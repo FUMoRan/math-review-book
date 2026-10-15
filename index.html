@@ -40,8 +40,10 @@
   <button id="exportBtn">导出</button>
   <button id="importBtn2">导入</button>
   <button class="primary" id="addBtn">+ 新增错题</button>
+  <button id="aiBtn" title="上传题目图片，让 AI 识别并按格式整理">📷 AI 识题</button>
   <button id="settingsBtn" title="设置" aria-label="设置">⚙️ 设置</button>
   <input type="file" id="fileInput" accept="application/json,.json" hidden>
+  <input type="file" id="aiImgInput" accept="image/*" hidden>
   <input type="file" id="addImgInput" accept="image/*" multiple hidden>
   <input type="file" id="editImgInput" accept="image/*" multiple hidden>
 </header>
@@ -140,6 +142,34 @@
 <div class="lightbox" id="lightbox">
   <img id="lightboxImg" alt="图片">
   <button class="ghost lightbox-close" id="lightboxClose">关闭</button>
+</div>
+
+<!-- AI 识题进行中 -->
+<div class="ai-busy" id="aiBusy">
+  <div class="ai-busy-box">
+    <div class="ai-spinner"></div>
+    <p id="aiBusyText">正在识别…</p>
+    <button class="ghost" id="aiCancel">取消</button>
+  </div>
+</div>
+
+<!-- AI 识题第一步：确认识别出的原文 -->
+<div class="modal" id="aiCheckModal">
+  <div class="panel">
+    <h2 id="aiCheckTitle">确认题目</h2>
+    <p class="hint" id="aiCheckHint"></p>
+    <div class="ai-check-img" id="aiCheckImgBox" style="display:none">
+      <img id="aiCheckImg" alt="原题图片">
+    </div>
+    <textarea id="aiCheckText"></textarea>
+    <div class="row">
+      <button class="primary" id="aiCheckGo">开始解题</button>
+      <button class="ghost" id="aiRePick">重选图片</button>
+      <button class="ghost" id="aiCheckCancel">取消</button>
+      <span class="spacer"></span>
+      <span class="badge-note" id="aiCheckMsg"></span>
+    </div>
+  </div>
 </div>
 
 <!-- 回收站 -->
@@ -247,6 +277,43 @@
         <button id="printBtn">打印</button>
       </div>
       <p class="setnote">Markdown 与打印只导出「当前视图」（错题或知识点）。</p>
+    </div>
+
+    <div class="setrow">
+      <span class="lbl">AI 识题（可选功能，<b>使用时会联网</b>）</span>
+      <p class="setnote">
+        拍一张题目照片，让 AI 识别并整理成字段，核对后再导入。<br>
+        <b>用这个功能时，题目图片会发送到你选择的服务商</b>，除此之外应用的全部数据仍只保存在本机。
+        API Key 也只存于本机浏览器，<b>不会写入备份文件，也不会进仓库</b>。
+      </p>
+
+      <label class="ai-label" for="aiPreset">服务商</label>
+      <select id="aiPreset"></select>
+
+      <label class="ai-label" for="aiProtocol">接口协议</label>
+      <select id="aiProtocol">
+        <option value="openai">OpenAI 兼容（/chat/completions）</option>
+        <option value="gemini">Google Gemini（generateContent）</option>
+        <option value="anthropic">Anthropic Claude（/v1/messages）</option>
+      </select>
+
+      <label class="ai-label" for="aiBase">Base URL</label>
+      <input id="aiBase" class="ai-input" autocomplete="off" spellcheck="false" placeholder="https://…">
+
+      <label class="ai-label" for="aiModel">模型名</label>
+      <input id="aiModel" class="ai-input" autocomplete="off" spellcheck="false" placeholder="例如 gemini-2.5-flash">
+      <p class="setnote" id="aiModelNote">各家模型名更新频繁，若报「模型不存在」，请到你控制台复制实际可用的模型名。</p>
+
+      <label class="ai-label" for="aiKey">API Key</label>
+      <input id="aiKey" class="ai-input" type="password" autocomplete="off" spellcheck="false" placeholder="只保存在本机浏览器">
+
+      <div class="row" style="margin-top:8px">
+        <button id="aiTest">测试连接</button>
+        <button class="ghost" id="aiApplyPreset">恢复该服务商默认值</button>
+        <span class="spacer"></span>
+        <span class="badge-note" id="aiMsg"></span>
+      </div>
+      <p class="setnote" id="aiKeyHint"></p>
     </div>
   </div>
 </div>

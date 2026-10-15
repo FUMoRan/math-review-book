@@ -1,5 +1,5 @@
 // 离线缓存：首次访问后把页面和公式引擎缓存到本地，之后断网也能打开。
-const CACHE = 'math-review-v3';
+const CACHE = 'math-review-v4';
 const CORE = [
   './',
   './index.html',

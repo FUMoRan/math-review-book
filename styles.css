@@ -377,3 +377,35 @@ img.thumb.broken{opacity:.35;}
   .card:hover{border-color:var(--line);}
   html[data-anim="on"] .card{transition:border-color .15s ease, box-shadow .15s ease;}
 }
+
+/* ---------- AI 识题 ---------- */
+.ai-label{display:block; font-size:12px; color:var(--muted); margin:10px 0 4px;}
+.ai-input{
+  width:100%; padding:8px 12px; border:1px solid var(--line); border-radius:10px;
+  background:var(--sunken); color:var(--text); font-size:13px; font-family:inherit; outline:none;
+}
+.ai-input:focus{border-color:var(--brand);}
+.setrow > select{width:100%;}
+.setnote a{color:var(--brand);}
+
+.ai-busy{
+  position:fixed; inset:0; z-index:90; background:rgba(0,0,0,.45);
+  display:none; align-items:center; justify-content:center; padding:20px;
+}
+.ai-busy.open{display:flex;}
+.ai-busy-box{
+  background:var(--card); border:1px solid var(--line); border-radius:14px;
+  padding:22px 26px; text-align:center; box-shadow:var(--shadow-lg); min-width:230px;
+}
+.ai-busy-box p{margin:14px 0 16px; font-size:14px; color:var(--text-2);}
+.ai-spinner{
+  width:30px; height:30px; margin:0 auto; border-radius:50%;
+  border:3px solid var(--line); border-top-color:var(--brand);
+  animation:aiSpin .9s linear infinite;
+}
+@keyframes aiSpin{to{transform:rotate(360deg);}}
+.ai-check-img{margin:0 0 10px; text-align:center;}
+.ai-check-img img{
+  max-width:100%; max-height:200px; border-radius:10px;
+  border:1px solid var(--line); cursor:zoom-in;
+}

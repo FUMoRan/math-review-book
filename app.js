@@ -128,15 +128,17 @@ function dropImage(id) {
   idbDel(id).catch(() => {});
 }
 
-// 压缩：最长边 1600，JPEG 0.85；小图或压缩后反而更大则保留原图
-function compressImage(file) {
+// 压缩：默认最长边 1600、JPEG 0.85；小图或压缩后反而更大则保留原图
+function compressImage(file, maxSide, quality) {
+  const limit = maxSide || 1600;
+  const q = quality || 0.85;
   return new Promise(resolve => {
     if (!file || !file.type || !file.type.startsWith('image/')) return resolve(null);
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       const w = img.naturalWidth, h = img.naturalHeight;
-      const scale = Math.min(1, 1600 / Math.max(w, h));
+      const scale = Math.min(1, limit / Math.max(w, h));
       if (scale === 1 && file.size <= 200 * 1024) { URL.revokeObjectURL(url); return resolve(file); }
       const outW = Math.max(1, Math.round(w * scale));
       const outH = Math.max(1, Math.round(h * scale));
@@ -147,7 +149,7 @@ function compressImage(file) {
       ctx.fillRect(0, 0, outW, outH);
       ctx.drawImage(img, 0, 0, outW, outH);
       URL.revokeObjectURL(url);
-      cv.toBlob(b => resolve(b && b.size < file.size ? b : file), 'image/jpeg', 0.85);
+      cv.toBlob(b => resolve(b && b.size < file.size ? b : file), 'image/jpeg', q);
     };
     img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
     img.src = url;
@@ -1426,8 +1428,406 @@ window.addEventListener('resize', debounce(applySettings, 120));
 if (mqDark.addEventListener) mqDark.addEventListener('change', applySettings);
 if (mqMotion.addEventListener) mqMotion.addEventListener('change', applySettings);
 
+/* ===================== AI 识题（可选功能，仅此功能需要联网） =====================
+   上传题目图片 → 调用你所选服务商的视觉模型 → 按固定格式返回 → 你核对后导入。
+   API Key 仅存本机 localStorage（键 mq_ai）：不写入导出备份，也不进仓库。
+   支持三种协议：OpenAI 兼容 / Google Gemini / Anthropic Claude。 */
+const K_AI = 'mq_ai';
+
+const AI_PRESETS = [
+  { id: 'gemini', name: 'Google Gemini', protocol: 'gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com', model: 'gemini-2.5-flash',
+    keyUrl: 'https://aistudio.google.com/apikey' },
+  { id: 'openai', name: 'OpenAI', protocol: 'openai',
+    baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini',
+    keyUrl: 'https://platform.openai.com/api-keys' },
+  { id: 'anthropic', name: 'Anthropic Claude', protocol: 'anthropic',
+    baseUrl: 'https://api.anthropic.com', model: 'claude-3-5-sonnet-latest',
+    keyUrl: 'https://console.anthropic.com/settings/keys' },
+  { id: 'ark', name: '火山方舟（豆包）', protocol: 'openai',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', model: 'doubao-seed-2-0-pro-260215',
+    keyUrl: 'https://console.volcengine.com/ark' },
+  { id: 'qwen', name: '阿里百炼（通义千问）', protocol: 'openai',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-vl-max',
+    keyUrl: 'https://bailian.console.aliyun.com/' },
+  { id: 'zhipu', name: '智谱 GLM', protocol: 'openai',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4v-flash',
+    keyUrl: 'https://open.bigmodel.cn/' },
+  { id: 'kimi', name: 'Kimi（月之暗面）', protocol: 'openai',
+    baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k-vision-preview',
+    keyUrl: 'https://platform.moonshot.cn/' },
+  { id: 'openrouter', name: 'OpenRouter（聚合多模型）', protocol: 'openai',
+    baseUrl: 'https://openrouter.ai/api/v1', model: 'google/gemini-2.5-flash',
+    keyUrl: 'https://openrouter.ai/keys' },
+  { id: 'custom', name: '自定义（任意 OpenAI 兼容接口）', protocol: 'openai',
+    baseUrl: '', model: '', keyUrl: '' },
+];
+
+let aiCfg = (() => {
+  try {
+    const v = JSON.parse(localStorage.getItem(K_AI));
+    return v && typeof v === 'object' ? v : {};
+  } catch (e) { return {}; }
+})();
+function saveAiCfg() { try { localStorage.setItem(K_AI, JSON.stringify(aiCfg)); } catch (e) {} }
+
+const aiEl = id => document.getElementById(id);
+const aiReady = () => !!(aiCfg.baseUrl && aiCfg.model && aiCfg.key);
+const aiPreset = id => AI_PRESETS.find(p => p.id === id) || AI_PRESETS[AI_PRESETS.length - 1];
+let aiAbort = null;
+
+aiEl('aiPreset').innerHTML = AI_PRESETS
+  .map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+
+function updateAiHint() {
+  const p = aiPreset(aiEl('aiPreset').value);
+  aiEl('aiKeyHint').innerHTML = p.keyUrl
+    ? `申请 API Key：<a href="${esc(p.keyUrl)}" target="_blank" rel="noreferrer">${esc(p.keyUrl)}</a>`
+    : '';
+}
+function fillAiForm() {
+  const id = aiCfg.preset || 'gemini';
+  aiEl('aiPreset').value = AI_PRESETS.some(p => p.id === id) ? id : 'gemini';
+  aiEl('aiProtocol').value = aiCfg.protocol || 'gemini';
+  aiEl('aiBase').value = aiCfg.baseUrl || '';
+  aiEl('aiModel').value = aiCfg.model || '';
+  aiEl('aiKey').value = aiCfg.key || '';
+  updateAiHint();
+}
+function readAiForm() {
+  aiCfg = {
+    preset: aiEl('aiPreset').value,
+    protocol: aiEl('aiProtocol').value,
+    baseUrl: aiEl('aiBase').value.trim().replace(/\/+$/, ''),
+    model: aiEl('aiModel').value.trim(),
+    key: aiEl('aiKey').value.trim(),
+  };
+  saveAiCfg();
+}
+function applyAiPreset() {
+  const p = aiPreset(aiEl('aiPreset').value);
+  if (p.id !== 'custom') {
+    aiEl('aiProtocol').value = p.protocol;
+    aiEl('aiBase').value = p.baseUrl;
+    aiEl('aiModel').value = p.model;
+  }
+  readAiForm();
+  updateAiHint();
+  aiEl('aiMsg').textContent = '';
+}
+aiEl('aiPreset').onchange = applyAiPreset;
+aiEl('aiApplyPreset').onclick = applyAiPreset;
+['aiProtocol', 'aiBase', 'aiModel', 'aiKey'].forEach(id => {
+  aiEl(id).onchange = () => { readAiForm(); aiEl('aiMsg').textContent = ''; };
+});
+
+/* ---------- 图片 → base64 ---------- */
+function blobToB64(blob) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result).split(',')[1] || '');
+    fr.onerror = () => rej(fr.error);
+    fr.readAsDataURL(blob);
+  });
+}
+// 测试连接用的极小图片（现场生成，避免硬编码二进制）
+function aiTinyImage() {
+  return new Promise(res => {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 16;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 16, 16);
+    cv.toBlob(b => blobToB64(b).then(res), 'image/jpeg', 0.8);
+  });
+}
+
+/* ---------- 提示词：分两步（先只转录原文，再解题整理） ---------- */
+const aiNoun = () => active === 'q' ? '题目' : '知识点';
+
+// 第一步：只做识别/转录，不解答、不给答案
+function aiOcrPrompt() {
+  const n = aiNoun();
+  return [
+    `你是数学${n}识别助手。用户会给你一张图片（拍照或截图）。`,
+    `请只把图中的${n}**原文**准确转录出来，不要解答，也不要添加任何解析、答案或说明。`,
+    '要求：',
+    '1. 只输出原文本身，不要输出【】这类标记，不要标题，不要任何解释；',
+    '2. 公式一律使用 LaTeX：行内公式用 $...$，独立公式用 $$...$$；',
+    `3. 图中若有多道${n}，它们之间用单独一行 === 分隔；`,
+    '4. 若图中没有可识别的内容，就只回答：未识别到内容。',
+  ].join('\n');
+}
+
+// 第二步：基于用户已核对/修正过的原文，解题并整理成导入格式
+function aiSolvePrompt(stem) {
+  const d = DEF[active];
+  return [
+    `下面是用户已经核对确认过的数学${aiNoun()}原文，请据此完成整理。`,
+    '',
+    '原文：',
+    stem,
+    '',
+    '要求：',
+    '1. 严格按下面的格式输出，不要输出任何解释、寒暄或标题；',
+    '2. 不要用 ``` 代码块包裹；',
+    '3. 公式一律使用 LaTeX：行内公式用 $...$，独立公式用 $$...$$；',
+    '4. 上面的原文里若含多项（以 === 分隔），输出的每一项与之一一对应；',
+    '5. 不要改动原文的题目内容，只在其基础上补充解答与整理。',
+    '',
+    '格式示例：',
+    d.importExample,
+  ].join('\n');
+}
+
+function aiHttpErr(status, data) {
+  let m = '';
+  if (data) {
+    if (typeof data.error === 'string') m = data.error;
+    else if (data.error && data.error.message) m = data.error.message;
+    else if (typeof data.message === 'string') m = data.message;
+  }
+  return `请求失败（HTTP ${status}）${m ? '：' + m : ''}`;
+}
+
+/* ---------- 发起请求（system=角色设定；ask=本次指令；可选带图） ---------- */
+async function aiCall({ system, ask, b64, mime }) {
+  readAiForm();
+  if (!aiReady()) throw new Error('AI 配置不完整（需要 Base URL、模型名、API Key）。');
+  const cfg = aiCfg;
+  const base = cfg.baseUrl.replace(/\/+$/, '');
+  const hasImg = !!(b64 && mime);
+  const ctrl = new AbortController();
+  aiAbort = ctrl;
+  const timer = setTimeout(() => ctrl.abort(), 120000);
+  try {
+    if (cfg.protocol === 'gemini') {
+      const url = base + '/v1beta/models/' + encodeURIComponent(cfg.model) +
+        ':generateContent?key=' + encodeURIComponent(cfg.key);
+      const gParts = [{ text: system }, { text: ask }];
+      if (hasImg) gParts.push({ inline_data: { mime_type: mime, data: b64 } });
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: gParts }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+        }),
+        signal: ctrl.signal,
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(aiHttpErr(r.status, data));
+      const parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
+      return parts.map(p => p.text || '').join('').trim();
+    }
+
+    if (cfg.protocol === 'anthropic') {
+      const aContent = [{ type: 'text', text: ask }];
+      if (hasImg) aContent.push({ type: 'image', source: { type: 'base64', media_type: mime, data: b64 } });
+      const r = await fetch(base + '/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': cfg.key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: cfg.model,
+          max_tokens: 4096,
+          system,
+          messages: [{ role: 'user', content: aContent }],
+        }),
+        signal: ctrl.signal,
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(aiHttpErr(r.status, data));
+      return (data.content || []).map(c => c.text || '').join('').trim();
+    }
+
+    // OpenAI 兼容（多数国内外服务商，包含方舟/百炼/智谱/Kimi/OpenRouter 等）
+    const oContent = [{ type: 'text', text: ask }];
+    if (hasImg) oContent.push({ type: 'image_url', image_url: { url: 'data:' + mime + ';base64,' + b64 } });
+    const r = await fetch(base + '/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.key },
+      body: JSON.stringify({
+        model: cfg.model,
+        temperature: 0.2,
+        max_tokens: 4096,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: oContent },
+        ],
+      }),
+      signal: ctrl.signal,
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(aiHttpErr(r.status, data));
+    const msg = ((data.choices || [])[0] || {}).message || {};
+    return (Array.isArray(msg.content)
+      ? msg.content.map(c => c.text || '').join('')
+      : (msg.content || '')).trim();
+  } catch (err) {
+    if (err && err.name === 'AbortError') throw err;
+    const m = (err && err.message) || '';
+    // 浏览器的 fetch 在网络/CORS 失败时只会抛 TypeError（Failed to fetch），对用户没有信息量
+    if (err instanceof TypeError || /Failed to fetch|NetworkError|Load failed/i.test(m)) {
+      throw new Error('无法连接到该接口地址。常见原因：网络不通；该服务商不允许浏览器直接调用（CORS 限制）；Base URL 填写有误。');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    aiAbort = null;
+  }
+}
+
+/* ---------- 识题主流程 ---------- */
+function showAiBusy(text) {
+  aiEl('aiBusyText').textContent = text || '正在识别…';
+  aiEl('aiBusy').classList.add('open');
+}
+function hideAiBusy() { aiEl('aiBusy').classList.remove('open'); }
+aiEl('aiCancel').onclick = () => { if (aiAbort) aiAbort.abort(); };
+
+/* 第一步：只识别原文，弹出核对框；第二步：用户确认后才解题 */
+const aiCheckModal = aiEl('aiCheckModal');
+let aiSourceBlob = null, aiSourceUrl = null;
+
+function closeAiCheck() {
+  aiCheckModal.classList.remove('open');
+  if (aiSourceUrl) { URL.revokeObjectURL(aiSourceUrl); aiSourceUrl = null; }
+}
+aiEl('aiCheckCancel').onclick = closeAiCheck;
+aiEl('aiRePick').onclick = () => { closeAiCheck(); aiEl('aiImgInput').click(); };
+aiCheckModal.onclick = e => { if (e.target === aiCheckModal) closeAiCheck(); };
+
+async function aiExtractFromFile(file) {
+  if (!aiReady()) {
+    settingsDrawer.classList.add('open');
+    alert('还没有配置 AI。\n请在「设置 → AI 识题」里选择服务商，填入 API Key 与模型名后再试。');
+    return;
+  }
+  showAiBusy('正在压缩图片…');
+  try {
+    const blob = await compressImage(file, 1280, 0.8) || file;
+    const mime = blob.type || 'image/jpeg';
+    const b64 = await blobToB64(blob);
+    if (!b64) throw new Error('图片读取失败。');
+    aiSourceBlob = blob;
+
+    showAiBusy(`正在识别${aiNoun()}，请稍候…`);
+    const text = await aiCall({
+      system: aiOcrPrompt(),
+      ask: '请把这张图片里的内容按上述要求转录出来，不要解答。',
+      b64, mime,
+    });
+    hideAiBusy();
+    if (!text) throw new Error('模型没有返回任何内容。');
+
+    // 弹出核对框，让用户先确认/修正原文
+    aiEl('aiCheckTitle').textContent = `第 1 步 · 核对识别出的${aiNoun()}`;
+    aiEl('aiCheckHint').innerHTML =
+      `下面是 AI 从图片里识别出的${aiNoun()}原文。<b>请核对并直接修正</b>（公式、正负号、上下标最容易出错），` +
+      `确认无误后点「${active === 'q' ? '开始解题' : '开始整理'}」，AI 才会继续作答。`;
+    aiEl('aiCheckText').value = text;
+    aiEl('aiCheckMsg').textContent = '';
+    if (aiSourceUrl) URL.revokeObjectURL(aiSourceUrl);
+    aiSourceUrl = URL.createObjectURL(blob);
+    aiEl('aiCheckImg').src = aiSourceUrl;
+    aiEl('aiCheckImgBox').style.display = 'block';
+    aiCheckModal.classList.add('open');
+    aiEl('aiCheckText').focus();
+  } catch (e) {
+    hideAiBusy();
+    if (e && e.name === 'AbortError') { alert('已取消。'); return; }
+    alert('识别失败：' + ((e && e.message) || e) +
+      '\n\n常见原因：\n· Base URL / 模型名 / API Key 填写有误\n· 该服务商不允许浏览器直接调用（CORS 限制）\n· 网络不通或请求超时');
+  }
+}
+
+async function aiSolve() {
+  const stem = aiEl('aiCheckText').value.trim();
+  if (!stem) { aiEl('aiCheckMsg').textContent = '内容为空，请先填写，或点「重选图片」。'; return; }
+  aiEl('aiCheckGo').disabled = true;
+  showAiBusy(active === 'q' ? 'AI 正在解题，请稍候…' : 'AI 正在整理，请稍候…');
+  try {
+    const text = await aiCall({
+      system: aiSolvePrompt(stem),
+      ask: '请按上述格式输出整理结果。',
+    });
+    if (!text) throw new Error('模型没有返回任何内容。');
+
+    hideAiBusy();
+    closeAiCheck();
+
+    // 打开「新增 / 导入」面板并预填整理结果
+    document.getElementById('addBtn').click();
+    document.getElementById('addTitle').textContent =
+      active === 'q' ? 'AI 解题结果 · 请核对后导入' : 'AI 整理结果 · 请核对后导入';
+    document.getElementById('addHint').innerHTML =
+      `已基于你核对过的${aiNoun()}原文生成（模型：<b>${esc(aiCfg.model)}</b>）。<b>请核对</b>公式与答案后，再点「导入选中项」。`;
+    document.getElementById('rawInput').value = text;
+    document.getElementById('parseBtn').click();
+
+    // 只整理出 1 项时，把原题图片自动挂为配图
+    if (pending.length === 1 && aiSourceBlob) {
+      const id = 'img_' + uid();
+      await idbPut({ id, blob: aiSourceBlob, type: aiSourceBlob.type || 'image/jpeg', size: aiSourceBlob.size || 0, addedAt: Date.now() });
+      pendingImgs = pendingImgs.concat(id);
+      addImgRow.style.display = 'block';
+      renderPendingThumbs();
+      document.getElementById('addImgMsg').textContent = '已自动附上原题图片';
+    } else if (pending.length > 1) {
+      document.getElementById('parseMsg').textContent += ' 识别到多项：可先整批导入，再逐条「编辑」补配图。';
+    }
+  } catch (e) {
+    hideAiBusy();
+    if (e && e.name === 'AbortError') { aiEl('aiCheckMsg').textContent = '已取消'; return; }
+    aiEl('aiCheckMsg').textContent = '失败：' + ((e && e.message) || e);
+  } finally {
+    aiEl('aiCheckGo').disabled = false;
+  }
+}
+aiEl('aiCheckGo').onclick = aiSolve;
+
+aiEl('aiBtn').onclick = () => {
+  if (!aiReady()) {
+    settingsDrawer.classList.add('open');
+    alert('还没有配置 AI。\n请在「设置 → AI 识题」里选择服务商，填入 API Key 与模型名。');
+    return;
+  }
+  aiEl('aiImgInput').click();
+};
+aiEl('aiImgInput').onchange = e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (f) aiExtractFromFile(f);
+};
+
+aiEl('aiTest').onclick = async () => {
+  const msg = aiEl('aiMsg');
+  readAiForm();
+  if (!aiReady()) { msg.textContent = '请先填写 Base URL / 模型名 / API Key'; return; }
+  msg.textContent = '测试中…';
+  showAiBusy('正在测试连接…');
+  try {
+    const b64 = await aiTinyImage();
+    const t = await aiCall({
+      system: aiOcrPrompt(),
+      ask: '请把这张图片里的内容按上述要求转录出来，不要解答。',
+      b64, mime: 'image/jpeg',
+    });
+    hideAiBusy();
+    msg.textContent = t ? '连接成功 ✓' : '连上了，但模型没有返回内容';
+  } catch (e) {
+    hideAiBusy();
+    msg.textContent = (e && e.name === 'AbortError') ? '已取消' : '失败：' + ((e && e.message) || e);
+  }
+};
+
 /* ---------- 初始化 ---------- */
 applySettings();
+fillAiForm();
 purgeTrash();
 updateTrashCount();
 updateBackupBar();
