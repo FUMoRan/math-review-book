@@ -6,8 +6,14 @@
 /* ===================== storage ===================== */
 const K_Q = 'mq_items';
 const K_K = 'mq_kps';
-const STATUS = { new: '未复习', reviewing: '复习中', mastered: '已掌握' };
-const STATUS_NEXT = { new: 'reviewing', reviewing: 'mastered', mastered: 'new' };
+
+/* 纯逻辑统一放在 lib.js（浏览器与单测共用），此处引用即可 */
+const {
+  STATUS, STATUS_NEXT, uid, normText,
+  makeGramProfile, simFromProfile,
+  parseText, parseSearch,
+  normalizeQuestion, normalizeKp, scheduleSrs, isDue, dueLabel, DAY,
+} = MQ;
 
 /* ===================== 设置（偏好，与数据分开存） ===================== */
 const K_SET = 'mq_settings';
@@ -66,14 +72,18 @@ function applySettings() {
 }
 
 
-/* ===================== 图片（存 IndexedDB，文本仍存 localStorage） ===================== */
+/* ===================== 图片 / 文本持久化（IndexedDB；文本在 IDB 不可用时回退 localStorage） ===================== */
 const K_TRASH = 'mq_trash';
 let idbPromise = null;
 function idb() {
   if (!idbPromise) {
     idbPromise = new Promise((res, rej) => {
-      const rq = indexedDB.open('mqimg', 1);
-      rq.onupgradeneeded = () => { rq.result.createObjectStore('imgs', { keyPath: 'id' }); };
+      const rq = indexedDB.open('mqimg', 2);
+      rq.onupgradeneeded = () => {
+        const db = rq.result;
+        if (!db.objectStoreNames.contains('imgs')) db.createObjectStore('imgs', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv', { keyPath: 'key' });
+      };
       rq.onsuccess = () => res(rq.result);
       rq.onerror = () => rej(rq.error);
     });
@@ -102,6 +112,36 @@ async function idbDel(id) {
     tx.objectStore('imgs').delete(id);
     tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
   });
+}
+async function idbKeys() {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const rq = db.transaction('imgs', 'readonly').objectStore('imgs').getAllKeys();
+    rq.onsuccess = () => res(rq.result || []); rq.onerror = () => rej(rq.error);
+  });
+}
+// base64（不含前缀）→ Blob，用于从完整备份还原图片
+function b64ToBlob(b64, type) {
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: type || 'image/jpeg' });
+}
+// 仍被引用（含回收站）的图片 id 集合，用于清理孤儿图片
+function referencedImageIds() {
+  const s = new Set();
+  const add = list => list.forEach(it => (it.images || []).forEach(id => s.add(id)));
+  add(stores.q.items); add(stores.k.items); add(trash.map(t => t.item));
+  return s;
+}
+async function gcImages() {
+  try {
+    const keep = referencedImageIds();
+    const keys = await idbKeys();
+    const gone = keys.filter(k => !keep.has(k));
+    for (const k of gone) await idbDel(k);
+    return gone.length;
+  } catch (e) { return 0; }
 }
 
 const imgCache = new Map(); // id -> objectURL
@@ -199,11 +239,8 @@ document.addEventListener('click', e => {
 
 /* ---------- 回收站（软删除，30 天自动清理） ---------- */
 const TRASH_DAYS = 30;
-let trash = (() => {
-  try { const v = JSON.parse(localStorage.getItem(K_TRASH)); return Array.isArray(v) ? v : []; }
-  catch (e) { return []; }
-})();
-function saveTrash() { try { localStorage.setItem(K_TRASH, JSON.stringify(trash)); } catch (e) {} }
+let trash = []; // 启动时由 loadInitial 从 IndexedDB 载入
+function saveTrash() { persist(K_TRASH, trash); }
 function updateTrashCount() {
   const el = document.getElementById('trashCount');
   if (el) el.textContent = trash.length;
@@ -287,102 +324,81 @@ document.getElementById('trashEmpty').onclick = () => {
   renderTrash();
 };
 
-/* ---------- 重复检测 ---------- */
-function normText(s) {
-  return String(s || '').toLowerCase().replace(/\s+/g, '').replace(/[，。、；：！？“”‘’（）()【】\[\]$]/g, '');
-}
-function bigrams(s) {
+/* ---------- 重复检测（bigram 预编译；批量导入时复用同一索引） ---------- */
+function dupKey(kind) { return kind === 'k' ? 'title' : 'stem'; }
+
+function buildDupIndex(kind) {
+  const key = dupKey(kind);
   const out = [];
-  for (let i = 0; i < s.length - 1; i++) out.push(s.slice(i, i + 2));
+  for (const it of stores[kind].items) {
+    const p = makeGramProfile(it[key]);
+    if (p.len) out.push({ item: it, profile: p });
+  }
   return out;
 }
-function simScore(a, b) {
-  const A = bigrams(normText(a)), B = bigrams(normText(b));
-  if (!A.length || !B.length) return 0;
-  const m = new Map();
-  A.forEach(g => m.set(g, (m.get(g) || 0) + 1));
-  let hit = 0;
-  for (const g of B) { const c = m.get(g); if (c > 0) { hit++; m.set(g, c - 1); } }
-  return (2 * hit) / (A.length + B.length);
-}
-function findDup(kind, obj) {
-  const key = kind === 'k' ? 'title' : 'stem';
-  const val = obj[key];
-  if (!normText(val)) return null;
+function findDupIn(index, value) {
+  if (!normText(value)) return null;
   let best = null;
-  for (const it of stores[kind].items) {
-    const s = simScore(val, it[key]);
-    if (s >= 0.85 && (!best || s > best.score)) best = { score: s, item: it };
+  for (const p of index) {
+    const s = simFromProfile(p.profile, value);
+    if (s >= 0.85 && (!best || s > best.score)) best = { score: s, item: p.item };
   }
   return best;
 }
-
 // 统计一批待导入项里，有多少与现有条目高度相似
 function countDups(kind, incoming) {
-  const key = kind === 'k' ? 'title' : 'stem';
+  const key = dupKey(kind);
+  const index = buildDupIndex(kind);
   let n = 0;
   for (const o of incoming) {
     const val = o && o[key];
     if (!normText(val)) continue;
-    if (stores[kind].items.some(it => simScore(val, it[key]) >= 0.85)) n++;
+    if (findDupIn(index, val)) n++;
   }
   return n;
 }
 
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
+/* ---------- 持久化：优先 IndexedDB（容量大），不可用时回退 localStorage ---------- */
+const KV_STORE = 'kv';
+function lsRead(key) { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return undefined; } }
+function lsWrite(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { return false; } }
 
-function normalizeQuestion(it) {
-  const o = it && typeof it === 'object' ? it : {};
-  return {
-    id: o.id || uid(),
-    stem: typeof o.stem === 'string' ? o.stem : '',
-    analysis: typeof o.analysis === 'string' ? o.analysis : '',
-    knowledge: typeof o.knowledge === 'string' ? o.knowledge : '',
-    tags: Array.isArray(o.tags) ? o.tags.filter(t => typeof t === 'string' && t.trim()) : [],
-    status: STATUS[o.status] ? o.status : 'new',
-    star: !!o.star,
-    images: Array.isArray(o.images) ? o.images.filter(s => typeof s === 'string' && s) : [],
-    createdAt: o.createdAt || Date.now(),
-    updatedAt: o.updatedAt || Date.now(),
-  };
+async function idbKVGet(key) {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const rq = db.transaction(KV_STORE, 'readonly').objectStore(KV_STORE).get(key);
+    rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
+  });
 }
-
-function normalizeKp(it) {
-  const o = it && typeof it === 'object' ? it : {};
-  return {
-    id: o.id || uid(),
-    title: typeof o.title === 'string' ? o.title : '',
-    content: typeof o.content === 'string' ? o.content : '',
-    tags: Array.isArray(o.tags) ? o.tags.filter(t => typeof t === 'string' && t.trim()) : [],
-    status: STATUS[o.status] ? o.status : 'new',
-    star: !!o.star,
-    images: Array.isArray(o.images) ? o.images.filter(s => typeof s === 'string' && s) : [],
-    createdAt: o.createdAt || Date.now(),
-    updatedAt: o.updatedAt || Date.now(),
-  };
+async function idbKVPut(key, json) {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(KV_STORE, 'readwrite');
+    tx.objectStore(KV_STORE).put({ key, json });
+    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
+  });
 }
-
-function loadStore(key, norm) {
+// 读：IndexedDB 优先；IDB 不可用时读 localStorage
+async function kvGet(key) {
   try {
-    const raw = JSON.parse(localStorage.getItem(key));
-    if (!Array.isArray(raw)) return null;
-    return raw.map(norm);
-  } catch (e) {
-    return null;
-  }
+    const rec = await idbKVGet(key);
+    return rec === undefined ? undefined : JSON.parse(rec.json);
+  } catch (e) { return lsRead(key); }
 }
-
-function saveStore(key, list) {
+// 写：IndexedDB 优先；失败回退 localStorage；两者都失败才提示
+async function persist(key, val) {
   try {
-    localStorage.setItem(key, JSON.stringify(list));
+    await idbKVPut(key, JSON.stringify(val));
+    localStorage.removeItem(key); // 迁移到 IDB 后释放 localStorage 空间
     return true;
   } catch (e) {
+    if (lsWrite(key, val)) return true;
     alert('本地存储写入失败（可能是隐私模式或空间不足），建议先「导出」备份。');
     return false;
   }
 }
+// 沿用 saveStore 名字：触发异步写入，不阻塞 UI
+function saveStore(key, list) { return persist(key, list); }
 
 function seedQuestions() {
   const now = Date.now();
@@ -419,11 +435,27 @@ function seedKps() {
 }
 
 const stores = {
-  q: { key: K_Q, norm: normalizeQuestion, items: loadStore(K_Q, normalizeQuestion) },
-  k: { key: K_K, norm: normalizeKp, items: loadStore(K_K, normalizeKp) },
+  q: { key: K_Q, norm: normalizeQuestion, items: [] },
+  k: { key: K_K, norm: normalizeKp, items: [] },
 };
-if (stores.q.items === null) { stores.q.items = seedQuestions(); saveStore(K_Q, stores.q.items); }
-if (stores.k.items === null) { stores.k.items = seedKps(); saveStore(K_K, stores.k.items); }
+
+// 启动时从 IndexedDB 载入（并把旧版 localStorage 数据迁移过来）
+async function loadInitial() {
+  for (const kind of ['q', 'k']) {
+    const key = stores[kind].key;
+    let raw = await kvGet(key);
+    if (!Array.isArray(raw)) raw = lsRead(key); // IDB 无记录时，检查旧版 localStorage
+    if (Array.isArray(raw)) {
+      stores[kind].items = raw.map(stores[kind].norm);
+    } else {
+      stores[kind].items = (kind === 'q' ? seedQuestions() : seedKps()).map(stores[kind].norm);
+    }
+    await persist(key, stores[kind].items); // 迁移或首次种子都落盘
+  }
+  let t = await kvGet(K_TRASH);
+  if (!Array.isArray(t)) t = lsRead(K_TRASH);
+  trash = Array.isArray(t) ? t : [];
+}
 
 /* ===================== 视图定义 ===================== */
 const DEF = {
@@ -432,16 +464,17 @@ const DEF = {
     addLabel: '+ 新增错题',
     randomLabel: '随机一题',
     overviewTitle: '随机一题 · 先自己想，再展开',
-    fieldLabels: { stem: '题目（公式用 $...$）', analysis: '解析', knowledge: '知识点讲解' },
-    importFieldMap: { 题目: 'stem', 解析: 'analysis', 知识点: 'knowledge', 标签: 'tags' },
+    fieldLabels: { stem: '题目（公式用 $...$）', analysis: '解析', knowledge: '知识点讲解', myAnswer: '我的错误答案（可选）' },
+    importFieldMap: { 题目: 'stem', 解析: 'analysis', 知识点: 'knowledge', 我的错误答案: 'myAnswer', 标签: 'tags' },
     importRequired: '题目',
-    importExample: '【题目】\n求函数 $f(x)=x^2-2x+1$ 的最小值。\n【解析】\n配方得 $f(x)=(x-1)^2$，故最小值为 $0$，在 $x=1$ 处取得。\n【知识点】\n二次函数顶点式 $y=a(x-h)^2+k$，顶点为 $(h,k)$。\n【标签】\n二次函数, 最值\n\n多题之间用单独一行 === 分隔',
+    importExample: '【题目】\n求函数 $f(x)=x^2-2x+1$ 的最小值。\n【解析】\n配方得 $f(x)=(x-1)^2$，故最小值为 $0$，在 $x=1$ 处取得。\n【知识点】\n二次函数顶点式 $y=a(x-h)^2+k$，顶点为 $(h,k)$。\n【我的错误答案】\n（选填：我当时是怎么错的）\n【标签】\n二次函数, 最值\n\n多题之间用单独一行 === 分隔',
     main: it => `<div class="stem">${renderMath(it.stem)}</div>`,
     details: it => [
+      { label: '查看我的错误答案', text: it.myAnswer || '' },
       { label: '查看解析', text: it.analysis },
       { label: '查看知识点讲解', text: it.knowledge },
     ],
-    hay: it => [it.stem, it.analysis, it.knowledge, it.tags.join(' ')].join(' '),
+    hay: it => [it.stem, it.analysis, it.knowledge, it.myAnswer || '', it.tags.join(' ')].join(' '),
     previewMain: o => o.stem || '（无题目）',
     previewInfo: o => `解析 ${o.analysis ? '✓' : '✗'} · 知识点 ${o.knowledge ? '✓' : '✗'} · 标签 ${o.tags.length}`,
   },
@@ -464,62 +497,19 @@ const DEF = {
 
 const PAGE = 30;
 const views = {
-  q: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), search: '', status: '', starOnly: false },
-  k: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), search: '', status: '', starOnly: false },
+  q: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), search: '', status: '', starOnly: false, dueOnly: false },
+  k: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), search: '', status: '', starOnly: false, dueOnly: false },
 };
 let active = 'q';
 let editingId = null;
 let pending = [];
 let pendingAnim = false;
+// 记录已展开的折叠区（键为 `itemId|label`），使重渲染后不丢失展开状态
+const openDetails = new Set();
 
 const cur = () => views[active];
 const curItems = () => stores[active].items;
 const saveActive = () => saveStore(stores[active].key, curItems());
-
-/* ===================== parser（通用） ===================== */
-function parseBlockGeneric(block, map, requiredLabel) {
-  const labels = Object.keys(map);
-  const re = new RegExp('^\\s*【(' + labels.join('|') + ')】\\s*(.*)$');
-  const obj = { errors: [], preText: '' };
-  for (const key of Object.values(map)) obj[key] = key === 'tags' ? [] : '';
-
-  let curField = null;
-  let buf = [];
-  let seen = false;
-  const flush = () => {
-    if (!curField) return;
-    const val = buf.join('\n').trim();
-    if (curField === 'tags') obj.tags = val.split(/[,，]/).map(s => s.trim()).filter(Boolean);
-    else obj[curField] = val;
-    buf = [];
-  };
-
-  for (const line of block.split('\n')) {
-    const m = line.match(re);
-    if (m) {
-      flush();
-      seen = true;
-      curField = map[m[1]];
-      if (m[2]) buf.push(m[2]);
-    } else if (!seen) {
-      if (line.trim()) obj.preText += line + '\n';
-    } else {
-      buf.push(line);
-    }
-  }
-  flush();
-
-  if (obj.preText.trim()) obj.errors.push('标记前有多余文本（已忽略）');
-  if (!obj[map[requiredLabel]]) obj.errors.push('缺少【' + requiredLabel + '】');
-  return obj;
-}
-
-function parseText(text, map, requiredLabel) {
-  return text
-    .split(/^[ \t]*={3,}[ \t]*$/m)
-    .map(b => parseBlockGeneric(b, map, requiredLabel))
-    .filter(o => Object.values(map).some(k => (k === 'tags' ? o.tags.length : o[k])) || o.preText.trim());
-}
 
 /* ===================== render ===================== */
 function esc(s) {
@@ -552,35 +542,64 @@ const addBtn = document.getElementById('addBtn');
 const randomBtn = document.getElementById('randomBtn');
 const tabEls = [...document.querySelectorAll('.tab')];
 
+// 搜索文本缓存：按 id + updatedAt 命中，避免每次筛选重新拼接
+const hayCache = new Map();
+function hayOf(it) {
+  const c = hayCache.get(it.id);
+  if (c && c.u === it.updatedAt) return c.hay;
+  const hay = DEF[active].hay(it).toLowerCase();
+  hayCache.set(it.id, { u: it.updatedAt, hay });
+  return hay;
+}
+
 function currentFiltered() {
   const v = cur();
-  const q = v.search.trim().toLowerCase();
+  const s = parseSearch(v.search);
+  const now = Date.now();
   const out = curItems().filter(it => {
     if (v.status && it.status !== v.status) return false;
+    if (s.status && it.status !== s.status) return false;
     if (v.starOnly && !it.star) return false;
+    if (s.star && !it.star) return false;
+    if (v.dueOnly && !isDue(it, now)) return false;
+    if (s.due && !isDue(it, now)) return false;
     // 多标签：选多个时取交集（必须同时含有全部所选标签）
     if (v.activeTags.size && ![...v.activeTags].every(t => it.tags.includes(t))) return false;
-    if (q && !DEF[active].hay(it).toLowerCase().includes(q)) return false;
+    if (s.tags.length && !s.tags.every(t => it.tags.includes(t))) return false;
+    if (s.text && !hayOf(it).includes(s.text)) return false;
     return true;
   });
   out.sort((a, b) => b.updatedAt - a.updatedAt);
   return out;
 }
 
-function bindLazy(detailsEl, text, emptyLabel) {
+function bindLazy(detailsEl, key, text, emptyLabel) {
   const body = detailsEl.querySelector('.body');
+  const paint = () => {
+    if (body.dataset.done === '1') return;
+    body.innerHTML = text ? renderMath(text) : `<span class="section-label">${emptyLabel}</span>`;
+    body.dataset.done = '1';
+  };
+  if (detailsEl.open) paint();
   detailsEl.addEventListener('toggle', () => {
-    if (detailsEl.open && body.dataset.done !== '1') {
-      body.innerHTML = text || `<span class="section-label">${emptyLabel}</span>`;
-      if (text) body.innerHTML = renderMath(text);
-      body.dataset.done = '1';
-    }
+    if (detailsEl.open) { openDetails.add(key); paint(); }
+    else openDetails.delete(key);
   });
 }
 
-function relatedCount(kp) {
-  if (!kp.tags.length) return 0;
-  return stores.q.items.filter(q => q.tags.some(t => kp.tags.includes(t))).length;
+// 与「另一库」按标签交集的数量：错题视图看知识点，知识点视图看错题
+function relatedCount(it) {
+  if (!it.tags.length) return 0;
+  const other = active === 'k' ? stores.q.items : stores.k.items;
+  return other.filter(o => o.tags.some(t => it.tags.includes(t))).length;
+}
+
+// 统一的复习动作：切换状态并安排下次复习时间（SRS）
+function applyStatus(item, next) {
+  item.status = next;
+  item.updatedAt = Date.now();
+  scheduleSrs(item, next);
+  saveActive();
 }
 
 function makeCard(it) {
@@ -588,10 +607,14 @@ function makeCard(it) {
   const v = cur();
   const card = document.createElement('div');
   card.className = 'card';
+  card.dataset.id = it.id;
   const tags = it.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('');
-  const rel = active === 'k' && relatedCount(it)
-    ? `<span class="relchip" data-rel="1">相关错题 ${relatedCount(it)} 道</span>` : '';
-  const dets = d.details(it);
+  const rc = relatedCount(it); // 只计算一次
+  const rel = rc
+    ? `<span class="relchip" data-rel="1">相关${active === 'k' ? '错题' : '知识点'} ${rc} ${active === 'k' ? '道' : '个'}</span>` : '';
+  const due = `<span class="duechip${isDue(it) ? ' due' : ''}" data-due="1" title="点击标记为「复习中」">🕒 ${dueLabel(it)}</span>`;
+  // 「我的错误答案」为空时不显示该折叠区，避免噪音
+  const dets = d.details(it).filter(x => x.label !== '查看我的错误答案' || x.text);
   card.innerHTML = `
     ${v.selectMode ? `<input type="checkbox" class="chk" data-act="pick" ${v.selected.has(it.id) ? 'checked' : ''}>` : ''}
     ${d.main(it)}
@@ -599,20 +622,29 @@ function makeCard(it) {
     <div class="meta">
       <button class="star ${it.star ? 'on' : ''}" data-act="star" title="${it.star ? '取消收藏' : '收藏'}">${it.star ? '★' : '☆'}</button>
       ${tags}${rel}
-      <span class="spacer"></span>
-      <span class="status ${it.status}" data-act="status">● ${STATUS[it.status]}</span>
-      <button class="link" data-act="edit">编辑</button>
-      <button class="link" data-act="delete">删除</button>
+      <div class="cardacts">
+        ${due}
+        <span class="status ${it.status}" data-act="status">● ${STATUS[it.status]}</span>
+        <button class="link" data-act="edit">编辑</button>
+        <button class="link" data-act="delete">删除</button>
+      </div>
     </div>
-    ${dets.map(x => `<details><summary>${x.label}</summary><div class="body"></div></details>`).join('')}
+    ${dets.map(x => {
+      const key = it.id + '|' + x.label;
+      return `<details data-key="${esc(key)}"${openDetails.has(key) ? ' open' : ''}><summary>${x.label}</summary><div class="body"></div></details>`;
+    }).join('')}
   `;
-  card.querySelectorAll('details').forEach((el, i) => bindLazy(el, dets[i].text, '（暂无）'));
+  card.querySelectorAll('details').forEach((el, i) => bindLazy(el, it.id + '|' + dets[i].label, dets[i].text, '（暂无）'));
 
   card.querySelector('[data-act="status"]').onclick = () => {
-    it.status = STATUS_NEXT[it.status];
-    it.updatedAt = Date.now();
-    saveActive();
-    render();
+    applyStatus(it, STATUS_NEXT[it.status]);
+    const el = card.querySelector('[data-act="status"]');
+    el.className = 'status ' + it.status;
+    el.textContent = '● ' + STATUS[it.status];
+    const dueEl = card.querySelector('[data-due]');
+    if (dueEl) { dueEl.textContent = '🕒 ' + dueLabel(it); dueEl.classList.toggle('due', isDue(it)); }
+    // 状态筛选 / 待复习筛选生效时，列表组成会变化，需要整体重渲染
+    if (v.status || v.dueOnly) render();
   };
   card.querySelector('[data-act="star"]').onclick = () => {
     it.star = !it.star;
@@ -642,11 +674,14 @@ function makeCard(it) {
   };
   const relEl = card.querySelector('[data-rel]');
   if (relEl) relEl.onclick = () => {
-    views.q.activeTags = new Set(it.tags);
-    views.q.visibleCount = PAGE;
-    views.q.search = '';
-    views.q.status = '';
-    switchView('q');
+    const other = active === 'k' ? 'q' : 'k';
+    const ov = views[other];
+    ov.activeTags = new Set(it.tags);
+    ov.visibleCount = PAGE;
+    ov.search = '';
+    ov.status = '';
+    ov.dueOnly = false;
+    switchView(other);
   };
   // 移动端：长按 0.5 秒进入多选并选中该项
   let pressT = null, moved = false;
@@ -773,6 +808,12 @@ function syncHeader() {
   const sb = document.getElementById('starBtn');
   sb.classList.toggle('on', v.starOnly);
   sb.textContent = v.starOnly ? '★ 只看收藏' : '☆ 只看收藏';
+  const db = document.getElementById('dueBtn');
+  if (db) {
+    db.classList.toggle('on', v.dueOnly);
+    const dueN = curItems().filter(it => isDue(it)).length;
+    db.textContent = dueN ? `🕒 待复习 ${dueN}` : '🕒 待复习';
+  }
 }
 
 function switchView(v) {
@@ -827,6 +868,13 @@ document.getElementById('starBtn').onclick = () => {
   applyFilters();
 };
 
+document.getElementById('dueBtn').onclick = () => {
+  const v = cur();
+  v.dueOnly = !v.dueOnly;
+  syncHeader();
+  applyFilters();
+};
+
 /* ---------- 批量操作 ---------- */
 document.getElementById('selAll').onclick = () => {
   const v = cur();
@@ -845,7 +893,9 @@ document.querySelectorAll('[data-batch-status]').forEach(btn => {
   btn.onclick = () => {
     const v = cur();
     if (!v.selected.size) return alert('还没选任何项。');
-    curItems().forEach(it => { if (v.selected.has(it.id)) { it.status = btn.dataset.batchStatus; it.updatedAt = Date.now(); } });
+    curItems().forEach(it => {
+      if (v.selected.has(it.id)) { it.status = btn.dataset.batchStatus; it.updatedAt = Date.now(); scheduleSrs(it, btn.dataset.batchStatus); }
+    });
     saveActive();
     render();
   };
@@ -964,8 +1014,10 @@ document.getElementById('importBtn').onclick = () => {
   const checked = [...previewEl.querySelectorAll('input[type=checkbox]')].filter(c => c.checked).map(c => +c.dataset.i);
   if (!checked.length) { alert('至少选一项。'); return; }
 
-  // 去重：与已有内容高度相似时先提醒
-  const dups = checked.filter(i => findDup(active, pending[i]));
+  // 去重：与已有内容高度相似时先提醒（索引只建一次，避免逐条重扫）
+  const dupIndex = buildDupIndex(active);
+  const key = dupKey(active);
+  const dups = checked.filter(i => findDupIn(dupIndex, pending[i][key]));
   if (dups.length) {
     const names = dups.slice(0, 5).map(i => '· ' + DEF[active].previewMain(pending[i])).join('\n');
     if (!confirm(`检测到 ${dups.length} 项与已有内容高度相似：\n${names}${dups.length > 5 ? '\n…' : ''}\n\n仍要全部导入吗？点「取消」将中止本次导入。`)) return;
@@ -983,15 +1035,16 @@ document.getElementById('importBtn').onclick = () => {
   applyFilters();
 };
 
-/* ---------- 编辑弹窗 ---------- */
+/* ---------- 编辑弹窗 ----------
+   图片改动走「草稿」：在弹窗里的增删只改草稿，点「保存」才落盘并清理被移除的图片；
+   点「取消」/关闭则丢弃本次新增的图片，不动原始条目。 */
 const editModal = document.getElementById('editModal');
-let editingItem = null;
+let editImgs = [];      // 草稿图片列表
+let editOrig = null;    // 打开弹窗时的原始图片集合
 
 function renderEditThumbs() {
-  renderThumbs(document.getElementById('editThumbs'), (editingItem && editingItem.images) || [], id => {
-    editingItem.images = editingItem.images.filter(x => x !== id);
-    dropImage(id);
-    saveActive();
+  renderThumbs(document.getElementById('editThumbs'), editImgs, id => {
+    editImgs = editImgs.filter(x => x !== id); // 先只改草稿，保存时才真正删 blob
     renderEditThumbs();
   });
 }
@@ -999,16 +1052,18 @@ document.getElementById('editImgBtn').onclick = () => document.getElementById('e
 document.getElementById('editImgInput').onchange = async e => {
   const files = [...e.target.files];
   e.target.value = '';
-  if (!files.length || !editingItem) return;
-  const n = await attachImages(editingItem, files);
-  saveActive();
+  if (!files.length || !editOrig) return;
+  const holder = { images: [] };
+  const n = await attachImages(holder, files);
+  editImgs = editImgs.concat(holder.images);
   document.getElementById('editImgMsg').textContent = n ? `已添加 ${n} 张` : '没有可用的图片';
   renderEditThumbs();
 };
 
 function openEdit(it) {
   editingId = it.id;
-  editingItem = it;
+  editOrig = new Set(it.images || []);
+  editImgs = (it.images || []).slice();
   const d = DEF[active];
   document.getElementById('editTitle').textContent = active === 'q' ? '编辑错题' : '编辑知识点';
   document.getElementById('editForm').innerHTML = Object.entries(d.fieldLabels).map(([key, label]) => `
@@ -1024,18 +1079,30 @@ function openEdit(it) {
   renderEditThumbs();
   editModal.classList.add('open');
 }
-document.getElementById('editCancel').onclick = () => editModal.classList.remove('open');
-editModal.onclick = e => { if (e.target === editModal) editModal.classList.remove('open'); };
+function finishEdit() {
+  editImgs = []; editOrig = null; editingId = null;
+  editModal.classList.remove('open');
+}
+function cancelEdit() {
+  // 丢弃本次新增、未被保存的图片
+  if (editOrig) editImgs.filter(id => !editOrig.has(id)).forEach(dropImage);
+  finishEdit();
+}
+document.getElementById('editCancel').onclick = cancelEdit;
+editModal.onclick = e => { if (e.target === editModal) cancelEdit(); };
 document.getElementById('editSave').onclick = () => {
   const it = curItems().find(x => x.id === editingId);
   if (!it) return;
   for (const key of Object.keys(DEF[active].fieldLabels)) it[key] = document.getElementById('ef_' + key).value.trim();
   it.tags = document.getElementById('ef_tags').value.split(/[,，]/).map(s => s.trim()).filter(Boolean);
   it.updatedAt = Date.now();
+  // 图片：提交草稿，并删除被移除的 blob
+  if (editOrig) [...editOrig].filter(id => !editImgs.includes(id)).forEach(dropImage);
+  it.images = editImgs.slice();
   saveActive();
   refreshTagPicker();
   render();
-  editModal.classList.remove('open');
+  finishEdit();
 };
 
 /* ---------- 随机复习 ---------- */
@@ -1046,15 +1113,17 @@ randomBtn.onclick = () => {
   const it = pool[Math.floor(Math.random() * pool.length)];
   const d = DEF[active];
   document.getElementById('randomTitle').textContent = d.overviewTitle;
+  const secs = d.details(it).filter(x => x.label !== '查看我的错误答案' || x.text);
   document.getElementById('randomBody').innerHTML = `
     ${d.main(it)}
     ${imgStrip(it)}
     <div class="meta">
+      <span class="duechip${isDue(it) ? ' due' : ''}">🕒 ${dueLabel(it)}</span>
       ${it.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}
       <span class="spacer"></span>
       <span class="status ${it.status}">● ${STATUS[it.status]}</span>
     </div>
-    ${d.details(it).map(x => `<details><summary>${x.label}</summary><div class="body">${renderMath(x.text) || '<span class="section-label">（暂无）</span>'}</div></details>`).join('')}
+    ${secs.map(x => `<details><summary>${x.label}</summary><div class="body">${renderMath(x.text) || '<span class="section-label">（暂无）</span>'}</div></details>`).join('')}
   `;
   hydrateImages(document.getElementById('randomBody'));
   randomModal.classList.add('open');
@@ -1064,18 +1133,47 @@ document.getElementById('randomNext').onclick = () => randomBtn.click();
 randomModal.onclick = e => { if (e.target === randomModal) randomModal.classList.remove('open'); };
 
 /* ---------- 导出 / 导入（两库一起） ---------- */
-document.getElementById('exportBtn').onclick = () => {
-  const payload = { version: 2, questions: stores.q.items, knowledge: stores.k.items };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+function dateStamp() {
   const d = new Date();
-  const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+}
+function downloadBlob(name, blob) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `数学复习本-${stamp}.json`;
+  a.download = name;
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+// 体积小的纯文字备份（不含配图）
+document.getElementById('exportBtn').onclick = () => {
+  const payload = { version: 2, questions: stores.q.items, knowledge: stores.k.items };
+  downloadBlob(`数学复习本-${dateStamp()}.json`,
+    new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
   setBackupMeta(Object.assign(getBackupMeta(), { json: Date.now() }));
   updateBackupBar();
+};
+
+// 完整备份：把配图以 base64 一并写入，换设备后可完整还原
+document.getElementById('exportFullBtn').onclick = async () => {
+  settingsDrawer.classList.remove('open');
+  const payload = { version: 3, questions: stores.q.items, knowledge: stores.k.items, images: {} };
+  try {
+    for (const id of referencedImageIds()) {
+      const rec = await idbGet(id);
+      if (rec && rec.blob) payload.images[id] = { type: rec.type || 'image/jpeg', data: await blobToB64(rec.blob) };
+    }
+  } catch (e) { /* 图片读取失败时仍导出文字部分 */ }
+  downloadBlob(`数学复习本-完整备份-${dateStamp()}.json`,
+    new Blob([JSON.stringify(payload)], { type: 'application/json' }));
+  setBackupMeta(Object.assign(getBackupMeta(), { json: Date.now() }));
+  updateBackupBar();
+};
+
+// 手动清理未被任何条目（含回收站）引用的图片
+document.getElementById('gcBtn').onclick = async () => {
+  const n = await gcImages();
+  alert(n ? `已清理 ${n} 张无用图片。` : '没有发现无用图片。');
 };
 
 document.getElementById('importBtn2').onclick = () => document.getElementById('fileInput').click();
@@ -1084,16 +1182,17 @@ document.getElementById('fileInput').onchange = e => {
   e.target.value = '';
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     let data;
     try { data = JSON.parse(reader.result); } catch (err) { alert('文件不是合法的 JSON。'); return; }
 
-    let qs = null, ks = null;
+    let qs = null, ks = null, imgs = null;
     if (Array.isArray(data)) {
       qs = data; // 兼容旧版：数组即错题列表
     } else if (data && typeof data === 'object') {
       if (Array.isArray(data.questions)) qs = data.questions;
       if (Array.isArray(data.knowledge)) ks = data.knowledge;
+      if (data.images && typeof data.images === 'object') imgs = data.images;
     }
     if (qs === null && ks === null) { alert('文件结构不符合要求，未做任何修改。'); return; }
     if (qs && !qs.every(x => x && typeof x === 'object')) { alert('questions 结构非法，未做任何修改。'); return; }
@@ -1112,9 +1211,26 @@ document.getElementById('fileInput').onchange = e => {
     }
     if (qs) { const inc = qs.map(normalizeQuestion); stores.q.items = mode ? inc : stores.q.items.concat(inc); saveStore(K_Q, stores.q.items); }
     if (ks) { const inc = ks.map(normalizeKp); stores.k.items = mode ? inc : stores.k.items.concat(inc); saveStore(K_K, stores.k.items); }
+
+    // 还原配图（完整备份）：写入 IndexedDB，使条目里的图片 id 能取到
+    let restored = 0;
+    if (imgs) {
+      for (const [id, rec] of Object.entries(imgs)) {
+        if (!rec || typeof rec.data !== 'string') continue;
+        try {
+          const blob = b64ToBlob(rec.data, rec.type);
+          await idbPut({ id, blob, type: rec.type || 'image/jpeg', size: blob.size || 0, addedAt: Date.now() });
+          restored++;
+        } catch (e) { /* 单张失败忽略 */ }
+      }
+    }
+    // 替换模式下，被覆盖条目遗留的图片不再被引用，一并清掉
+    if (mode) await gcImages();
+
     refreshTagPicker();
     applyFilters();
-    alert(`导入完成：错题 ${stores.q.items.length} 道，知识点 ${stores.k.items.length} 个。`);
+    alert(`导入完成：错题 ${stores.q.items.length} 道，知识点 ${stores.k.items.length} 个。` +
+      (restored ? `\n已还原配图 ${restored} 张。` : ''));
   };
   reader.readAsText(file);
 };
@@ -1198,6 +1314,7 @@ function toMarkdown() {
       out.push('**题目**');
       out.push('');
       out.push(it.stem || '（无题目）');
+      if (it.myAnswer) { out.push(''); out.push('**我的错误答案**'); out.push(''); out.push(it.myAnswer); }
       if (it.analysis) { out.push(''); out.push('**解析**'); out.push(''); out.push(it.analysis); }
       if (it.knowledge) { out.push(''); out.push('**知识点**'); out.push(''); out.push(it.knowledge); }
     } else {
@@ -1240,7 +1357,7 @@ document.getElementById('printBtn').onclick = () => {
     const tags = it.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('');
     const main = isQ ? renderMath(it.stem) : `<b>${renderMath(it.title)}</b>`;
     const secs = isQ
-      ? [['解析', it.analysis], ['知识点', it.knowledge]]
+      ? [['我的错误答案', it.myAnswer], ['解析', it.analysis], ['知识点', it.knowledge]]
       : [['讲解', it.content]];
     const secHtml = secs.filter(s => s[1]).map(s =>
       `<div class="print-sec"><div class="print-label">${s[0]}</div><div>${renderMath(s[1])}</div></div>`).join('');
@@ -1350,9 +1467,7 @@ function renderCram() {
   hydrateImages(cramStage);
 
   cramStage.querySelector('[data-cram-status]').onclick = () => {
-    it.status = STATUS_NEXT[it.status];
-    it.updatedAt = Date.now();
-    saveActive();
+    applyStatus(it, STATUS_NEXT[it.status]);
     renderCram();
   };
   cramStage.querySelector('[data-cram-star]').onclick = () => {
@@ -1572,7 +1687,8 @@ function aiSolvePrompt(stem) {
     '2. 不要用 ``` 代码块包裹；',
     '3. 公式一律使用 LaTeX：行内公式用 $...$，独立公式用 $$...$$；',
     '4. 上面的原文里若含多项（以 === 分隔），输出的每一项与之一一对应；',
-    '5. 不要改动原文的题目内容，只在其基础上补充解答与整理。',
+    '5. 不要改动原文的题目内容，只在其基础上补充解答与整理；',
+    '6. 【我的错误答案】是留给用户自己填的，请保持为空、不要输出该段内容。',
     '',
     '格式示例：',
     d.importExample,
@@ -1826,10 +1942,15 @@ aiEl('aiTest').onclick = async () => {
 };
 
 /* ---------- 初始化 ---------- */
-applySettings();
-fillAiForm();
-purgeTrash();
-updateTrashCount();
-updateBackupBar();
-refreshTagPicker();
-render();
+async function boot() {
+  await loadInitial();
+  applySettings();
+  fillAiForm();
+  purgeTrash();
+  await gcImages(); // 清理历史遗留的孤儿图片
+  updateTrashCount();
+  updateBackupBar();
+  refreshTagPicker();
+  render();
+}
+boot();

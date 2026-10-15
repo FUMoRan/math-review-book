@@ -21,7 +21,7 @@
     <button class="tab active" data-view="q">错题</button>
     <button class="tab" data-view="k">知识点</button>
   </div>
-  <input id="search" class="search" placeholder="搜索…">
+  <input id="search" class="search" placeholder="搜索…（支持 tag:导数、status:已掌握、star、due）">
   <select id="statusFilter">
     <option value="">全部状态</option>
     <option value="new">未复习</option>
@@ -35,6 +35,7 @@
   <button id="selectBtn">多选</button>
   <button id="groupBtn">分组</button>
   <button id="starBtn">☆ 只看收藏</button>
+  <button id="dueBtn">🕒 待复习</button>
   <button id="randomBtn">随机一题</button>
   <button id="cramBtn">背题模式</button>
   <button id="exportBtn">导出</button>
@@ -277,6 +278,11 @@
         <button id="printBtn">打印</button>
       </div>
       <p class="setnote">Markdown 与打印只导出「当前视图」（错题或知识点）。</p>
+      <div class="row" style="margin-top:8px">
+        <button id="exportFullBtn">完整备份（含图片）</button>
+        <button id="gcBtn">清理无用图片</button>
+      </div>
+      <p class="setnote">「导出」只含文字（体积小）；「完整备份」会把配图一并打包，可在换设备后完整还原。API Key 永不包含在备份中。</p>
     </div>
 
     <div class="setrow">
@@ -319,6 +325,7 @@
 </div>
 
 <script src="./vendor/katex/katex.min.js"></script>
+<script src="./lib.js"></script>
 <script src="./app.js"></script>
 <!-- PWA-BEGIN -->
 <script>

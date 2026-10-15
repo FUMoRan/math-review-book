@@ -118,6 +118,8 @@ main{max-width:var(--mainw); margin:0 auto; padding:20px; transition:max-width .
 .status.reviewing{color:var(--warn); border-color:var(--warn-line); background:var(--warn-bg);}
 .status.mastered{color:var(--ok); border-color:var(--ok-line); background:var(--ok-bg);}
 .spacer{flex:1;}
+/* 卡片右侧操作组：整体换行，避免「删除」被挤到单独一行 */
+.cardacts{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-left:auto;}
 .link{color:var(--muted); font-size:13px; background:none; border:none; padding:2px 6px; cursor:pointer;}
 .link:hover{color:var(--brand);}
 details{
@@ -223,6 +225,12 @@ button.danger:hover{background:var(--danger-bg); border-color:var(--danger); col
   border-radius:20px; padding:2px 9px; cursor:pointer;
 }
 .relchip:hover{background:var(--kp-soft-2);}
+.duechip{
+  font-size:12px; color:var(--muted); background:var(--sunken); border:1px solid var(--line);
+  border-radius:20px; padding:2px 9px; white-space:nowrap; cursor:default;
+}
+.duechip.due{color:var(--warn); background:var(--warn-bg); border-color:var(--warn-line);}
+button#dueBtn.on{border-color:var(--warn); color:var(--warn); background:transparent;}
 
 /* ---------- 设置抽屉 ---------- */
 .drawer{position:fixed; inset:0; background:rgba(20,25,40,.4); display:none; z-index:60;}
