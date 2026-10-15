@@ -34,14 +34,26 @@
   </div>
   <button id="selectBtn">多选</button>
   <button id="groupBtn">分组</button>
+  <button id="starBtn">☆ 只看收藏</button>
   <button id="randomBtn">随机一题</button>
+  <button id="cramBtn">背题模式</button>
   <button id="exportBtn">导出</button>
   <button id="importBtn2">导入</button>
   <button class="primary" id="addBtn">+ 新增错题</button>
+  <button id="settingsBtn" title="设置" aria-label="设置">⚙️ 设置</button>
   <input type="file" id="fileInput" accept="application/json,.json" hidden>
+  <input type="file" id="addImgInput" accept="image/*" multiple hidden>
+  <input type="file" id="editImgInput" accept="image/*" multiple hidden>
 </header>
 
 <main>
+  <div class="backupbar" id="backupBar" style="display:none">
+    <span id="backupText"></span>
+    <span class="spacer"></span>
+    <button class="primary" id="backupNow">立即导出备份</button>
+    <button class="ghost" id="backupLater">以后再说</button>
+  </div>
+
   <p class="count" id="count"></p>
 
   <div class="toolbar" id="toolbar" style="display:none">
@@ -78,6 +90,14 @@
       <span id="parseMsg" class="badge-note"></span>
     </div>
     <div class="preview" id="preview"></div>
+    <div class="imgrow" id="addImgRow" style="display:none">
+      <label>配图（解析出 1 项时可用；多项请在导入后逐个「编辑」添加）</label>
+      <div class="thumbs" id="addThumbs"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" id="addImgBtn">+ 添加图片</button>
+        <span class="badge-note" id="addImgMsg"></span>
+      </div>
+    </div>
     <div class="row" id="importRow" style="display:none">
       <button class="primary" id="importBtn">导入选中项</button>
     </div>
@@ -89,6 +109,14 @@
   <div class="panel">
     <h2 id="editTitle">编辑</h2>
     <div id="editForm"></div>
+    <div id="editImgs">
+      <label>配图</label>
+      <div class="thumbs" id="editThumbs"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" id="editImgBtn">+ 添加图片</button>
+        <span class="badge-note" id="editImgMsg"></span>
+      </div>
+    </div>
     <div class="row">
       <button class="primary" id="editSave">保存</button>
       <button class="ghost" id="editCancel">取消</button>
@@ -104,6 +132,121 @@
     <div class="row">
       <button class="primary" id="randomNext">换一题</button>
       <button class="ghost" id="randomClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 图片查看 -->
+<div class="lightbox" id="lightbox">
+  <img id="lightboxImg" alt="图片">
+  <button class="ghost lightbox-close" id="lightboxClose">关闭</button>
+</div>
+
+<!-- 回收站 -->
+<div class="modal" id="trashModal">
+  <div class="panel">
+    <h2>回收站</h2>
+    <p class="hint">删除的内容会先放到这里，30 天后自动清理。可以恢复或彻底删除。</p>
+    <div id="trashList"></div>
+    <div class="row">
+      <button class="ghost" id="trashClose">关闭</button>
+      <span class="spacer"></span>
+      <button class="danger" id="trashEmpty">清空回收站</button>
+    </div>
+  </div>
+</div>
+
+<!-- 统计 -->
+<div class="modal" id="statsModal">
+  <div class="panel">
+    <h2>数据统计</h2>
+    <p class="hint">当前两库的整体概览。</p>
+    <div id="statsBody"></div>
+    <div class="row">
+      <button class="ghost" id="statsClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 打印区域（仅打印时可见） -->
+<div class="print-area" id="printArea"></div>
+
+<button class="totop" id="toTop" title="返回顶部" aria-label="返回顶部">↑</button>
+
+<!-- 背题模式 -->
+<div class="cram" id="cram">
+  <div class="cram-bar">
+    <button class="ghost" id="cramExit">‹ 退出</button>
+    <span class="spacer"></span>
+    <span class="section-label" id="cramProg"></span>
+  </div>
+  <div class="cram-stage" id="cramStage"></div>
+  <div class="cram-foot">
+    <button id="cramPrev">‹ 上一</button>
+    <button class="primary" id="cramNext">下一 ›</button>
+  </div>
+</div>
+
+<!-- 设置抽屉 -->
+<div class="drawer" id="settingsDrawer">
+  <div class="drawer-panel">
+    <div class="row" style="margin:0 0 8px">
+      <h2 style="margin:0; font-size:17px">设置</h2>
+      <span class="spacer"></span>
+      <button class="ghost" id="settingsClose">关闭</button>
+    </div>
+
+    <div class="setrow">
+      <span class="lbl">分栏（宽屏生效，手机上固定 1 列）</span>
+      <div class="seg" id="setCols">
+        <button data-cols="auto">自动</button>
+        <button data-cols="1">1 列</button>
+        <button data-cols="2">2 列</button>
+        <button data-cols="3">3 列</button>
+      </div>
+      <p class="setnote" id="colsNote"></p>
+    </div>
+
+    <div class="setrow">
+      <span class="lbl">主题</span>
+      <div class="seg" id="setTheme">
+        <button data-theme="system">跟随系统</button>
+        <button data-theme="light">浅色</button>
+        <button data-theme="dark">深色</button>
+      </div>
+    </div>
+
+    <div class="setrow">
+      <span class="lbl">密度</span>
+      <div class="seg" id="setDensity">
+        <button data-density="compact">紧凑</button>
+        <button data-density="comfortable">舒适</button>
+        <button data-density="large">大号</button>
+      </div>
+    </div>
+
+    <div class="setrow">
+      <span class="lbl">动效</span>
+      <div class="seg" id="setAnim">
+        <button data-anim="on">开启</button>
+        <button data-anim="off">关闭</button>
+      </div>
+      <p class="setnote">开启后：展开/折叠平滑淡入、切页淡入、按钮按下反馈。</p>
+    </div>
+
+    <div class="setrow">
+      <span class="lbl">回收站</span>
+      <button id="openTrash">打开回收站（<span id="trashCount">0</span>）</button>
+    </div>
+
+    <div class="setrow">
+      <span class="lbl">数据</span>
+      <div class="row" style="margin-top:0">
+        <button id="openStats">统计</button>
+        <button id="exportMdBtn">导出 Markdown</button>
+        <button id="printBtn">打印</button>
+      </div>
+      <p class="setnote">Markdown 与打印只导出「当前视图」（错题或知识点）。</p>
     </div>
   </div>
 </div>

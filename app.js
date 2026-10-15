@@ -9,6 +9,324 @@ const K_K = 'mq_kps';
 const STATUS = { new: '未复习', reviewing: '复习中', mastered: '已掌握' };
 const STATUS_NEXT = { new: 'reviewing', reviewing: 'mastered', mastered: 'new' };
 
+/* ===================== 设置（偏好，与数据分开存） ===================== */
+const K_SET = 'mq_settings';
+const SET_DEF = { cols: 'auto', theme: 'system', density: 'comfortable', anim: 'on' };
+
+function readSettings() {
+  try {
+    const v = JSON.parse(localStorage.getItem(K_SET));
+    return v && typeof v === 'object' ? v : {};
+  } catch (e) { return {}; }
+}
+const settings = Object.assign({}, SET_DEF, readSettings());
+
+function saveSettings() {
+  try { localStorage.setItem(K_SET, JSON.stringify(settings)); } catch (e) {}
+}
+
+const mqDark = window.matchMedia('(prefers-color-scheme: dark)');
+const mqMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+const effectiveTheme = () => settings.theme === 'system' ? (mqDark.matches ? 'dark' : 'light') : settings.theme;
+const effectiveAnim = () => settings.anim === 'off' ? 'off' : (mqMotion.matches ? 'off' : 'on');
+
+// 实际列数：手机（<768）固定 1 列；宽屏按设置，同时不超过屏幕能容纳的列数
+function effectiveCols() {
+  const w = window.innerWidth;
+  if (w < 768) return 1;
+  const cap = Math.max(1, Math.floor((w - 48) / 320));
+  let want;
+  if (settings.cols === 'auto') want = w >= 1440 ? 3 : (w >= 1024 ? 2 : 1);
+  else want = parseInt(settings.cols, 10) || 1;
+  return Math.min(want, cap);
+}
+
+function applySettings() {
+  const root = document.documentElement;
+  const cols = effectiveCols();
+  root.dataset.theme = effectiveTheme();
+  root.dataset.density = settings.density;
+  root.dataset.anim = effectiveAnim();
+  root.dataset.cols = cols;
+  root.style.setProperty('--cols', cols);
+  root.style.setProperty('--mainw', cols >= 3 ? '1560px' : (cols === 2 ? '1180px' : '840px'));
+
+  document.querySelectorAll('#setCols button').forEach(b => b.classList.toggle('on', b.dataset.cols === settings.cols));
+  document.querySelectorAll('#setTheme button').forEach(b => b.classList.toggle('on', b.dataset.theme === settings.theme));
+  document.querySelectorAll('#setDensity button').forEach(b => b.classList.toggle('on', b.dataset.density === settings.density));
+  document.querySelectorAll('#setAnim button').forEach(b => b.classList.toggle('on', b.dataset.anim === settings.anim));
+
+  const note = document.getElementById('colsNote');
+  if (note) {
+    note.textContent = window.innerWidth < 768
+      ? '当前屏幕较窄，固定 1 列（把窗口拉宽或平板横屏后可多列）。'
+      : `当前实际显示 ${cols} 列。`;
+  }
+}
+
+
+/* ===================== 图片（存 IndexedDB，文本仍存 localStorage） ===================== */
+const K_TRASH = 'mq_trash';
+let idbPromise = null;
+function idb() {
+  if (!idbPromise) {
+    idbPromise = new Promise((res, rej) => {
+      const rq = indexedDB.open('mqimg', 1);
+      rq.onupgradeneeded = () => { rq.result.createObjectStore('imgs', { keyPath: 'id' }); };
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    });
+  }
+  return idbPromise;
+}
+async function idbPut(rec) {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('imgs', 'readwrite');
+    tx.objectStore('imgs').put(rec);
+    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
+  });
+}
+async function idbGet(id) {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const rq = db.transaction('imgs', 'readonly').objectStore('imgs').get(id);
+    rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
+  });
+}
+async function idbDel(id) {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('imgs', 'readwrite');
+    tx.objectStore('imgs').delete(id);
+    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
+  });
+}
+
+const imgCache = new Map(); // id -> objectURL
+async function imgUrl(id) {
+  if (imgCache.has(id)) return imgCache.get(id);
+  try {
+    const rec = await idbGet(id);
+    if (!rec || !rec.blob) return null;
+    const u = URL.createObjectURL(rec.blob);
+    imgCache.set(id, u);
+    return u;
+  } catch (e) { return null; }
+}
+function hydrateImages(root) {
+  root.querySelectorAll('img[data-img-id]').forEach(el => {
+    imgUrl(el.dataset.imgId).then(u => {
+      if (u) el.src = u; else el.classList.add('broken');
+    });
+  });
+}
+function dropImage(id) {
+  const u = imgCache.get(id);
+  if (u) { URL.revokeObjectURL(u); imgCache.delete(id); }
+  idbDel(id).catch(() => {});
+}
+
+// 压缩：最长边 1600，JPEG 0.85；小图或压缩后反而更大则保留原图
+function compressImage(file) {
+  return new Promise(resolve => {
+    if (!file || !file.type || !file.type.startsWith('image/')) return resolve(null);
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight;
+      const scale = Math.min(1, 1600 / Math.max(w, h));
+      if (scale === 1 && file.size <= 200 * 1024) { URL.revokeObjectURL(url); return resolve(file); }
+      const outW = Math.max(1, Math.round(w * scale));
+      const outH = Math.max(1, Math.round(h * scale));
+      const cv = document.createElement('canvas');
+      cv.width = outW; cv.height = outH;
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, outW, outH);
+      ctx.drawImage(img, 0, 0, outW, outH);
+      URL.revokeObjectURL(url);
+      cv.toBlob(b => resolve(b && b.size < file.size ? b : file), 'image/jpeg', 0.85);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
+async function attachImages(item, files) {
+  let added = 0;
+  for (const f of files) {
+    const blob = await compressImage(f);
+    if (!blob) continue;
+    const id = 'img_' + uid();
+    await idbPut({ id, blob, type: blob.type || 'image/jpeg', size: blob.size || 0, addedAt: Date.now() });
+    item.images = (item.images || []).concat(id);
+    added++;
+  }
+  return added;
+}
+
+const imgStrip = it => (it.images && it.images.length)
+  ? `<div class="imgs">${it.images.map(id => `<img class="thumb" data-img-id="${id}" alt="配图" loading="lazy">`).join('')}</div>`
+  : '';
+
+function renderThumbs(box, ids, onDelete) {
+  if (!ids.length) { box.innerHTML = '<span class="section-label">还没有图片</span>'; return; }
+  box.innerHTML = ids.map(id =>
+    `<div class="thumb-wrap"><img class="thumb" data-img-id="${id}" alt="配图"><button class="thumb-del" data-del="${id}" title="移除">×</button></div>`
+  ).join('');
+  hydrateImages(box);
+  box.querySelectorAll('[data-del]').forEach(b => b.onclick = e => { e.stopPropagation(); onDelete(b.dataset.del); });
+}
+
+/* ---------- 图片查看 ---------- */
+const lightbox = document.getElementById('lightbox');
+const lightboxImg = document.getElementById('lightboxImg');
+function openLightbox(src) {
+  lightboxImg.src = src;
+  lightbox.classList.add('open');
+}
+document.getElementById('lightboxClose').onclick = () => lightbox.classList.remove('open');
+lightbox.onclick = e => { if (e.target === lightbox) lightbox.classList.remove('open'); };
+document.addEventListener('click', e => {
+  if (!e.target || !e.target.closest) return;
+  const t = e.target.closest('img.thumb');
+  if (t && t.src) openLightbox(t.src);
+});
+
+/* ---------- 回收站（软删除，30 天自动清理） ---------- */
+const TRASH_DAYS = 30;
+let trash = (() => {
+  try { const v = JSON.parse(localStorage.getItem(K_TRASH)); return Array.isArray(v) ? v : []; }
+  catch (e) { return []; }
+})();
+function saveTrash() { try { localStorage.setItem(K_TRASH, JSON.stringify(trash)); } catch (e) {} }
+function updateTrashCount() {
+  const el = document.getElementById('trashCount');
+  if (el) el.textContent = trash.length;
+}
+function toTrash(kind, item) {
+  trash.unshift({ kind, item, deletedAt: Date.now() });
+  saveTrash();
+  updateTrashCount();
+}
+function purgeTrash() {
+  const limit = TRASH_DAYS * 24 * 3600 * 1000;
+  const keep = [], gone = [];
+  for (const t of trash) (Date.now() - t.deletedAt > limit ? gone : keep).push(t);
+  if (!gone.length) return;
+  trash = keep;
+  saveTrash();
+  gone.forEach(t => (t.item.images || []).forEach(dropImage));
+}
+function purgeTrashOne(i) {
+  const t = trash[i];
+  if (!t) return;
+  (t.item.images || []).forEach(dropImage);
+  trash.splice(i, 1);
+  saveTrash();
+  updateTrashCount();
+}
+function restoreTrashOne(i) {
+  const t = trash[i];
+  if (!t) return;
+  const kind = t.kind === 'k' ? 'k' : 'q';
+  stores[kind].items.push(stores[kind].norm(t.item));
+  saveStore(stores[kind].key, stores[kind].items);
+  trash.splice(i, 1);
+  saveTrash();
+  updateTrashCount();
+  refreshTagPicker();
+  render();
+}
+
+const trashModal = document.getElementById('trashModal');
+function renderTrash() {
+  const box = document.getElementById('trashList');
+  if (!trash.length) {
+    box.innerHTML = '<div class="empty" style="padding:24px 0">回收站是空的。</div>';
+    return;
+  }
+  box.innerHTML = trash.map((t, i) => {
+    const isK = t.kind === 'k';
+    const title = isK ? (t.item.title || '（无名称）') : (t.item.stem || '（无题目）');
+    const days = Math.floor((Date.now() - t.deletedAt) / 86400000);
+    return `<div class="pvi">
+      <div class="section-label" style="margin-bottom:6px">${isK ? '知识点' : '错题'} · 删除于 ${days > 0 ? days + ' 天前' : '今天'}</div>
+      <div class="stem">${renderMath(title)}</div>
+      <div class="imgs">${(t.item.images || []).map(id => `<img class="thumb" data-img-id="${id}" alt="配图">`).join('')}</div>
+      <div class="row" style="margin-top:8px">
+        <button data-restore="${i}">恢复</button>
+        <button class="danger" data-purge="${i}">彻底删除</button>
+      </div>
+    </div>`;
+  }).join('');
+  hydrateImages(box);
+  box.querySelectorAll('[data-restore]').forEach(b => b.onclick = () => { restoreTrashOne(+b.dataset.restore); renderTrash(); });
+  box.querySelectorAll('[data-purge]').forEach(b => b.onclick = () => {
+    if (confirm('彻底删除，无法恢复。确定？')) { purgeTrashOne(+b.dataset.purge); renderTrash(); }
+  });
+}
+document.getElementById('openTrash').onclick = () => {
+  settingsDrawer.classList.remove('open');
+  renderTrash();
+  trashModal.classList.add('open');
+};
+document.getElementById('trashClose').onclick = () => trashModal.classList.remove('open');
+trashModal.onclick = e => { if (e.target === trashModal) trashModal.classList.remove('open'); };
+document.getElementById('trashEmpty').onclick = () => {
+  if (!trash.length) return;
+  if (!confirm(`彻底删除回收站里的全部 ${trash.length} 项？无法恢复。`)) return;
+  trash.forEach(t => (t.item.images || []).forEach(dropImage));
+  trash = [];
+  saveTrash();
+  updateTrashCount();
+  renderTrash();
+};
+
+/* ---------- 重复检测 ---------- */
+function normText(s) {
+  return String(s || '').toLowerCase().replace(/\s+/g, '').replace(/[，。、；：！？“”‘’（）()【】\[\]$]/g, '');
+}
+function bigrams(s) {
+  const out = [];
+  for (let i = 0; i < s.length - 1; i++) out.push(s.slice(i, i + 2));
+  return out;
+}
+function simScore(a, b) {
+  const A = bigrams(normText(a)), B = bigrams(normText(b));
+  if (!A.length || !B.length) return 0;
+  const m = new Map();
+  A.forEach(g => m.set(g, (m.get(g) || 0) + 1));
+  let hit = 0;
+  for (const g of B) { const c = m.get(g); if (c > 0) { hit++; m.set(g, c - 1); } }
+  return (2 * hit) / (A.length + B.length);
+}
+function findDup(kind, obj) {
+  const key = kind === 'k' ? 'title' : 'stem';
+  const val = obj[key];
+  if (!normText(val)) return null;
+  let best = null;
+  for (const it of stores[kind].items) {
+    const s = simScore(val, it[key]);
+    if (s >= 0.85 && (!best || s > best.score)) best = { score: s, item: it };
+  }
+  return best;
+}
+
+// 统计一批待导入项里，有多少与现有条目高度相似
+function countDups(kind, incoming) {
+  const key = kind === 'k' ? 'title' : 'stem';
+  let n = 0;
+  for (const o of incoming) {
+    const val = o && o[key];
+    if (!normText(val)) continue;
+    if (stores[kind].items.some(it => simScore(val, it[key]) >= 0.85)) n++;
+  }
+  return n;
+}
+
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
@@ -22,6 +340,8 @@ function normalizeQuestion(it) {
     knowledge: typeof o.knowledge === 'string' ? o.knowledge : '',
     tags: Array.isArray(o.tags) ? o.tags.filter(t => typeof t === 'string' && t.trim()) : [],
     status: STATUS[o.status] ? o.status : 'new',
+    star: !!o.star,
+    images: Array.isArray(o.images) ? o.images.filter(s => typeof s === 'string' && s) : [],
     createdAt: o.createdAt || Date.now(),
     updatedAt: o.updatedAt || Date.now(),
   };
@@ -35,6 +355,8 @@ function normalizeKp(it) {
     content: typeof o.content === 'string' ? o.content : '',
     tags: Array.isArray(o.tags) ? o.tags.filter(t => typeof t === 'string' && t.trim()) : [],
     status: STATUS[o.status] ? o.status : 'new',
+    star: !!o.star,
+    images: Array.isArray(o.images) ? o.images.filter(s => typeof s === 'string' && s) : [],
     createdAt: o.createdAt || Date.now(),
     updatedAt: o.updatedAt || Date.now(),
   };
@@ -140,12 +462,13 @@ const DEF = {
 
 const PAGE = 30;
 const views = {
-  q: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), search: '', status: '' },
-  k: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), search: '', status: '' },
+  q: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), search: '', status: '', starOnly: false },
+  k: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), search: '', status: '', starOnly: false },
 };
 let active = 'q';
 let editingId = null;
 let pending = [];
+let pendingAnim = false;
 
 const cur = () => views[active];
 const curItems = () => stores[active].items;
@@ -232,7 +555,9 @@ function currentFiltered() {
   const q = v.search.trim().toLowerCase();
   const out = curItems().filter(it => {
     if (v.status && it.status !== v.status) return false;
-    if (v.activeTags.size && !it.tags.some(t => v.activeTags.has(t))) return false;
+    if (v.starOnly && !it.star) return false;
+    // 多标签：选多个时取交集（必须同时含有全部所选标签）
+    if (v.activeTags.size && ![...v.activeTags].every(t => it.tags.includes(t))) return false;
     if (q && !DEF[active].hay(it).toLowerCase().includes(q)) return false;
     return true;
   });
@@ -268,7 +593,9 @@ function makeCard(it) {
   card.innerHTML = `
     ${v.selectMode ? `<input type="checkbox" class="chk" data-act="pick" ${v.selected.has(it.id) ? 'checked' : ''}>` : ''}
     ${d.main(it)}
+    ${imgStrip(it)}
     <div class="meta">
+      <button class="star ${it.star ? 'on' : ''}" data-act="star" title="${it.star ? '取消收藏' : '收藏'}">${it.star ? '★' : '☆'}</button>
       ${tags}${rel}
       <span class="spacer"></span>
       <span class="status ${it.status}" data-act="status">● ${STATUS[it.status]}</span>
@@ -285,9 +612,19 @@ function makeCard(it) {
     saveActive();
     render();
   };
+  card.querySelector('[data-act="star"]').onclick = () => {
+    it.star = !it.star;
+    saveActive();
+    const btn = card.querySelector('[data-act="star"]');
+    btn.classList.toggle('on', it.star);
+    btn.textContent = it.star ? '★' : '☆';
+    btn.title = it.star ? '取消收藏' : '收藏';
+    if (v.starOnly && !it.star) render();
+  };
   card.querySelector('[data-act="edit"]').onclick = () => openEdit(it);
   card.querySelector('[data-act="delete"]').onclick = () => {
-    if (confirm('确定删除？')) {
+    if (confirm('移入回收站？30 天内可在「设置 → 回收站」恢复。')) {
+      toTrash(active, it);
       stores[active].items = curItems().filter(x => x.id !== it.id);
       v.selected.delete(it.id);
       saveActive();
@@ -309,6 +646,23 @@ function makeCard(it) {
     views.q.status = '';
     switchView('q');
   };
+  // 移动端：长按 0.5 秒进入多选并选中该项
+  let pressT = null, moved = false;
+  card.addEventListener('touchstart', () => {
+    if (v.selectMode) return;
+    moved = false;
+    pressT = setTimeout(() => {
+      if (moved) return;
+      enterSelectMode([it.id]);
+      if (navigator.vibrate) navigator.vibrate(15);
+      const s = window.getSelection && window.getSelection();
+      if (s && s.removeAllRanges) s.removeAllRanges();
+    }, 500);
+  }, { passive: true });
+  card.addEventListener('touchmove', () => { moved = true; clearTimeout(pressT); }, { passive: true });
+  card.addEventListener('touchend', () => clearTimeout(pressT));
+  card.addEventListener('touchcancel', () => { moved = true; clearTimeout(pressT); });
+
   return card;
 }
 
@@ -322,6 +676,7 @@ function render() {
   if (!filtered.length) {
     listEl.innerHTML = `<div class="empty">还没有内容。点右上角「${DEF[active].addLabel}」粘贴一段试试。</div>`;
     loadMoreRow.style.display = 'none';
+    pendingAnim = false;
     updateToolbar();
     return;
   }
@@ -348,7 +703,15 @@ function render() {
     shown.forEach(it => listEl.appendChild(makeCard(it)));
   }
 
+  if (pendingAnim) {
+    [...listEl.querySelectorAll('.card')].forEach((c, i) => {
+      c.classList.add('enter');
+      c.style.animationDelay = Math.min(i, 12) * 18 + 'ms';
+    });
+    pendingAnim = false;
+  }
   loadMoreRow.style.display = filtered.length > shown.length ? 'flex' : 'none';
+  hydrateImages(listEl);
   updateToolbar();
 }
 
@@ -368,9 +731,12 @@ function refreshTagPicker() {
   const v = cur();
   const tags = allTags();
   const clearRow = v.activeTags.size ? '<div class="tagopt clear">清除标签筛选</div>' : '';
-  menu.innerHTML = clearRow + (tags.length
+  const note = v.activeTags.size >= 2
+    ? `<div class="tagopt" style="color:var(--muted); font-size:12px; cursor:default">已选 ${v.activeTags.size} 个 · 需同时满足（交集）</div>`
+    : '';
+  menu.innerHTML = clearRow + note + (tags.length
     ? tags.map(t => `<label class="tagopt"><input type="checkbox" value="${esc(t)}" ${v.activeTags.has(t) ? 'checked' : ''}> ${esc(t)}</label>`).join('')
-    : '<div class="tagopt" style="color:#7a8194">暂无标签</div>');
+    : '<div class="tagopt" style="color:var(--muted)">暂无标签</div>');
   menu.querySelectorAll('input[type=checkbox]').forEach(cb => {
     cb.onchange = () => {
       cb.checked ? v.activeTags.add(cb.value) : v.activeTags.delete(cb.value);
@@ -392,6 +758,7 @@ function debounce(fn, ms) {
 function applyFilters() {
   cur().visibleCount = PAGE;
   cur().selected.clear();
+  pendingAnim = true;
   render();
 }
 
@@ -401,6 +768,9 @@ function syncHeader() {
   statusEl.value = v.status;
   document.getElementById('selectBtn').classList.toggle('primary', v.selectMode);
   document.getElementById('groupBtn').classList.toggle('primary', v.groupMode);
+  const sb = document.getElementById('starBtn');
+  sb.classList.toggle('on', v.starOnly);
+  sb.textContent = v.starOnly ? '★ 只看收藏' : '☆ 只看收藏';
 }
 
 function switchView(v) {
@@ -410,6 +780,7 @@ function switchView(v) {
   randomBtn.textContent = DEF[v].randomLabel;
   syncHeader();
   refreshTagPicker();
+  pendingAnim = true;
   render();
 }
 
@@ -437,6 +808,21 @@ document.getElementById('groupBtn').onclick = () => {
   v.groupMode = !v.groupMode;
   document.getElementById('groupBtn').classList.toggle('primary', v.groupMode);
   render();
+};
+
+function enterSelectMode(ids) {
+  const v = cur();
+  v.selectMode = true;
+  v.selected = new Set(ids || []);
+  document.getElementById('selectBtn').classList.add('primary');
+  render();
+}
+
+document.getElementById('starBtn').onclick = () => {
+  const v = cur();
+  v.starOnly = !v.starOnly;
+  syncHeader();
+  applyFilters();
 };
 
 /* ---------- 批量操作 ---------- */
@@ -478,7 +864,8 @@ document.getElementById('batchTag').onclick = () => {
 document.getElementById('batchDelete').onclick = () => {
   const v = cur();
   if (!v.selected.size) return alert('还没选任何项。');
-  if (!confirm(`确定删除选中的 ${v.selected.size} 项？`)) return;
+  if (!confirm(`确定把选中的 ${v.selected.size} 项移入回收站？30 天内可恢复。`)) return;
+  curItems().filter(it => v.selected.has(it.id)).forEach(it => toTrash(active, it));
   stores[active].items = curItems().filter(it => !v.selected.has(it.id));
   v.selected.clear();
   saveActive();
@@ -490,10 +877,40 @@ document.getElementById('batchDelete').onclick = () => {
 const modal = document.getElementById('modal');
 const previewEl = document.getElementById('preview');
 const importRow = document.getElementById('importRow');
+const addImgRow = document.getElementById('addImgRow');
+
+/* 导入时临时配图（只有解析出 1 项时可用） */
+let pendingImgs = [];
+function renderPendingThumbs() {
+  renderThumbs(document.getElementById('addThumbs'), pendingImgs, id => {
+    pendingImgs = pendingImgs.filter(x => x !== id);
+    dropImage(id);
+    document.getElementById('addImgMsg').textContent = '';
+    renderPendingThumbs();
+  });
+}
+function resetPendingImgs() {
+  pendingImgs = [];
+  document.getElementById('addThumbs').innerHTML = '';
+  document.getElementById('addImgMsg').textContent = '';
+  addImgRow.style.display = 'none';
+}
+addImgRow.querySelector('#addImgBtn').onclick = () => document.getElementById('addImgInput').click();
+document.getElementById('addImgInput').onchange = async e => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  if (!files.length) return;
+  const holder = { images: pendingImgs };
+  const n = await attachImages(holder, files);
+  pendingImgs = holder.images;
+  document.getElementById('addImgMsg').textContent = n ? `已添加 ${n} 张` : '没有可用的图片';
+  renderPendingThumbs();
+};
 
 addBtn.onclick = () => {
   const d = DEF[active];
   pending = [];
+  resetPendingImgs();
   document.getElementById('addTitle').textContent = active === 'q' ? '粘贴 AI 内容 / 手动填写' : '粘贴 / 手动新增知识点';
   document.getElementById('addHint').innerHTML = `按固定格式粘贴，点「拆分预览」自动拆成字段。多项之间用单独一行 <b>===</b> 分隔。`;
   document.getElementById('formatHint').textContent = '格式示例：\n' + d.importExample;
@@ -522,6 +939,12 @@ document.getElementById('parseBtn').onclick = () => {
   msg.textContent = `解析到 ${pending.length} 项${bad ? `，其中 ${bad} 项有问题` : ''}。`;
   previewEl.classList.add('show');
   importRow.style.display = 'flex';
+  if (pending.length === 1) {
+    addImgRow.style.display = 'block';
+    renderPendingThumbs();
+  } else {
+    resetPendingImgs();
+  }
   previewEl.innerHTML = pending.map((p, i) => `
     <div class="pvi">
       <div class="row" style="margin:0 0 8px">
@@ -538,19 +961,52 @@ document.getElementById('parseBtn').onclick = () => {
 document.getElementById('importBtn').onclick = () => {
   const checked = [...previewEl.querySelectorAll('input[type=checkbox]')].filter(c => c.checked).map(c => +c.dataset.i);
   if (!checked.length) { alert('至少选一项。'); return; }
+
+  // 去重：与已有内容高度相似时先提醒
+  const dups = checked.filter(i => findDup(active, pending[i]));
+  if (dups.length) {
+    const names = dups.slice(0, 5).map(i => '· ' + DEF[active].previewMain(pending[i])).join('\n');
+    if (!confirm(`检测到 ${dups.length} 项与已有内容高度相似：\n${names}${dups.length > 5 ? '\n…' : ''}\n\n仍要全部导入吗？点「取消」将中止本次导入。`)) return;
+  }
+
+  // 单题导入时把临时配图挂上去
+  if (checked.length === 1 && pendingImgs.length) pending[checked[0]].images = pendingImgs.slice();
+
   const norm = stores[active].norm;
   for (const i of checked) stores[active].items.push(norm(pending[i]));
   saveActive();
   refreshTagPicker();
+  resetPendingImgs();
   modal.classList.remove('open');
   applyFilters();
 };
 
 /* ---------- 编辑弹窗 ---------- */
 const editModal = document.getElementById('editModal');
+let editingItem = null;
+
+function renderEditThumbs() {
+  renderThumbs(document.getElementById('editThumbs'), (editingItem && editingItem.images) || [], id => {
+    editingItem.images = editingItem.images.filter(x => x !== id);
+    dropImage(id);
+    saveActive();
+    renderEditThumbs();
+  });
+}
+document.getElementById('editImgBtn').onclick = () => document.getElementById('editImgInput').click();
+document.getElementById('editImgInput').onchange = async e => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  if (!files.length || !editingItem) return;
+  const n = await attachImages(editingItem, files);
+  saveActive();
+  document.getElementById('editImgMsg').textContent = n ? `已添加 ${n} 张` : '没有可用的图片';
+  renderEditThumbs();
+};
 
 function openEdit(it) {
   editingId = it.id;
+  editingItem = it;
   const d = DEF[active];
   document.getElementById('editTitle').textContent = active === 'q' ? '编辑错题' : '编辑知识点';
   document.getElementById('editForm').innerHTML = Object.entries(d.fieldLabels).map(([key, label]) => `
@@ -562,6 +1018,8 @@ function openEdit(it) {
   `;
   for (const key of Object.keys(d.fieldLabels)) document.getElementById('ef_' + key).value = it[key];
   document.getElementById('ef_tags').value = it.tags.join(', ');
+  document.getElementById('editImgMsg').textContent = '';
+  renderEditThumbs();
   editModal.classList.add('open');
 }
 document.getElementById('editCancel').onclick = () => editModal.classList.remove('open');
@@ -588,6 +1046,7 @@ randomBtn.onclick = () => {
   document.getElementById('randomTitle').textContent = d.overviewTitle;
   document.getElementById('randomBody').innerHTML = `
     ${d.main(it)}
+    ${imgStrip(it)}
     <div class="meta">
       ${it.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}
       <span class="spacer"></span>
@@ -595,6 +1054,7 @@ randomBtn.onclick = () => {
     </div>
     ${d.details(it).map(x => `<details><summary>${x.label}</summary><div class="body">${renderMath(x.text) || '<span class="section-label">（暂无）</span>'}</div></details>`).join('')}
   `;
+  hydrateImages(document.getElementById('randomBody'));
   randomModal.classList.add('open');
 };
 document.getElementById('randomClose').onclick = () => randomModal.classList.remove('open');
@@ -612,6 +1072,8 @@ document.getElementById('exportBtn').onclick = () => {
   a.download = `数学复习本-${stamp}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
+  setBackupMeta(Object.assign(getBackupMeta(), { json: Date.now() }));
+  updateBackupBar();
 };
 
 document.getElementById('importBtn2').onclick = () => document.getElementById('fileInput').click();
@@ -636,6 +1098,16 @@ document.getElementById('fileInput').onchange = e => {
     if (ks && !ks.every(x => x && typeof x === 'object')) { alert('knowledge 结构非法，未做任何修改。'); return; }
 
     const mode = confirm('点「确定」= 替换现有全部数据；点「取消」= 追加到现有数据之后。');
+    if (!mode) {
+      const dupQ = qs ? countDups('q', qs) : 0;
+      const dupK = ks ? countDups('k', ks) : 0;
+      if (dupQ + dupK) {
+        const parts = [];
+        if (dupQ) parts.push(`错题 ${dupQ} 道`);
+        if (dupK) parts.push(`知识点 ${dupK} 个`);
+        if (!confirm(`追加模式：检测到 ${parts.join('、')}与已有内容高度相似。仍要继续吗？`)) return;
+      }
+    }
     if (qs) { const inc = qs.map(normalizeQuestion); stores.q.items = mode ? inc : stores.q.items.concat(inc); saveStore(K_Q, stores.q.items); }
     if (ks) { const inc = ks.map(normalizeKp); stores.k.items = mode ? inc : stores.k.items.concat(inc); saveStore(K_K, stores.k.items); }
     refreshTagPicker();
@@ -645,6 +1117,319 @@ document.getElementById('fileInput').onchange = e => {
   reader.readAsText(file);
 };
 
+/* ---------- 统计 ---------- */
+const statsModal = document.getElementById('statsModal');
+document.getElementById('statsClose').onclick = () => statsModal.classList.remove('open');
+statsModal.onclick = e => { if (e.target === statsModal) statsModal.classList.remove('open'); };
+document.getElementById('openStats').onclick = () => {
+  settingsDrawer.classList.remove('open');
+  renderStats();
+  statsModal.classList.add('open');
+};
+
+function statRow(label, value, total, cls) {
+  const pct = total ? Math.round((value / total) * 100) : 0;
+  return `<div class="stat-line"><span>${label}</span><b>${value}</b></div>
+    <div class="stat-bar ${cls || ''}"><i style="width:${pct}%"></i></div>`;
+}
+
+function renderStats() {
+  const week = Date.now() - 7 * 86400000;
+  const sum = (list, st) => list.filter(i => i.status === st).length;
+  const starN = list => list.filter(i => i.star).length;
+  const imgN = list => list.reduce((n, i) => n + (i.images ? i.images.length : 0), 0);
+  const weekN = list => list.filter(i => (i.createdAt || 0) >= week).length;
+
+  const q = stores.q.items, k = stores.k.items;
+  const freq = new Map();
+  [...q, ...k].forEach(i => i.tags.forEach(t => freq.set(t, (freq.get(t) || 0) + 1)));
+  const topTags = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+  document.getElementById('statsBody').innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card">
+        <h3>错题</h3>
+        ${statRow('总计', q.length, q.length)}
+        ${statRow('未复习', sum(q, 'new'), q.length)}
+        ${statRow('复习中', sum(q, 'reviewing'), q.length, 'warn')}
+        ${statRow('已掌握', sum(q, 'mastered'), q.length, 'ok')}
+        <div class="stat-line"><span>⭐ 收藏</span><b>${starN(q)}</b></div>
+        <div class="stat-line"><span>近 7 天新增</span><b>${weekN(q)}</b></div>
+      </div>
+      <div class="stat-card">
+        <h3>知识点</h3>
+        ${statRow('总计', k.length, k.length)}
+        ${statRow('未复习', sum(k, 'new'), k.length)}
+        ${statRow('复习中', sum(k, 'reviewing'), k.length, 'warn')}
+        ${statRow('已掌握', sum(k, 'mastered'), k.length, 'ok')}
+        <div class="stat-line"><span>⭐ 收藏</span><b>${starN(k)}</b></div>
+        <div class="stat-line"><span>近 7 天新增</span><b>${weekN(k)}</b></div>
+      </div>
+    </div>
+    <div class="stat-card" style="margin-top:12px">
+      <h3>其他</h3>
+      <div class="stat-line"><span>配图数量</span><b>${imgN(q) + imgN(k)}</b></div>
+      <div class="stat-line"><span>标签数量</span><b>${freq.size}</b></div>
+      <div class="stat-line"><span>回收站</span><b>${trash.length}</b></div>
+      <div style="margin-top:8px">
+        <span class="section-label">常用标签</span>
+        <div class="tagfreq">${topTags.length
+          ? topTags.map(([t, n]) => `<span class="chip">${esc(t)} · ${n}</span>`).join('')
+          : '<span class="section-label">暂无标签</span>'}</div>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------- 导出 Markdown ---------- */
+function toMarkdown() {
+  const isQ = active === 'q';
+  const items = curItems().slice().sort((a, b) => b.updatedAt - a.updatedAt);
+  const out = [`# 数学复习本 · ${isQ ? '错题' : '知识点'}`, '', `> 导出时间：${new Date().toLocaleString('zh-CN')} · 共 ${items.length} 项`, ''];
+  items.forEach((it, idx) => {
+    const tags = it.tags.join('、') || '—';
+    out.push(`## ${idx + 1}. ${STATUS[it.status]}${it.star ? ' ★' : ''}`);
+    out.push('');
+    out.push(`标签：${tags}`);
+    out.push('');
+    if (isQ) {
+      out.push('**题目**');
+      out.push('');
+      out.push(it.stem || '（无题目）');
+      if (it.analysis) { out.push(''); out.push('**解析**'); out.push(''); out.push(it.analysis); }
+      if (it.knowledge) { out.push(''); out.push('**知识点**'); out.push(''); out.push(it.knowledge); }
+    } else {
+      out.push(`**${it.title || '（无名称）'}**`);
+      if (it.content) { out.push(''); out.push(it.content); }
+    }
+    if (it.images && it.images.length) { out.push(''); out.push(`> 含配图 ${it.images.length} 张（图片未包含在 Markdown 中）`); }
+    out.push('');
+    out.push('---');
+    out.push('');
+  });
+  return out.join('\n');
+}
+
+document.getElementById('exportMdBtn').onclick = () => {
+  settingsDrawer.classList.remove('open');
+  const isQ = active === 'q';
+  const items = curItems();
+  if (!items.length) { alert(`当前${isQ ? '错题' : '知识点'}库是空的。`); return; }
+  const blob = new Blob([toMarkdown()], { type: 'text/markdown;charset=utf-8' });
+  const d = new Date();
+  const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `数学复习本-${isQ ? '错题' : '知识点'}-${stamp}.md`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+/* ---------- 打印（当前视图） ---------- */
+document.getElementById('printBtn').onclick = () => {
+  settingsDrawer.classList.remove('open');
+  const isQ = active === 'q';
+  const items = curItems().slice().sort((a, b) => b.updatedAt - a.updatedAt);
+  if (!items.length) { alert(`当前${isQ ? '错题' : '知识点'}库是空的。`); return; }
+  const area = document.getElementById('printArea');
+  const head = `<h1>数学复习本 · ${isQ ? '错题' : '知识点'}</h1>
+    <p class="print-meta">共 ${items.length} 项 · ${new Date().toLocaleDateString('zh-CN')}</p>`;
+  const body = items.map((it, i) => {
+    const tags = it.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('');
+    const main = isQ ? renderMath(it.stem) : `<b>${renderMath(it.title)}</b>`;
+    const secs = isQ
+      ? [['解析', it.analysis], ['知识点', it.knowledge]]
+      : [['讲解', it.content]];
+    const secHtml = secs.filter(s => s[1]).map(s =>
+      `<div class="print-sec"><div class="print-label">${s[0]}</div><div>${renderMath(s[1])}</div></div>`).join('');
+    return `<div class="print-item">
+      <div class="print-num">第 ${i + 1} 题${isQ ? '' : '（知识点）'} · ${STATUS[it.status]}${it.star ? ' ★' : ''}</div>
+      <div class="print-head">${main}</div>
+      ${tags ? `<div class="print-tags">${tags}</div>` : ''}
+      ${imgStrip(it)}
+      ${secHtml}
+    </div>`;
+  }).join('');
+  area.innerHTML = head + body;
+  hydrateImages(area);
+  setTimeout(() => window.print(), 350);
+};
+
+/* ---------- 备份提醒 ---------- */
+const K_LASTEXPORT = 'mq_lastexport';
+const BACKUP_DAYS = 14;
+const SNOOZE_DAYS = 7;
+function getBackupMeta() {
+  try { return JSON.parse(localStorage.getItem(K_LASTEXPORT)) || {}; } catch (e) { return {}; }
+}
+function setBackupMeta(o) {
+  try { localStorage.setItem(K_LASTEXPORT, JSON.stringify(o)); } catch (e) {}
+}
+function updateBackupBar() {
+  const bar = document.getElementById('backupBar');
+  if (!bar) return;
+  const total = stores.q.items.length + stores.k.items.length;
+  const meta = getBackupMeta();
+  if (!total || (meta.snooze && Date.now() - meta.snooze < SNOOZE_DAYS * 86400000)) {
+    bar.style.display = 'none';
+    return;
+  }
+  let txt;
+  if (!meta.json) {
+    txt = '你还没导出过备份，建议现在导出一份 JSON，避免数据丢失。';
+  } else {
+    const days = Math.floor((Date.now() - meta.json) / 86400000);
+    if (days < BACKUP_DAYS) { bar.style.display = 'none'; return; }
+    txt = `距上次备份已 ${days} 天，建议再导出一份 JSON 备份。`;
+  }
+  document.getElementById('backupText').textContent = txt;
+  bar.style.display = 'flex';
+}
+document.getElementById('backupNow').onclick = () => document.getElementById('exportBtn').click();
+document.getElementById('backupLater').onclick = () => {
+  setBackupMeta(Object.assign(getBackupMeta(), { snooze: Date.now() }));
+  updateBackupBar();
+};
+
+/* ---------- 返回顶部 ---------- */
+const toTopEl = document.getElementById('toTop');
+function updateToTop() {
+  toTopEl.classList.toggle('show', window.scrollY > 400 && !cram.open);
+}
+window.addEventListener('scroll', updateToTop, { passive: true });
+toTopEl.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
+/* ---------- 背题模式 ---------- */
+const cramEl = document.getElementById('cram');
+const cramStage = document.getElementById('cramStage');
+const cram = { open: false, pool: [], idx: 0, shown: {} };
+
+function cramGo(delta) {
+  cram.idx = Math.max(0, Math.min(cram.pool.length - 1, cram.idx + delta));
+  cram.shown = {};
+  renderCram();
+}
+
+function revealNext() {
+  const it = cram.pool[cram.idx];
+  if (!it) return;
+  const next = DEF[active].details(it).filter(x => x.text).find(x => !cram.shown[x.label]);
+  if (next) { cram.shown[next.label] = true; renderCram(); }
+}
+
+function renderCram() {
+  const d = DEF[active];
+  const it = cram.pool[cram.idx];
+  if (!it) { closeCram(); return; }
+  document.getElementById('cramProg').textContent = `${cram.idx + 1} / ${cram.pool.length}`;
+  document.getElementById('cramPrev').disabled = cram.idx === 0;
+  document.getElementById('cramNext').disabled = cram.idx === cram.pool.length - 1;
+
+  const secs = d.details(it).filter(x => x.text);
+  const secHtml = secs.map(x => cram.shown[x.label]
+    ? `<div class="cram-sec"><span class="section-label">${esc(x.label.replace('查看', ''))}</span><div class="cram-body">${renderMath(x.text)}</div></div>`
+    : `<button class="cram-reveal" data-reveal="${esc(x.label)}">👁 ${esc(x.label.replace('查看', '看'))}</button>`
+  ).join('');
+
+  cramStage.innerHTML = `
+    <div class="cram-card">
+      <div class="cram-meta">
+        <button class="star ${it.star ? 'on' : ''}" data-cram-star title="收藏">${it.star ? '★' : '☆'}</button>
+        ${it.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}
+        <span class="spacer"></span>
+        <span class="status ${it.status}" data-cram-status>● ${STATUS[it.status]}</span>
+      </div>
+      ${d.main(it)}
+      ${imgStrip(it)}
+      ${secHtml}
+      <p class="cram-hint">${secs.length ? '左右滑动 / 点下方按钮翻页 · 空格键揭示下一段' : '（这一项没有解析或讲解内容）'}</p>
+    </div>
+  `;
+  hydrateImages(cramStage);
+
+  cramStage.querySelector('[data-cram-status]').onclick = () => {
+    it.status = STATUS_NEXT[it.status];
+    it.updatedAt = Date.now();
+    saveActive();
+    renderCram();
+  };
+  cramStage.querySelector('[data-cram-star]').onclick = () => {
+    it.star = !it.star;
+    saveActive();
+    renderCram();
+  };
+  cramStage.querySelectorAll('[data-reveal]').forEach(b => {
+    b.onclick = () => { cram.shown[b.dataset.reveal] = true; renderCram(); };
+  });
+  cramStage.scrollTop = 0;
+}
+
+function openCram() {
+  const pool = currentFiltered();
+  if (!pool.length) { alert('当前筛选下没有内容。'); return; }
+  cram.open = true;
+  cram.pool = pool;
+  cram.idx = 0;
+  cram.shown = {};
+  cramEl.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  updateToTop();
+  renderCram();
+}
+function closeCram() {
+  cram.open = false;
+  cramEl.classList.remove('open');
+  document.body.style.overflow = '';
+  updateToTop();
+}
+document.getElementById('cramBtn').onclick = openCram;
+document.getElementById('cramExit').onclick = closeCram;
+document.getElementById('cramPrev').onclick = () => cramGo(-1);
+document.getElementById('cramNext').onclick = () => cramGo(1);
+
+let cramSX = 0, cramSY = 0;
+cramStage.addEventListener('touchstart', e => {
+  cramSX = e.touches[0].clientX; cramSY = e.touches[0].clientY;
+}, { passive: true });
+cramStage.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - cramSX;
+  const dy = e.changedTouches[0].clientY - cramSY;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) cramGo(dx < 0 ? 1 : -1);
+}, { passive: true });
+
+document.addEventListener('keydown', e => {
+  if (cram.open) {
+    if (e.key === 'ArrowRight') cramGo(1);
+    else if (e.key === 'ArrowLeft') cramGo(-1);
+    else if (e.key === 'Escape') closeCram();
+    else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); revealNext(); }
+    return;
+  }
+  if (e.key === 'Escape' && settingsDrawer.classList.contains('open')) settingsDrawer.classList.remove('open');
+});
+
+/* ---------- 设置抽屉 ---------- */
+const settingsDrawer = document.getElementById('settingsDrawer');
+document.getElementById('settingsBtn').onclick = () => settingsDrawer.classList.add('open');
+document.getElementById('settingsClose').onclick = () => settingsDrawer.classList.remove('open');
+settingsDrawer.onclick = e => { if (e.target === settingsDrawer) settingsDrawer.classList.remove('open'); };
+settingsDrawer.querySelectorAll('.seg button').forEach(btn => {
+  btn.onclick = () => {
+    const key = btn.closest('.seg').id.slice(3).toLowerCase(); // setCols→cols 等
+    settings[key] = btn.dataset[key];
+    saveSettings();
+    applySettings();
+  };
+});
+
+window.addEventListener('resize', debounce(applySettings, 120));
+if (mqDark.addEventListener) mqDark.addEventListener('change', applySettings);
+if (mqMotion.addEventListener) mqMotion.addEventListener('change', applySettings);
+
 /* ---------- 初始化 ---------- */
+applySettings();
+purgeTrash();
+updateTrashCount();
+updateBackupBar();
 refreshTagPicker();
 render();
