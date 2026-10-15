@@ -24,7 +24,10 @@ Copyright (c) 2026 FUMoRan. All Rights Reserved.
 1. 通过公开网址访问、浏览已部署的网站；
 2. 在代码托管平台上阅读本项目源码；或将本项目 fork 至你本人账号后
    **仅用于阅读与学习**（不得运行、不得对外发布、不得再分发）；
-3. 在未作任何修改的前提下，客观介绍、评论或引用本项目的名称与链接。
+3. 在未作任何修改的前提下，客观介绍、评论或引用本项目的名称与链接；
+4. 通过本项目的官方部署网址，将本网站「安装 / 添加到主屏幕」，并在
+   **你自己的设备**上离线使用，用于个人、非商业的学习目的。
+   此行为属于网站的正常使用，不涉及复制、修改或再分发本项目源码。
 
 ----------------------------------------------------------------
 二、须事先取得书面同意的行为
@@ -94,7 +97,11 @@ Permitted without further permission:
       your own account for reading and study only (no running, publishing,
       or redistribution);
   (c) objectively introducing, reviewing, or referencing the name and links
-      of this project without modification.
+      of this project without modification;
+  (d) installing / adding the deployed website to your home screen and using
+      it offline on your own device for personal, non-commercial study.
+      This counts as ordinary use of the website and does not involve
+      copying, modifying, or redistributing the source code.
 
 Requires prior written permission:
   (a) copying, downloading, running, compiling, modifying, translating, or
