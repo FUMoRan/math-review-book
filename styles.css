@@ -151,3 +151,24 @@ button.danger:hover{background:#fff5f5; border-color:#e03131; color:#e03131;}
   border-radius:20px; padding:2px 9px; cursor:pointer;
 }
 .relchip:hover{background:#e5dbff;}
+
+/* ---------- 平板 / 横屏（宽屏）---------- */
+@media (min-width: 1024px){
+  main{max-width:1180px;}
+  /* 卡片列表改为两列，充分利用横向空间 */
+  #list{
+    display:grid; grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:14px; align-items:start;
+  }
+  #list > .card{margin-bottom:0;}
+  #list > .empty{grid-column:1 / -1;}
+  /* 分组模式下：每个分组独占一整行，组内卡片仍是两列 */
+  #list > .group{grid-column:1 / -1;}
+  .group-body{
+    display:grid; grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:14px; align-items:start;
+  }
+  .group-body .card{margin-bottom:0;}
+  /* 弹窗在大屏上略宽一些 */
+  .panel{max-width:760px;}
+}
