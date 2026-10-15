@@ -1,0 +1,123 @@
+授权声明 / Licensing Notice
+================================================================
+
+Copyright (c) 2026 FUMoRan. All Rights Reserved.
+版权所有 © 2026 FUMoRan。保留所有权利。
+
+【中文为本声明之准据版本；如中英文表述存在歧义，以中文为准。】
+
+----------------------------------------------------------------
+注意：本项目「源码可见」，但并非开源软件
+----------------------------------------------------------------
+
+本项目的源代码公开，仅用于浏览、学习与技术评估。
+
+**任何形式的使用，均须事先获得版权持有人的书面同意。**
+
+本项目未采用 MIT、Apache-2.0、GPL 等开源许可证，上述许可证授予的
+"自由使用 / 修改 / 分发 / 商用" 等权利，在本项目上一概不适用。
+
+----------------------------------------------------------------
+一、无需另行取得同意即可进行的行为
+----------------------------------------------------------------
+
+1. 通过公开网址访问、浏览已部署的网站；
+2. 在代码托管平台上阅读本项目源码；或将本项目 fork 至你本人账号后
+   **仅用于阅读与学习**（不得运行、不得对外发布、不得再分发）；
+3. 在未作任何修改的前提下，客观介绍、评论或引用本项目的名称与链接。
+
+----------------------------------------------------------------
+二、须事先取得书面同意的行为
+----------------------------------------------------------------
+
+1. 复制、下载、运行、编译、修改、翻译、演绎本项目源码的全部或部分；
+2. 将本项目或其任何修改版部署、发布、公开、分发、再许可、出售或出租，
+   或以任何方式提供给第三方使用；
+3. 用于任何商业目的，包括但不限于：公司或机构内部使用、作为收费产品或
+   服务的组成部分、用于商业培训、竞赛或外包交付；
+4. 用于教学授课、机构课程、考试命题、题库与教辅出版等场景；
+5. 移除、遮挡或篡改本声明、版权标识及第三方许可信息。
+
+----------------------------------------------------------------
+三、申请授权
+----------------------------------------------------------------
+
+如需获得使用授权，请通过以下任一方式联系版权持有人，并说明：
+
+  · 用途与使用场景
+  · 使用范围（个人 / 团队 / 机构 / 公开发布）
+  · 是否为商业用途
+  · 是否需要对源码进行修改
+
+联系方式：3030557499@qq.com（也可通过 GitHub Issue / 私信联系）
+
+在收到书面回复并明确获准之前，一律视为未获授权。
+
+----------------------------------------------------------------
+四、第三方组件
+----------------------------------------------------------------
+
+本项目包含 KaTeX 等第三方组件。此类组件版权归其各自作者所有，并适用其
+各自许可证（详见 NOTICE.md 与 vendor/katex/LICENSE）。
+
+**本声明不限制、亦不能限制你在这些第三方许可证下已经取得的权利。**
+
+----------------------------------------------------------------
+五、免责声明
+----------------------------------------------------------------
+
+本项目按"现状"提供，不附带任何明示或默示的担保，包括但不限于对适销性、
+特定用途适用性及不侵权的担保。在任何情况下，版权持有人均不对因使用或
+无法使用本项目而产生的任何损失承担责任。
+
+----------------------------------------------------------------
+六、声明变更
+----------------------------------------------------------------
+
+版权持有人可随时更新本声明，更新版本自发布之日起生效。
+
+
+================================================================
+English Version (for reference only)
+================================================================
+
+Copyright (c) 2026 FUMoRan. All Rights Reserved.
+
+IMPORTANT: This project is SOURCE-AVAILABLE, NOT OPEN SOURCE.
+The source code is published for viewing, study, and evaluation only.
+ANY use requires the prior written permission of the copyright holder.
+No open-source license (such as MIT, Apache-2.0, or GPL) is granted.
+
+Permitted without further permission:
+  (a) visiting and browsing the deployed website via its public URL;
+  (b) reading the source code on the hosting platform, or forking it into
+      your own account for reading and study only (no running, publishing,
+      or redistribution);
+  (c) objectively introducing, reviewing, or referencing the name and links
+      of this project without modification.
+
+Requires prior written permission:
+  (a) copying, downloading, running, compiling, modifying, translating, or
+      creating derivative works of all or part of the source code;
+  (b) deploying, publishing, distributing, sublicensing, selling, or renting
+      this project or any derivative, or otherwise making it available to
+      any third party;
+  (c) any commercial purpose, including internal use by a company or
+      institution, inclusion in a paid product or service, commercial
+      training, competitions, or outsourced delivery;
+  (d) use for teaching, institutional courses, examination item authoring,
+      question banks, or textbook/test-prep publication;
+  (e) removing, obscuring, or altering this notice, copyright notices, or
+      third-party license information.
+
+Third-party components: this project includes third-party components such as
+KaTeX, which remain under their own licenses (see NOTICE.md and
+vendor/katex/LICENSE). This notice does not and cannot limit any rights you
+already have under those licenses.
+
+Disclaimer: THE PROJECT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY
+CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF THE PROJECT.
+
+The copyright holder may revise this notice at any time; the revised version
+takes effect upon publication.
