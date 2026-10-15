@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数学复习本</title>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="88">📘</text></svg>'>
+<!-- PWA-BEGIN 以下到 PWA-END 之间为「添加到主屏幕」相关配置，离线单文件版会自动移除 -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#4c6ef5">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<!-- PWA-END -->
+<link rel="stylesheet" href="./vendor/katex/katex.min.css">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<header>
+  <h1>📘 数学复习本</h1>
+  <div class="tabs">
+    <button class="tab active" data-view="q">错题</button>
+    <button class="tab" data-view="k">知识点</button>
+  </div>
+  <input id="search" class="search" placeholder="搜索…">
+  <select id="statusFilter">
+    <option value="">全部状态</option>
+    <option value="new">未复习</option>
+    <option value="reviewing">复习中</option>
+    <option value="mastered">已掌握</option>
+  </select>
+  <div class="tagpick">
+    <button id="tagPickBtn">标签 ▾</button>
+    <div class="tagpick-menu" id="tagMenu"></div>
+  </div>
+  <button id="selectBtn">多选</button>
+  <button id="groupBtn">分组</button>
+  <button id="randomBtn">随机一题</button>
+  <button id="exportBtn">导出</button>
+  <button id="importBtn2">导入</button>
+  <button class="primary" id="addBtn">+ 新增错题</button>
+  <input type="file" id="fileInput" accept="application/json,.json" hidden>
+</header>
+
+<main>
+  <p class="count" id="count"></p>
+
+  <div class="toolbar" id="toolbar" style="display:none">
+    <span id="selCount">已选 0 项</span>
+    <button id="selAll">全选已显示</button>
+    <button id="selNone">清空选择</button>
+    <button data-batch-status="new">标记未复习</button>
+    <button data-batch-status="reviewing">标记复习中</button>
+    <button data-batch-status="mastered">标记已掌握</button>
+    <button id="batchTag">加标签</button>
+    <button id="batchDelete" class="danger">删除</button>
+    <span class="spacer"></span>
+    <button id="exitSelect">退出多选</button>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="row loadmore" id="loadMoreRow" style="display:none">
+    <button id="loadMoreBtn">加载更多</button>
+  </div>
+</main>
+
+<!-- 新增 / 粘贴导入 -->
+<div class="modal" id="modal">
+  <div class="panel">
+    <h2 id="addTitle">粘贴 AI 内容 / 手动填写</h2>
+    <p class="hint" id="addHint">按固定格式粘贴，点「拆分预览」自动拆成字段。多项之间用单独一行 <b>===</b> 分隔。</p>
+    <textarea id="rawInput"></textarea>
+    <pre class="tpl" id="formatHint"></pre>
+    <div class="row">
+      <button class="primary" id="parseBtn">拆分预览</button>
+      <button class="ghost" id="closeBtn">关闭</button>
+      <span class="spacer"></span>
+      <span id="parseMsg" class="badge-note"></span>
+    </div>
+    <div class="preview" id="preview"></div>
+    <div class="row" id="importRow" style="display:none">
+      <button class="primary" id="importBtn">导入选中项</button>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑 -->
+<div class="modal" id="editModal">
+  <div class="panel">
+    <h2 id="editTitle">编辑</h2>
+    <div id="editForm"></div>
+    <div class="row">
+      <button class="primary" id="editSave">保存</button>
+      <button class="ghost" id="editCancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 随机一题 -->
+<div class="modal" id="randomModal">
+  <div class="panel">
+    <h2 id="randomTitle">随机一题 · 先自己想，再展开</h2>
+    <div id="randomBody"></div>
+    <div class="row">
+      <button class="primary" id="randomNext">换一题</button>
+      <button class="ghost" id="randomClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script src="./vendor/katex/katex.min.js"></script>
+<script src="./app.js"></script>
+<!-- PWA-BEGIN -->
+<script>
+// 注册离线缓存，让托管后的页面可以「添加到主屏幕」并断网使用
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('./sw.js').catch(function () {});
+  });
+}
+</script>
+<!-- PWA-END -->
+</body>
+</html>

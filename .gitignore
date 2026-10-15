@@ -1,0 +1,6 @@
+# 工具产生的中间产物
+.screenshots/
+.trae-html-share-packages/
+
+# 打包生成的离线单文件（可由 index.html 重新打包得到）
+数学复习本-离线版.html
