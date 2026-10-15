@@ -497,8 +497,8 @@ const DEF = {
 
 const PAGE = 30;
 const views = {
-  q: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), search: '', status: '', starOnly: false, dueOnly: false },
-  k: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), search: '', status: '', starOnly: false, dueOnly: false },
+  q: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), tagMode: 'all', search: '', status: '', starOnly: false, dueOnly: false },
+  k: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), tagMode: 'all', search: '', status: '', starOnly: false, dueOnly: false },
 };
 let active = 'q';
 let editingId = null;
@@ -563,8 +563,13 @@ function currentFiltered() {
     if (s.star && !it.star) return false;
     if (v.dueOnly && !isDue(it, now)) return false;
     if (s.due && !isDue(it, now)) return false;
-    // 多标签：选多个时取交集（必须同时含有全部所选标签）
-    if (v.activeTags.size && ![...v.activeTags].every(t => it.tags.includes(t))) return false;
+    // 标签筛选：默认「同时满足全部（交集）」；由「相关 X 个」跳转时改为「满足其一（并集）」，与计数口径一致
+    if (v.activeTags.size) {
+      const hit = v.tagMode === 'any'
+        ? [...v.activeTags].some(t => it.tags.includes(t))
+        : [...v.activeTags].every(t => it.tags.includes(t));
+      if (!hit) return false;
+    }
     if (s.tags.length && !s.tags.every(t => it.tags.includes(t))) return false;
     if (s.text && !hayOf(it).includes(s.text)) return false;
     return true;
@@ -677,10 +682,14 @@ function makeCard(it) {
     const other = active === 'k' ? 'q' : 'k';
     const ov = views[other];
     ov.activeTags = new Set(it.tags);
+    ov.tagMode = 'any';          // 与「相关 X 个」的计数口径一致：命中任一标签即算相关
     ov.visibleCount = PAGE;
     ov.search = '';
     ov.status = '';
+    ov.starOnly = false;
     ov.dueOnly = false;
+    ov.selectMode = false;
+    ov.selected.clear();
     switchView(other);
   };
   // 移动端：长按 0.5 秒进入多选并选中该项
@@ -769,20 +778,21 @@ function refreshTagPicker() {
   const tags = allTags();
   const clearRow = v.activeTags.size ? '<div class="tagopt clear">清除标签筛选</div>' : '';
   const note = v.activeTags.size >= 2
-    ? `<div class="tagopt" style="color:var(--muted); font-size:12px; cursor:default">已选 ${v.activeTags.size} 个 · 需同时满足（交集）</div>`
+    ? `<div class="tagopt" style="color:var(--muted); font-size:12px; cursor:default">已选 ${v.activeTags.size} 个 · ${v.tagMode === 'any' ? '满足其一即可（并集）' : '需同时满足（交集）'}</div>`
     : '';
   menu.innerHTML = clearRow + note + (tags.length
     ? tags.map(t => `<label class="tagopt"><input type="checkbox" value="${esc(t)}" ${v.activeTags.has(t) ? 'checked' : ''}> ${esc(t)}</label>`).join('')
     : '<div class="tagopt" style="color:var(--muted)">暂无标签</div>');
   menu.querySelectorAll('input[type=checkbox]').forEach(cb => {
     cb.onchange = () => {
+      v.tagMode = 'all';         // 手动勾选时回到交集语义
       cb.checked ? v.activeTags.add(cb.value) : v.activeTags.delete(cb.value);
       refreshTagPicker();
       applyFilters();
     };
   });
   const clear = menu.querySelector('.tagopt.clear');
-  if (clear) clear.onclick = () => { v.activeTags.clear(); refreshTagPicker(); applyFilters(); };
+  if (clear) clear.onclick = () => { v.activeTags.clear(); v.tagMode = 'all'; refreshTagPicker(); applyFilters(); };
   document.getElementById('tagPickBtn').textContent = v.activeTags.size ? `标签 · ${v.activeTags.size}个 ▾` : '标签 ▾';
 }
 
