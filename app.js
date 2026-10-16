@@ -467,7 +467,23 @@ const DEF = {
     fieldLabels: { stem: '题目（公式用 $...$）', analysis: '解析', knowledge: '知识点讲解', myAnswer: '我的错误答案（可选）' },
     importFieldMap: { 题目: 'stem', 解析: 'analysis', 知识点: 'knowledge', 我的错误答案: 'myAnswer', 标签: 'tags' },
     importRequired: '题目',
-    importExample: '【题目】\n求函数 $f(x)=x^2-2x+1$ 的最小值。\n【解析】\n配方得 $f(x)=(x-1)^2$，故最小值为 $0$，在 $x=1$ 处取得。\n【知识点】\n二次函数顶点式 $y=a(x-h)^2+k$，顶点为 $(h,k)$。\n【我的错误答案】\n（选填：我当时是怎么错的）\n【标签】\n二次函数, 最值\n\n多题之间用单独一行 === 分隔',
+    importExample: [
+      '【题目】',
+      '求函数 $f(x)=x^2-2x+1$ 的最小值。',
+      '【解析】',
+      '第 1 步：看二次项系数。$a=1>0$，抛物线开口向上，所以最小值在顶点处取得。',
+      '第 2 步：配方。$x^2-2x+1$ 本身是完全平方式：$$x^2-2x+1=(x-1)^2$$',
+      '第 3 步：读出顶点。对照顶点式 $y=a(x-h)^2+k$，得 $h=1$、$k=0$，顶点为 $(1,0)$。',
+      '第 4 步：下结论。开口向上时最小值就是顶点的纵坐标，故最小值为 $0$，在 $x=1$ 处取得。',
+      '【知识点】',
+      '二次函数顶点式 $y=a(x-h)^2+k$：顶点为 $(h,k)$；$a>0$ 时开口向上、有最小值 $k$，$a<0$ 时开口向下、有最大值 $k$。',
+      '【我的错误答案】',
+      '（选填：我当时是怎么错的）',
+      '【标签】',
+      '二次函数, 最值',
+      '',
+      '多题之间用单独一行 === 分隔',
+    ].join('\n'),
     main: it => `<div class="stem">${renderMath(it.stem)}</div>`,
     details: it => [
       { label: '查看我的错误答案', text: it.myAnswer || '' },
@@ -486,7 +502,19 @@ const DEF = {
     fieldLabels: { title: '知识点名称', content: '讲解（公式用 $...$）' },
     importFieldMap: { 知识点: 'title', 讲解: 'content', 标签: 'tags' },
     importRequired: '知识点',
-    importExample: '【知识点】\n二次函数顶点式\n【讲解】\n$y=a(x-h)^2+k$，顶点为 $(h,k)$，$a>0$ 时开口向上。\n【标签】\n函数, 二次函数\n\n多个知识点之间用单独一行 === 分隔',
+    importExample: [
+      '【知识点】',
+      '二次函数顶点式',
+      '【讲解】',
+      '第 1 步：定义。把二次函数写成 $y=a(x-h)^2+k$（$a\\ne 0$）的形式叫顶点式，顶点坐标是 $(h,k)$、对称轴是 $x=h$。',
+      '第 2 步：为什么成立。因为 $(x-h)^2\\ge 0$ 恒成立，所以 $a>0$ 时 $y\\ge k$、$a<0$ 时 $y\\le k$，最值可以直接从式子里读出来。',
+      '第 3 步：怎么用。把一般式 $y=ax^2+bx+c$ 配方：$$y=a\\left(x+\\frac{b}{2a}\\right)^2+\\frac{4ac-b^2}{4a}$$ 由此得 $h=-\\frac{b}{2a}$、$k=\\frac{4ac-b^2}{4a}$。',
+      '第 4 步：易错点。配方要先提出二次项系数 $a$ 再配平方，别在提出 $a$ 之前直接对 $bx$ 配；$a$ 的符号决定最值是最大还是最小。',
+      '【标签】',
+      '函数, 二次函数',
+      '',
+      '多个知识点之间用单独一行 === 分隔',
+    ].join('\n'),
     main: it => `<div class="stem"><span class="kp-badge">知识点</span>${renderMath(it.title)}</div>`,
     details: it => [{ label: '查看讲解', text: it.content }],
     hay: it => [it.title, it.content, it.tags.join(' ')].join(' '),
@@ -1684,6 +1712,35 @@ function aiOcrPrompt() {
   ].join('\n');
 }
 
+/* 两条主提示词（内置调用 / 复制给免费 AI）共用同一份「输出要求」，
+   避免两处各写一份、以后改一处忘一处。 */
+function aiOutputRules() {
+  const base = [
+    '1. 只输出固定格式的内容，不要输出任何解释、寒暄或标题；',
+    '2. 不要用 ``` 代码块把整体包裹起来；',
+    '3. 公式一律使用 LaTeX：行内公式用 $...$，独立公式用 $$...$$；矩阵、方程组、分段函数、多行推导等会跨行的公式必须用 $$...$$ 包裹（$...$ 不能跨行）；矩阵换行用 \\\\，列用 &，例如 $$\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}$$；',
+    '4. 不要使用 Markdown 语法：不要 **加粗**、不要 # 标题、不要 - 或 * 列表、不要 | 表格；需要分步就用行首「第 1 步：」这类前缀，每一步单独成行；',
+  ];
+  const steps = active === 'q' ? [
+    '5. 【解析】必须逐步详解，不要一步抛出答案：',
+    '   · 每一步都写清三件事：这一步在做什么、依据是什么（用到的定理/公式/性质，写成 LaTeX）、这一步得到的结果；',
+    '   · 不要跳步：配方、约分、通分、代入、换元、求导、解方程等关键变形的中间式都要写出来，必要时用 $$...$$ 展示推导；',
+    '   · 每一步单独成行，行首用「第 1 步：」「第 2 步：」这样的前缀；',
+    '6. 【知识点】写清「定义 + 为什么成立 + 怎么用 + 易错点」，公式同样用 LaTeX，必要时用 $$...$$ 展示推导；',
+    '7. 原文里若含多项（以 === 分隔），输出的每一项与之一一对应；',
+    '8. 不要改动原文的题目内容，只在其基础上补充解答与整理；',
+    '9. 【我的错误答案】是留给用户自己填的，请保持为空、不要输出该段内容。',
+  ] : [
+    '5. 【讲解】必须逐步讲透，不要只给结论：',
+    '   · 先给定义（写成 LaTeX），再说明为什么成立、几何或代数含义、适用条件；',
+    '   · 再给标准用法和一个示范，示范同样逐步写清在做什么、依据是什么、得到什么；',
+    '   · 最后写易错点；每一步单独成行，行首用「第 1 步：」「第 2 步：」这样的前缀；',
+    '6. 原文里若含多项（以 === 分隔），输出的每一项与之一一对应；',
+    '7. 不要改动原文的内容，只在其基础上补充讲解与整理。',
+  ];
+  return base.concat(steps);
+}
+
 // 第二步：基于用户已核对/修正过的原文，解题并整理成导入格式
 function aiSolvePrompt(stem) {
   const d = DEF[active];
@@ -1694,19 +1751,52 @@ function aiSolvePrompt(stem) {
     stem,
     '',
     '要求：',
-    '1. 严格按下面的格式输出，不要输出任何解释、寒暄或标题；',
-    '2. 不要用 ``` 代码块包裹；',
-    '3. 公式一律使用 LaTeX：行内公式用 $...$，独立公式用 $$...$$；',
-    '   注意：矩阵、方程组、分段函数、多行推导等会跨行的公式必须用 $$...$$ 包裹，$...$ 不能跨行；',
-    '   矩阵换行用 \\\\，列用 &，例如 $$\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}$$；',
-    '4. 上面的原文里若含多项（以 === 分隔），输出的每一项与之一一对应；',
-    '5. 不要改动原文的题目内容，只在其基础上补充解答与整理；',
-    '6. 【我的错误答案】是留给用户自己填的，请保持为空、不要输出该段内容。',
-    '',
-    '格式示例：',
-    d.importExample,
-  ].join('\n');
+  ].concat(aiOutputRules(), ['', '格式示例：', d.importExample]).join('\n');
 }
+
+// 「复制给我用的提示词」：让用户拿去任意对话式 AI 里预处理，再把结果粘回本应用
+function aiPromptText() {
+  const d = DEF[active];
+  const what = active === 'q' ? '一道数学题' : '一个数学知识点（含讲解）';
+  return [
+    `请扮演数学助教。下面我会把${what}发给你（可以直接发图片），`,
+    '请你把它整理成可直接导入我复习本的固定格式。',
+    '',
+    '输出要求：',
+  ].concat(aiOutputRules(), [
+    '',
+    '固定格式如下（这就是我需要的输出格式）：',
+    d.importExample,
+    '',
+    '现在请等我发送内容。',
+  ]).join('\n');
+}
+
+/* ---------- 剪贴板（复制提示词用，失败时回退到 execCommand） ---------- */
+function copyText(text) {
+  const s = String(text == null ? '' : text);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(s).then(() => true, () => legacyCopy(s));
+  }
+  return Promise.resolve(legacyCopy(s));
+}
+function legacyCopy(text) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) { return false; }
+}
+aiEl('aiPromptBtn').onclick = async () => {
+  const ok = await copyText(aiPromptText());
+  aiEl('aiMsg').textContent = ok ? '提示词已复制，去任意 AI 粘贴即可' : '复制失败，请手动复制';
+};
 
 function aiHttpErr(status, data) {
   let m = '';
