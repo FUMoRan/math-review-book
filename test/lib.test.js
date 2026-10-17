@@ -423,6 +423,22 @@ test('bareMathSegments: 英文词不被吞进公式（MATLAB、don\'t）', () =>
   assert.equal(bareMathSegments("注意 don't 这类词").filter(s => s.t === 'math').length, 0);
 });
 
+test('bareMathSegments: 填空下划线（a=____）不与等号一起卷进公式', () => {
+  const segs = bareMathSegments('则 a=____。');
+  assert.deepEqual(mathOf(segs), ['a=']);
+  assert.deepEqual(textOf(segs), ['则 ', '____。']);
+});
+
+test('bareMathSegments: 跨行矩阵环境整体识别为行间公式', () => {
+  const src = "A = \\begin{pmatrix}\na & 2 & 2 \\\\\n2 & a & 2 \\\\\n2 & 2 & a\n\\end{pmatrix}";
+  const segs = bareMathSegments(src);
+  const math = segs.filter(s => s.t === 'math');
+  assert.equal(math.length, 1);
+  assert.equal(math[0].display, true);
+  assert.equal(math[0].v, src);
+  assert.equal(segs.filter(s => s.t === 'text').length, 0);
+});
+
 /* ===================== 端到端：解析 → 归一化 → SRS ===================== */
 test('粘贴文本经解析归一化后可正确排程', () => {
   const input = '【题目】\n题\n【解析】\n解\n【知识点】\n知\n【标签】\n函数';

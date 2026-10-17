@@ -196,6 +196,10 @@
 
   function isMathChar(c) { return RE_MATH_ALNUM.test(c) || RE_MATH_SYM.test(c); }
   function isBlank(c) { return c === ' ' || c === '\t'; }
+  // 连续两个及以上的下划线是填空题的空（如 a=______），不是数学下标，不能卷进公式
+  function isBlankUnderscore(s, i) {
+    return s[i] === '_' && (s[i + 1] === '_' || s[i - 1] === '_');
+  }
 
   // 强信号：\命令、上下标（^ _ 后跟字母/数字/{/(）、求导撇（y'、yy''、(uv)'）、
   // 等号左侧有操作数的等式（x=0、y=1 这类只有等号的式子）
@@ -225,6 +229,7 @@
   function expandLeft(s, start) {
     let i = start;
     while (i > 0) {
+      if (isBlankUnderscore(s, i - 1)) break;
       if (isMathChar(s[i - 1])) { i--; continue; }
       if (isBlank(s[i - 1])) {
         let j = i; while (j > 0 && isBlank(s[j - 1])) j--;
@@ -240,6 +245,7 @@
     while (i < n) {
       const c = s[i];
       if (c === '\n' || c === '\r') break;
+      if (isBlankUnderscore(s, i)) break;
       if (isMathChar(c)) { i++; continue; }
       if (isBlank(c)) {
         let j = i; while (j < n && isBlank(s[j])) j++;
@@ -257,8 +263,24 @@
     let textStart = 0;
     const flush = end => { if (end > textStart) out.push({ t: 'text', v: s.slice(textStart, end) }); };
 
+    // 跨行的 LaTeX 环境（矩阵 / 分段函数 / 对齐等）无法逐行识别，先整体定位，必须整段渲染
+    const envEnd = new Map();
+    const reEnv = /\\begin\{(pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|smallmatrix|matrix|cases|aligned|alignedat|gathered|split|array|subarray|align\*?|alignat\*?)\}[\s\S]*?\\end\{\1\}/g;
+    let em;
+    while ((em = reEnv.exec(s))) envEnd.set(em.index, em.index + em[0].length);
+
     let i = 0;
     while (i < n) {
+      if (envEnd.has(i)) {                       // 整个环境作为一段行间公式
+        const b = envEnd.get(i);
+        let a = expandLeft(s, i);
+        while (a < b && /\s/.test(s[a])) a++;
+        flush(a);
+        out.push({ t: 'math', v: s.slice(a, b), display: true });
+        textStart = b;
+        i = b;
+        continue;
+      }
       if (!mathTrigger(s, i)) { i++; continue; }
       let a = expandLeft(s, i);
       let b = expandRight(s, i + 1);
