@@ -197,21 +197,29 @@
   function isMathChar(c) { return RE_MATH_ALNUM.test(c) || RE_MATH_SYM.test(c); }
   function isBlank(c) { return c === ' ' || c === '\t'; }
 
-  // 强信号：\命令 或 上下标后紧跟字母/数字/{/(
+  // 强信号：\命令、上下标（^ _ 后跟字母/数字/{/(）、求导撇（y'、yy''、(uv)'）、
+  // 等号左侧有操作数的等式（x=0、y=1 这类只有等号的式子）
   function mathTrigger(s, i) {
     const c = s[i];
     if (c === '\\') return /[A-Za-z]/.test(s[i + 1] || '');
     if (c === '^' || c === '_') return /[A-Za-z0-9{(\[]/.test(s[i + 1] || '');
+    if (c === "'") {
+      const run = /([A-Za-z]*)$/.exec(s.slice(0, i))[1];   // 撇前连续字母不超过 2 个，避免 don't 这类英文词
+      return (run.length >= 1 && run.length <= 2) || /\)$/.test(s.slice(0, i));
+    }
+    if (c === '=') return /[A-Za-z0-9)\]}']/.test(s[i - 1] || '');
     return false;
   }
   function tokenLeft(s, end) { let i = end; while (i > 0 && isMathChar(s[i - 1])) i--; return s.slice(i, end); }
   function tokenRight(s, from) { let i = from, n = s.length; while (i < n && isMathChar(s[i])) i++; return s.slice(from, i); }
-  // 「像数学」的词：含 \命令、数字/上下标/括号/运算符，或单字母变量（可带撇）
+  // 「像数学」的词：含 \命令、数字/上下标/括号/运算符；变量则要求一两个字母（x、uv、dp），
+  // 或带撇的求导记号（y'、yy''、y'y'、u'v）；连续 3 个以上字母的英文词（MATLAB、don't）不算
   function mathToken(tok) {
     if (!tok) return false;
     if (/\\[A-Za-z]+/.test(tok)) return true;
-    if (/[0-9^_{}[\]()=+\-*/]/.test(tok)) return true;
-    return /^[A-Za-z]'*$/.test(tok);
+    if (/[0-9^_{}[\]()=+\-*/<>]/.test(tok)) return true;
+    if (/[A-Za-z]{3,}/.test(tok)) return false;
+    return /^[A-Za-z][A-Za-z']*$/.test(tok) && (/'/.test(tok) || tok.length <= 2);
   }
 
   function expandLeft(s, start) {

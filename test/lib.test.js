@@ -383,6 +383,46 @@ test('bareMathSegments: 行内公式即使位于句尾也不升级为行间公�
   assert.equal(math[0].display, false);
 });
 
+test('bareMathSegments: 字母+撇的导数记号（yy\'、yy\'\'）不从公式中断开', () => {
+  const segs = bareMathSegments("第2步：得 yy' = C_1。");
+  assert.deepEqual(mathOf(segs), ["yy' = C_1"]);
+  assert.deepEqual(textOf(segs), ['第2步：得 ', '。']);
+});
+
+test('bareMathSegments: 只有撇、没有 ^ _ 反斜杠的整行公式也能识别', () => {
+  const segs = bareMathSegments("(yy')' = 0");
+  const math = segs.filter(s => s.t === 'math');
+  assert.equal(math.length, 1);
+  assert.equal(math[0].v, "(yy')' = 0");
+  assert.equal(math[0].display, true);
+});
+
+test('bareMathSegments: 乘积求导公式（含 u\'v、uv\'）整体识别', () => {
+  const segs = bareMathSegments("由 (uv)' = u'v + uv' 可得");
+  assert.deepEqual(mathOf(segs), ["(uv)' = u'v + uv'"]);
+  assert.deepEqual(textOf(segs), ['由 ', ' 可得']);
+});
+
+test('bareMathSegments: 只有等号的等式（x=0、y=1）可识别', () => {
+  assert.deepEqual(mathOf(bareMathSegments('代入初始条件 x=0 时')), ['x=0']);
+  assert.deepEqual(mathOf(bareMathSegments('初始条件 x=0, y=1，得')), ['x=0, y=1']);
+});
+
+test('bareMathSegments: 大于号片段不脱离公式（y|_{x=0}=1 > 0）', () => {
+  const segs = bareMathSegments('由 y|_{x=0}=1 > 0，应舍去负根');
+  assert.deepEqual(mathOf(segs), ['y|_{x=0}=1 > 0']);
+});
+
+test('bareMathSegments: 填空题下划线不被当成公式', () => {
+  const segs = bareMathSegments('特解为_______。');
+  assert.equal(segs.filter(s => s.t === 'math').length, 0);
+});
+
+test('bareMathSegments: 英文词不被吞进公式（MATLAB、don\'t）', () => {
+  assert.deepEqual(mathOf(bareMathSegments('用 MATLAB 绘制 s^2 曲线')), ['s^2']);
+  assert.equal(bareMathSegments("注意 don't 这类词").filter(s => s.t === 'math').length, 0);
+});
+
 /* ===================== 端到端：解析 → 归一化 → SRS ===================== */
 test('粘贴文本经解析归一化后可正确排程', () => {
   const input = '【题目】\n题\n【解析】\n解\n【知识点】\n知\n【标签】\n函数';
