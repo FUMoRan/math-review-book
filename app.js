@@ -13,6 +13,7 @@ const {
   makeGramProfile, simFromProfile,
   parseText, parseSearch,
   normalizeQuestion, normalizeKp, scheduleSrs, isDue, dueLabel, DAY,
+  bareMathSegments,
 } = MQ;
 
 /* ===================== 设置（偏好，与数据分开存） ===================== */
@@ -544,8 +545,8 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-// 支持四种定界符：$$...$$ / \[...\] 行间公式，$...$ / \(...\) 行内公式
-// （免费 AI 常见输出为 \( ... \) 与 \[ ... \]，此前未识别导致原样显示）
+// 依次识别：$$...$$ / \[...\] 行间公式，$...$ / \(...\) 行内公式，
+// 以及没有任何定界符的裸 LaTeX（如部分 AI 直接输出 y'' = \frac{dp}{dx} …）。
 function renderMath(text) {
   if (!text) return '';
   const parts = text.split(/(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\$[^$\n]+?\$|\\\([\s\S]+?\\\))/g);
@@ -559,7 +560,16 @@ function renderMath(text) {
       try { return katex.renderToString(m[1], { throwOnError: false }); }
       catch (e) { return esc(p); }
     }
-    return esc(p).replace(/\n/g, '<br>');
+    return renderBareMath(p);
+  }).join('');
+}
+
+// 无定界符文本：切出裸 LaTeX 片段后渲染，其余按普通文本处理（保留换行）
+function renderBareMath(text) {
+  return bareMathSegments(text).map(seg => {
+    if (seg.t === 'text') return esc(seg.v).replace(/\n/g, '<br>');
+    try { return katex.renderToString(seg.v, { displayMode: !!seg.display, throwOnError: false }); }
+    catch (e) { return esc(seg.v); }
   }).join('');
 }
 

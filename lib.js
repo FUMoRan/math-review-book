@@ -186,6 +186,95 @@
     return out;
   }
 
+  /* ---------- 裸 LaTeX 切分（无 $ / \( \) 定界符，如部分 AI 直接输出） ----------
+     场景：y'' = \frac{dp}{dx} = p \frac{dp}{dy} 这类整段 LaTeX 没有任何定界符。
+     思路：只有当字符位置构成「强信号」时才认为是公式，再向左右按数学字符集扩展；
+     遇到空白时，仅当两侧都是「数学词」才跨越（避免把普通英文句子卷入公式）。
+     返回 [{t:'text',v}|{t:'math',v,display}]，公式未含定界符，交调用方渲染。 */
+  const RE_MATH_ALNUM = /[0-9A-Za-z]/;
+  const RE_MATH_SYM = /[\\{}^_()[\]|+\-*/=.,;:'"<>!?~%&·×÷≤≥≠≈∞∫∑∏√∂±→←⇒⇔∈∀∃αβγδθλμσφωπΩΔ∘∥⊥∠]/;
+
+  function isMathChar(c) { return RE_MATH_ALNUM.test(c) || RE_MATH_SYM.test(c); }
+  function isBlank(c) { return c === ' ' || c === '\t'; }
+
+  // 强信号：\命令 或 上下标后紧跟字母/数字/{/(
+  function mathTrigger(s, i) {
+    const c = s[i];
+    if (c === '\\') return /[A-Za-z]/.test(s[i + 1] || '');
+    if (c === '^' || c === '_') return /[A-Za-z0-9{(\[]/.test(s[i + 1] || '');
+    return false;
+  }
+  function tokenLeft(s, end) { let i = end; while (i > 0 && isMathChar(s[i - 1])) i--; return s.slice(i, end); }
+  function tokenRight(s, from) { let i = from, n = s.length; while (i < n && isMathChar(s[i])) i++; return s.slice(from, i); }
+  // 「像数学」的词：含 \命令、数字/上下标/括号/运算符，或单字母变量（可带撇）
+  function mathToken(tok) {
+    if (!tok) return false;
+    if (/\\[A-Za-z]+/.test(tok)) return true;
+    if (/[0-9^_{}[\]()=+\-*/]/.test(tok)) return true;
+    return /^[A-Za-z]'*$/.test(tok);
+  }
+
+  function expandLeft(s, start) {
+    let i = start;
+    while (i > 0) {
+      if (isMathChar(s[i - 1])) { i--; continue; }
+      if (isBlank(s[i - 1])) {
+        let j = i; while (j > 0 && isBlank(s[j - 1])) j--;
+        if (mathToken(tokenLeft(s, j)) && mathToken(tokenRight(s, i))) { i = j; continue; }
+      }
+      break;
+    }
+    return i;
+  }
+  function expandRight(s, start) {
+    const n = s.length;
+    let i = start;
+    while (i < n) {
+      const c = s[i];
+      if (c === '\n' || c === '\r') break;
+      if (isMathChar(c)) { i++; continue; }
+      if (isBlank(c)) {
+        let j = i; while (j < n && isBlank(s[j])) j++;
+        if (j < n && !/[\n\r]/.test(s[j]) && mathToken(tokenLeft(s, i)) && mathToken(tokenRight(s, j))) { i = j; continue; }
+      }
+      break;
+    }
+    return i;
+  }
+
+  function bareMathSegments(text) {
+    const s = String(text == null ? '' : text);
+    const out = [];
+    const n = s.length;
+    let textStart = 0;
+    const flush = end => { if (end > textStart) out.push({ t: 'text', v: s.slice(textStart, end) }); };
+
+    let i = 0;
+    while (i < n) {
+      if (!mathTrigger(s, i)) { i++; continue; }
+      let a = expandLeft(s, i);
+      let b = expandRight(s, i + 1);
+      while (a < b && /\s/.test(s[a])) a++;
+      while (b > a && /\s/.test(s[b - 1])) b--;
+      while (b > a && /[.,;:]/.test(s[b - 1])) b--;
+      while (a < b && /[.,;:]/.test(s[a])) a++;
+      if (b <= a) { i++; continue; }
+
+      const lineStart = s.lastIndexOf('\n', a - 1) + 1;
+      let lineEnd = s.indexOf('\n', b); if (lineEnd < 0) lineEnd = n;
+      // 整行只剩公式（允许行尾是全角/半角句读）时按行间公式渲染
+      const tail = s.slice(b, lineEnd).replace(/[\s。，；：、,;:.]+$/, '');
+      const display = !s.slice(lineStart, a).trim() && !tail;
+
+      flush(a);
+      out.push({ t: 'math', v: s.slice(a, b), display });
+      textStart = b;
+      i = b;
+    }
+    flush(n);
+    return out;
+  }
+
   return {
     DAY,
     STATUS, STATUS_NEXT, uid,
@@ -194,5 +283,6 @@
     normalizeQuestion, normalizeKp,
     parseBlockGeneric, parseText,
     parseSearch,
+    bareMathSegments,
   };
 });

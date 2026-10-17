@@ -12,6 +12,7 @@ const {
   normalizeSrs, scheduleSrs, isDue, dueLabel,
   normalizeQuestion, normalizeKp,
   parseText, parseSearch,
+  bareMathSegments,
 } = MQ;
 
 /* ===================== 基础工具 ===================== */
@@ -300,6 +301,86 @@ test('parseSearch 无前缀的普通词只作为关键词，不当作标签', ()
   const s = parseSearch('导数 数列');
   assert.deepEqual(s.tags, []);
   assert.equal(s.text, '导数 数列');
+});
+
+/* ===================== 裸 LaTeX 切分（无定界符） ===================== */
+// 只取 math 片段，便于断言
+const mathOf = segs => segs.filter(s => s.t === 'math').map(s => s.v);
+const textOf = segs => segs.filter(s => s.t === 'text').map(s => s.v);
+
+test('bareMathSegments: 整行裸公式判为行间公式', () => {
+  const src = "y'' = \\frac{dp}{dx} = \\frac{dp}{dy} \\cdot \\frac{dy}{dx} = p \\frac{dp}{dy}";
+  const segs = bareMathSegments(src);
+  const math = segs.filter(s => s.t === 'math');
+  assert.equal(math.length, 1);
+  assert.equal(math[0].v, src);
+  assert.equal(math[0].display, true);
+});
+
+test('bareMathSegments: 中文句子中的裸公式判为行内公式', () => {
+  const segs = bareMathSegments('由 a_1 与公差 d 可得 x^2 的结果。');
+  assert.deepEqual(textOf(segs), ['由 ', ' 与公差 d 可得 ', ' 的结果。']);
+  const math = segs.filter(s => s.t === 'math');
+  assert.deepEqual(math.map(m => m.v), ['a_1', 'x^2']);
+  assert.ok(math.every(m => m.display === false));
+});
+
+test('bareMathSegments: 无公式的纯中文文本不误判', () => {
+  const src = '这是一个普通句子，没有任何公式。';
+  const segs = bareMathSegments(src);
+  assert.equal(segs.length, 1);
+  assert.equal(segs[0].t, 'text');
+  assert.equal(segs[0].v, src);
+});
+
+test('bareMathSegments: 全角句号后正确截断，不吞进标点', () => {
+  const segs = bareMathSegments('因此 y=x^2。');
+  assert.deepEqual(mathOf(segs), ['y=x^2']);
+  assert.deepEqual(textOf(segs), ['因此 ', '。']);
+});
+
+test('bareMathSegments: 行间公式与说明文字混排，换行保留在文本段', () => {
+  const segs = bareMathSegments('第一行说明\n\nx^2 + 1 = 0\n\n结束');
+  const math = segs.filter(s => s.t === 'math');
+  assert.equal(math.length, 1);
+  assert.equal(math[0].display, true);
+  assert.equal(math[0].v, 'x^2 + 1 = 0');
+  assert.equal(textOf(segs).join(''), '第一行说明\n\n\n\n结束');
+});
+
+test('bareMathSegments: 多个 LaTeX 片段（含空格）合并为一段', () => {
+  const segs = bareMathSegments('设 \\alpha + \\beta = \\gamma 成立');
+  assert.deepEqual(mathOf(segs), ['\\alpha + \\beta = \\gamma']);
+  assert.equal(segs[0].t, 'text');
+});
+
+test('bareMathSegments: 无强信号（无 \\命令/上下标）不触发', () => {
+  const src = '(a+b)/2 这只是一段说明文字';
+  const segs = bareMathSegments(src);
+  assert.equal(segs.length, 1);
+  assert.equal(segs[0].t, 'text');
+});
+
+test('bareMathSegments: 空与非字符串入参安全', () => {
+  assert.deepEqual(bareMathSegments(''), []);
+  assert.deepEqual(bareMathSegments(null), []);
+  assert.deepEqual(bareMathSegments(undefined), []);
+});
+
+test('bareMathSegments: 整行公式即便以全角句号收尾也判为行间公式', () => {
+  const segs = bareMathSegments('\\frac{a}{b} = c。');
+  const math = segs.filter(s => s.t === 'math');
+  assert.equal(math.length, 1);
+  assert.equal(math[0].v, '\\frac{a}{b} = c');
+  assert.equal(math[0].display, true);
+  assert.deepEqual(textOf(segs), ['。']);
+});
+
+test('bareMathSegments: 行内公式即使位于句尾也不升级为行间公式', () => {
+  const segs = bareMathSegments('求导得 x^2。');
+  const math = segs.filter(s => s.t === 'math');
+  assert.equal(math.length, 1);
+  assert.equal(math[0].display, false);
 });
 
 /* ===================== 端到端：解析 → 归一化 → SRS ===================== */
