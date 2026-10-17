@@ -544,16 +544,18 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// 支持四种定界符：$$...$$ / \[...\] 行间公式，$...$ / \(...\) 行内公式
+// （免费 AI 常见输出为 \( ... \) 与 \[ ... \]，此前未识别导致原样显示）
 function renderMath(text) {
   if (!text) return '';
-  const parts = text.split(/(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g);
+  const parts = text.split(/(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\$[^$\n]+?\$|\\\([\s\S]+?\\\))/g);
   return parts.map(p => {
     let m;
-    if ((m = p.match(/^\$\$([\s\S]+?)\$\$$/))) {
+    if ((m = p.match(/^\$\$([\s\S]+?)\$\$$/)) || (m = p.match(/^\\\[([\s\S]+?)\\\]$/))) {
       try { return katex.renderToString(m[1], { displayMode: true, throwOnError: false }); }
       catch (e) { return esc(p); }
     }
-    if ((m = p.match(/^\$([^$]+?)\$$/))) {
+    if ((m = p.match(/^\$([^$]+?)\$$/)) || (m = p.match(/^\\\(([\s\S]+?)\\\)$/))) {
       try { return katex.renderToString(m[1], { throwOnError: false }); }
       catch (e) { return esc(p); }
     }
