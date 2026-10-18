@@ -680,9 +680,8 @@ function currentFiltered() {
     if (s.text && !hayOf(it).includes(s.text)) return false;
     return true;
   });
-  // 按创建时间倒序：新增的排最前，编辑/改状态不会打乱既有顺序
-  out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  return out;
+  // 按当前库的排序模式：自动=创建时间倒序（新增的排最前）；手动=order（新条目 order=null 排最前）
+  return sortItems(out, (settings.sortMode && settings.sortMode[active]) || 'auto');
 }
 
 function bindLazy(detailsEl, key, text, emptyLabel) {
