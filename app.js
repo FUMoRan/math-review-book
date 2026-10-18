@@ -665,7 +665,8 @@ function currentFiltered() {
     if (s.text && !hayOf(it).includes(s.text)) return false;
     return true;
   });
-  out.sort((a, b) => b.updatedAt - a.updatedAt);
+  // 按创建时间倒序：新增的排最前，编辑/改状态不会打乱既有顺序
+  out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   return out;
 }
 
@@ -1982,7 +1983,7 @@ function renderStats() {
 /* ---------- 导出 Markdown ---------- */
 function toMarkdown() {
   const isQ = active === 'q';
-  const items = curItems().slice().sort((a, b) => b.updatedAt - a.updatedAt);
+  const items = curItems().slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const out = [`# 数学复习本 · ${isQ ? '错题' : '知识点'}`, '', `> 导出时间：${new Date().toLocaleString('zh-CN')} · 共 ${items.length} 项`, ''];
   items.forEach((it, idx) => {
     const tags = it.tags.join('、') || '—';
@@ -2028,7 +2029,7 @@ document.getElementById('exportMdBtn').onclick = () => {
 document.getElementById('printBtn').onclick = () => {
   settingsDrawer.classList.remove('open');
   const isQ = active === 'q';
-  const items = curItems().slice().sort((a, b) => b.updatedAt - a.updatedAt);
+  const items = curItems().slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   if (!items.length) { alert(`当前${isQ ? '错题' : '知识点'}库是空的。`); return; }
   const area = document.getElementById('printArea');
   const head = `<h1>数学复习本 · ${isQ ? '错题' : '知识点'}</h1>
