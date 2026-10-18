@@ -292,6 +292,20 @@
     return (Array.isArray(items) ? items : []).map((it, i) => Object.assign({}, it, { order: i }));
   }
 
+  /* 在整库顺序上把 movedId 移到 targetIndex，返回重编号（0..n-1）后的新数组。
+     入参 items 应按「当前显示顺序」传入；targetIndex 越界钳制到 [0, n-1]。
+     移动后顺序无变化时，输出与（已归一化的）输入值相等。 */
+  function reorderItems(items, movedId, targetIndex) {
+    const arr = Array.isArray(items) ? items.slice() : [];
+    const from = arr.findIndex(it => it && it.id === movedId);
+    if (from >= 0) {
+      const to = Math.max(0, Math.min(arr.length - 1, Math.floor(targetIndex)));
+      const [moved] = arr.splice(from, 1);
+      arr.splice(to, 0, moved);
+    }
+    return arr.map((it, i) => Object.assign({}, it, { order: i }));
+  }
+
   /* ---------- 搜索语法 ----------
      tag:导数  #导数    status:mastered/已掌握    star    due/今天
      其余词按普通关键词处理（AND）。 */
@@ -617,6 +631,7 @@
     paperWrongToQuestion,
     sortItems,
     materializeOrder,
+    reorderItems,
     normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
     collectionPath, flattenCollections, addCollection, renameCollection,
     canMoveCollection, moveCollection, deleteCollection,

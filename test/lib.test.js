@@ -11,7 +11,7 @@ const {
   normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
   normalizeSrs, scheduleSrs, isDue, dueLabel,
   normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers, paperWrongToQuestion,
-  sortItems, materializeOrder,
+  sortItems, materializeOrder, reorderItems,
   parseText, parsePaper, parseSearch,
   normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
   collectionPath, flattenCollections, addCollection, renameCollection,
@@ -792,5 +792,50 @@ test('materializeOrder 按输入顺序产出 order 0..n-1，且不改入参', ()
 test('materializeOrder 非法入参安全', () => {
   assert.deepEqual(materializeOrder(null), []);
   assert.deepEqual(materializeOrder(undefined), []);
+});
+
+test('reorderItems 移到首/末并重编 order 0..n-1', () => {
+  const items = [
+    { id: 'a', order: 0, createdAt: 1 },
+    { id: 'b', order: 1, createdAt: 1 },
+    { id: 'c', order: 2, createdAt: 1 },
+  ];
+  const toFirst = reorderItems(items, 'c', 0);
+  assert.deepEqual(toFirst.map(i => i.id), ['c', 'a', 'b']);
+  assert.deepEqual(toFirst.map(i => i.order), [0, 1, 2]);
+  const toLast = reorderItems(items, 'a', 2);
+  assert.deepEqual(toLast.map(i => i.id), ['b', 'c', 'a']);
+  assert.deepEqual(toLast.map(i => i.order), [0, 1, 2]);
+});
+
+test('reorderItems 移到自身与相邻交换', () => {
+  const items = [
+    { id: 'a', order: 0, createdAt: 1 },
+    { id: 'b', order: 1, createdAt: 1 },
+    { id: 'c', order: 2, createdAt: 1 },
+  ];
+  const same = reorderItems(items, 'b', 1);
+  assert.deepEqual(same.map(i => i.id), ['a', 'b', 'c']);
+  assert.deepEqual(same.map(i => i.order), [0, 1, 2]);
+  const swap = reorderItems(items, 'b', 2);
+  assert.deepEqual(swap.map(i => i.id), ['a', 'c', 'b']);
+  assert.deepEqual(swap.map(i => i.order), [0, 1, 2]);
+});
+
+test('reorderItems 目标下标越界钳制，且返回新数组', () => {
+  const items = [
+    { id: 'a', order: 0, createdAt: 1 },
+    { id: 'b', order: 1, createdAt: 1 },
+    { id: 'c', order: 2, createdAt: 1 },
+  ];
+  assert.deepEqual(reorderItems(items, 'c', -5).map(i => i.id), ['c', 'a', 'b']);
+  assert.deepEqual(reorderItems(items, 'a', 99).map(i => i.id), ['b', 'c', 'a']);
+  assert.notEqual(reorderItems(items, 'a', 99), items);
+});
+
+test('reorderItems 未知 id 只做重编号', () => {
+  const items = [{ id: 'a', order: 0, createdAt: 1 }, { id: 'b', order: 5, createdAt: 1 }];
+  const out = reorderItems(items, 'zzz', 0);
+  assert.deepEqual(out.map(i => [i.id, i.order]), [['a', 0], ['b', 1]]);
 });
 
