@@ -1264,6 +1264,7 @@ function renderPapers() {
         ${p.date ? `<span class="tag">${esc(p.date)}</span>` : ''}
         <div class="cardacts">
           <button class="link" data-act="open">打开</button>
+          <button class="link" data-act="edit">编辑</button>
           <button class="link" data-act="rename">改名</button>
           <button class="link" data-act="delete">删除</button>
         </div>
@@ -1277,6 +1278,7 @@ function renderPapers() {
       const act = e.target.dataset && e.target.dataset.act;
       const paper = stores.p.items.find(x => x.id === card.dataset.id);
       if (!paper) return;
+      if (act === 'edit') { openPaperEdit(paper.id); return; }
       if (act === 'delete') {
         if (confirm(`删除试卷「${paper.title}」？已加入错题本的题会保留。`)) {
           stores.p.items = stores.p.items.filter(x => x.id !== paper.id);
