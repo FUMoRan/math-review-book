@@ -100,10 +100,23 @@ main{max-width:var(--mainw); margin:0 auto; padding:20px; transition:max-width .
 #list > .empty{grid-column:1 / -1;}
 #list > .group{grid-column:1 / -1;}
 .card{
+  position:relative;
   background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
   padding:var(--card-pad); margin-bottom:0; box-shadow:var(--shadow);
   transition:border-color .15s ease, background-color .2s ease;
 }
+.card.has-drag .stem{padding-right:26px;}   /* 给右上角手柄让出位置 */
+
+/* ---------- 拖拽手柄 ---------- */
+.drag-handle{
+  position:absolute; top:6px; right:8px; width:24px; height:24px; padding:0;
+  border:1px solid transparent; background:transparent; color:var(--muted);
+  border-radius:8px; font-size:14px; line-height:1; cursor:grab;
+  touch-action:none; user-select:none;
+}
+.drag-handle:hover{border-color:var(--line); color:var(--brand);}
+.card.dragging{opacity:.72; border-color:var(--brand); box-shadow:var(--shadow-lg);}
+.card.dragging .drag-handle{cursor:grabbing;}
 .stem{font-size:var(--stem-size); margin:0 0 12px; overflow-wrap:anywhere;}
 .meta{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;}
 .tag{

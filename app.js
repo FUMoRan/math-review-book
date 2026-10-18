@@ -18,6 +18,7 @@ const {
   parseText, parseSearch,
   normalizeQuestion, normalizeKp, scheduleSrs, isDue, dueLabel, DAY,
   normalizePaper, parsePaper, paperWrongToQuestion, mergeSeedPapers,
+  sortItems, materializeOrder, reorderItems,
   settleCollections, collectionSubtreeIds, flattenCollections, collectionChildren,
   collectionPath, addCollection, renameCollection, canMoveCollection, moveCollection,
   deleteCollection, collectionCounts, sanitizeItemCollections,
@@ -716,8 +717,9 @@ function applyStatus(item, next) {
 function makeCard(it) {
   const d = DEF[active];
   const v = cur();
+  const canDrag = dragAllowed();
   const card = document.createElement('div');
-  card.className = 'card';
+  card.className = 'card' + (canDrag ? ' has-drag' : '');
   card.dataset.id = it.id;
   const tags = it.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('');
   const rc = relatedCount(it); // 只计算一次
@@ -733,6 +735,7 @@ function makeCard(it) {
   const dets = d.details(it).filter(x => x.label !== '查看我的错误答案' || x.text);
   card.innerHTML = `
     ${v.selectMode ? `<input type="checkbox" class="chk" data-act="pick" ${v.selected.has(it.id) ? 'checked' : ''}>` : ''}
+    ${canDrag ? `<button type="button" class="drag-handle" data-act="drag" title="按住拖拽调整顺序" aria-label="拖拽排序">⠿</button>` : ''}
     ${d.main(it)}
     ${imgStrip(it)}
     <div class="meta">
@@ -830,6 +833,11 @@ function makeCard(it) {
   card.addEventListener('touchmove', () => { moved = true; clearTimeout(pressT); }, { passive: true });
   card.addEventListener('touchend', () => clearTimeout(pressT));
   card.addEventListener('touchcancel', () => { moved = true; clearTimeout(pressT); });
+
+  if (canDrag) {
+    const handle = card.querySelector('[data-act="drag"]');
+    if (handle) bindDragHandle(handle);
+  }
 
   return card;
 }
@@ -1499,6 +1507,95 @@ document.getElementById('exitSelect').onclick = () => {
   document.getElementById('selectBtn').classList.remove('primary');
   render();
 };
+
+/* ---------- 拖拽手动排序 ----------
+   仅「列表视图 + 未搜索 + 无标签/状态/收藏/待复习筛选 + 未分组 + 合集为全部 + 未背题」时可用。
+   指针事件实现（pointerdown/move/up），桌面与触屏通用，不依赖 HTML5 DnD；长按多选不受影响。 */
+let dragState = null;
+
+function dragAllowed() {
+  if (active === 'p') return false;
+  const v = cur();
+  return !v.search && !v.status && !v.starOnly && !v.dueOnly
+    && v.activeTags.size === 0 && !v.groupMode && v.collectionFilter === COL_ALL
+    && !cram.open;
+}
+
+function dragPointerDown(e) {
+  if (e.button != null && e.button !== 0) return;      // 仅左键 / 触摸
+  const handle = e.currentTarget;
+  const card = handle.closest && handle.closest('.card');
+  if (!card) return;
+  e.preventDefault();
+  dragState = {
+    id: card.dataset.id,
+    el: card,
+    startY: e.clientY,
+    fromIndex: [...listEl.querySelectorAll('.card')].indexOf(card),
+    moved: false,
+    pointerId: e.pointerId,
+  };
+  try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+}
+
+function dragPointerMove(e) {
+  if (!dragState || e.pointerId !== dragState.pointerId) return;
+  if (!dragState.moved && Math.abs(e.clientY - dragState.startY) < 4) return;
+  dragState.moved = true;
+  dragState.el.classList.add('dragging');
+  const x = e.clientX, y = e.clientY;
+  // 命中指针所在的其它卡片，按指针在其上半/下半决定插入到前/后
+  let over = null;
+  for (const c of listEl.querySelectorAll('.card')) {
+    if (c === dragState.el) continue;
+    const r = c.getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) { over = c; break; }
+  }
+  if (over) {
+    const r = over.getBoundingClientRect();
+    if (y < r.top + r.height / 2) over.parentNode.insertBefore(dragState.el, over);
+    else over.parentNode.insertBefore(dragState.el, over.nextSibling);
+    return;
+  }
+  // 指针已落到所有卡片下方：移到末尾
+  const rest = [...listEl.querySelectorAll('.card')].filter(c => c !== dragState.el);
+  const last = rest[rest.length - 1];
+  if (last) {
+    const r = last.getBoundingClientRect();
+    if (y > r.bottom) last.parentNode.appendChild(dragState.el);
+  }
+}
+
+function dragPointerUp(e) {
+  if (!dragState || e.pointerId !== dragState.pointerId) return;
+  const st = dragState;
+  dragState = null;
+  try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+  st.el.classList.remove('dragging');
+  if (!st.moved) { render(); return; }                 // 只是点了下手柄：恢复
+  const targetIndex = [...listEl.querySelectorAll('.card')].findIndex(c => c.dataset.id === st.id);
+  if (targetIndex < 0 || targetIndex === st.fromIndex) { render(); return; }  // 拖回原位：不写盘
+  const mode = (settings.sortMode && settings.sortMode[active]) || 'auto';
+  let items;
+  if (mode !== 'manual') {                             // 首次拖拽：整库固化为手动
+    items = materializeOrder(sortItems(curItems(), 'auto'));
+    settings.sortMode[active] = 'manual';
+    saveSettings();
+  } else {
+    items = sortItems(curItems(), 'manual');
+  }
+  stores[active].items = reorderItems(items, st.id, targetIndex);
+  saveActive();
+  applySettings();
+  render();
+}
+
+function bindDragHandle(handle) {
+  handle.addEventListener('pointerdown', dragPointerDown);
+  handle.addEventListener('pointermove', dragPointerMove);
+  handle.addEventListener('pointerup', dragPointerUp);
+  handle.addEventListener('pointercancel', dragPointerUp);
+}
 document.querySelectorAll('[data-batch-status]').forEach(btn => {
   btn.onclick = () => {
     const v = cur();
