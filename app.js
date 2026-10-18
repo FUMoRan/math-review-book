@@ -7,6 +7,8 @@
 const K_Q = 'mq_items';
 const K_K = 'mq_kps';
 const K_P = 'mq_papers';
+const K_C_Q = 'mq_collections_q';   // 错题库的合集树
+const K_C_K = 'mq_collections_k';   // 知识点库的合集树
 const K_SEED = 'mq_seed_papers_v1';   // 内置真题只灌一次，之后不管你删不删都不再自动补
 
 /* 纯逻辑统一放在 lib.js（浏览器与单测共用），此处引用即可 */
@@ -16,6 +18,9 @@ const {
   parseText, parseSearch,
   normalizeQuestion, normalizeKp, scheduleSrs, isDue, dueLabel, DAY,
   normalizePaper, parsePaper, paperWrongToQuestion, mergeSeedPapers,
+  settleCollections, collectionSubtreeIds, flattenCollections, collectionChildren,
+  collectionPath, addCollection, renameCollection, canMoveCollection, moveCollection,
+  deleteCollection, collectionCounts, sanitizeItemCollections,
   bareMathSegments,
 } = MQ;
 
@@ -444,6 +449,13 @@ const stores = {
   p: { key: K_P, norm: normalizePaper, items: [] },
 };
 
+/* 合集树：错题、知识点各一棵（试卷视图不使用） */
+const colStores = { q: [], k: [] };
+const colKey = kind => kind === 'k' ? K_C_K : K_C_Q;
+const saveCols = kind => persist(colKey(kind), colStores[kind]);
+// 合集树/未分类在侧栏里作为「虚拟节点」的筛选值
+const COL_ALL = '__all__';
+
 // 启动时从 IndexedDB 载入（并把旧版 localStorage 数据迁移过来）
 async function loadInitial() {
   for (const kind of ['q', 'k', 'p']) {
@@ -454,6 +466,16 @@ async function loadInitial() {
       ? raw.map(stores[kind].norm)
       : (kind === 'q' ? seedQuestions() : (kind === 'k' ? seedKps() : [])).map(stores[kind].norm);
     await persist(key, stores[kind].items);
+  }
+  // 合集树（两库各一棵）
+  for (const kind of ['q', 'k']) {
+    const key = colKey(kind);
+    let raw = await kvGet(key);
+    if (!Array.isArray(raw)) raw = lsRead(key);
+    colStores[kind] = settleCollections(Array.isArray(raw) ? raw : []);
+    await persist(key, colStores[kind]);
+    // 把指向已不存在合集的条目纠正为「未分类」，保证筛选与计数口径一致
+    if (sanitizeItemCollections(stores[kind].items, colStores[kind])) await persist(stores[kind].key, stores[kind].items);
   }
   let t = await kvGet(K_TRASH);
   if (!Array.isArray(t)) t = lsRead(K_TRASH);
@@ -547,8 +569,8 @@ const DEF = {
 
 const PAGE = 30;
 const views = {
-  q: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), tagMode: 'all', search: '', status: '', starOnly: false, dueOnly: false },
-  k: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), tagMode: 'all', search: '', status: '', starOnly: false, dueOnly: false },
+  q: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), tagMode: 'all', search: '', status: '', starOnly: false, dueOnly: false, collectionFilter: COL_ALL },
+  k: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), tagMode: 'all', search: '', status: '', starOnly: false, dueOnly: false, collectionFilter: COL_ALL },
   p: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), tagMode: 'all', search: '', status: '', starOnly: false, dueOnly: false },
 };
 let active = 'q';
@@ -618,7 +640,14 @@ function currentFiltered() {
   const v = cur();
   const s = parseSearch(v.search);
   const now = Date.now();
+  // 合集筛选：null = 未分类；其余 = 该合集及其子合集；COL_ALL = 不过滤
+  const cf = v.collectionFilter;
+  const subIds = (cf && cf !== COL_ALL) ? collectionSubtreeIds(colStores[active] || [], cf) : null;
   const out = curItems().filter(it => {
+    if (cf !== COL_ALL) {
+      if (cf == null) { if (it.collectionId) return false; }
+      else if (!it.collectionId || !subIds.has(it.collectionId)) return false;
+    }
     if (v.status && it.status !== v.status) return false;
     if (s.status && it.status !== s.status) return false;
     if (v.starOnly && !it.star) return false;
@@ -636,7 +665,8 @@ function currentFiltered() {
     if (s.text && !hayOf(it).includes(s.text)) return false;
     return true;
   });
-  out.sort((a, b) => b.updatedAt - a.updatedAt);
+  // 按创建时间倒序：新增的排最前，编辑/改状态不会打乱既有顺序
+  out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   return out;
 }
 
@@ -682,6 +712,9 @@ function makeCard(it) {
   const due = `<span class="duechip${isDue(it) ? ' due' : ''}" data-due="1" title="点击标记为「复习中」">🕒 ${dueLabel(it)}</span>`;
   const src = it.fromPaper
     ? `<span class="relchip" data-frompaper="1" title="来自试卷，点击查看原卷">来自试卷</span>` : '';
+  const col = it.collectionId ? collectionById(active, it.collectionId) : null;
+  const colChip = col
+    ? `<span class="colchip" data-col="${esc(col.id)}" title="所属合集，点击只看这个合集">📁 ${esc(col.name)}</span>` : '';
   // 「我的错误答案」为空时不显示该折叠区，避免噪音
   const dets = d.details(it).filter(x => x.label !== '查看我的错误答案' || x.text);
   card.innerHTML = `
@@ -690,7 +723,7 @@ function makeCard(it) {
     ${imgStrip(it)}
     <div class="meta">
       <button class="star ${it.star ? 'on' : ''}" data-act="star" title="${it.star ? '取消收藏' : '收藏'}">${it.star ? '★' : '☆'}</button>
-      ${tags}${rel}${src}
+      ${tags}${rel}${src}${colChip}
       <div class="cardacts">
         ${due}
         <span class="status ${it.status}" data-act="status">● ${STATUS[it.status]}</span>
@@ -760,6 +793,12 @@ function makeCard(it) {
   if (srcEl) srcEl.onclick = () => {
     if (it.fromPaper && paperOf(it.fromPaper.paperId)) openPaper(it.fromPaper.paperId);
     else alert('原试卷已删除。');
+  };
+  const colEl = card.querySelector('[data-col]');
+  if (colEl) colEl.onclick = () => {
+    v.collectionFilter = colEl.dataset.col;
+    closeColDrawerIfNarrow();
+    applyFilters();
   };
   // 移动端：长按 0.5 秒进入多选并选中该项
   let pressT = null, moved = false;
@@ -1006,6 +1045,7 @@ function renderPapers() {
 }
 
 function render() {
+  renderColTree();
   if (active === 'p') return renderPapers();
   const v = cur();
   const filtered = currentFiltered();
@@ -1090,6 +1130,175 @@ function refreshTagPicker() {
   document.getElementById('tagPickBtn').textContent = v.activeTags.size ? `标签 · ${v.activeTags.size}个 ▾` : '标签 ▾';
 }
 
+/* ===================== 合集（文件夹式，每库一棵可嵌套的树） ===================== */
+const colTreeEl = document.getElementById('colTree');
+const colBackdrop = document.getElementById('colBackdrop');
+const colCollapsed = new Set();   // 被折叠的合集 id（默认展开）
+
+const colKind = () => active === 'k' ? 'k' : 'q';
+const colList = kind => (colStores[kind] || []);
+function collectionById(kind, id) { return colList(kind).find(c => c.id === id); }
+function collectionName(kind, id) { const c = collectionById(kind, id); return c ? c.name : '未分类'; }
+
+// 生成「所属合集」下拉的选项：未分类 + 缩进树 + 新建入口
+function collectionOptionsHtml(kind, selectedId) {
+  const opts = [`<option value=""${selectedId == null ? ' selected' : ''}>未分类</option>`];
+  for (const c of flattenCollections(colList(kind))) {
+    const ind = c.depth ? '　'.repeat(c.depth) + '└ ' : '';
+    opts.push(`<option value="${esc(c.id)}"${selectedId === c.id ? ' selected' : ''}>${ind}${esc(c.name)}</option>`);
+  }
+  opts.push(`<option value="__new__">＋ 新建合集…</option>`);
+  return opts.join('');
+}
+
+// 新建合集：加在指定父节点下（同名同级拒绝）
+function addCollectionQuick(kind, parentId, name) {
+  const nm = String(name == null ? '' : name).trim();
+  if (!nm) return null;
+  const pid = parentId || null;
+  if (collectionChildren(colList(kind), pid).some(c => c.name === nm)) {
+    alert(`同级下已存在同名合集「${nm}」。`);
+    return null;
+  }
+  const r = addCollection(colList(kind), nm, pid, Date.now());
+  colStores[kind] = r.cols;
+  if (pid) colCollapsed.delete(pid);      // 展开父节点，让新建的子合集可见
+  saveCols(kind);
+  return r.node.id;
+}
+
+if (colBackdrop) colBackdrop.onclick = () => closeColDrawer();
+function openColDrawer() { colTreeEl.classList.add('open'); colBackdrop.classList.add('show'); }
+function closeColDrawer() { colTreeEl.classList.remove('open'); colBackdrop.classList.remove('show'); }
+function closeColDrawerIfNarrow() { if (window.innerWidth < 1024) closeColDrawer(); }
+document.getElementById('colToggle').onclick = () => {
+  colTreeEl.classList.contains('open') ? closeColDrawer() : openColDrawer();
+};
+
+function renderColTree() {
+  if (!colTreeEl) return;
+  if (active !== 'q' && active !== 'k') { colTreeEl.innerHTML = ''; return; }
+  const kind = colKind();
+  const v = cur();
+  const cols = colList(kind);
+  const { subtree, unassigned } = collectionCounts(curItems(), cols);
+  const sel = v.collectionFilter;
+  const st = colTreeEl.scrollTop;
+
+  const nodeRow = o => {
+    const pad = 6 + o.depth * 14;
+    const twist = o.hasKids
+      ? `<span class="twist" data-twist="${esc(o.id)}">${o.collapsed ? '▸' : '▾'}</span>`
+      : '<span class="twist"></span>';
+    const acts = o.virtual ? '' : `
+      <span class="cacts">
+        <button data-cnew="${esc(o.id)}" title="新建子合集">＋</button>
+        <button data-cedit="${esc(o.id)}" title="重命名">✎</button>
+        <button data-cdel="${esc(o.id)}" class="del" title="删除">🗑</button>
+      </span>`;
+    return `<div class="colrow${o.active ? ' active' : ''}" data-crow="${esc(o.id)}" style="padding-left:${pad}px">
+      ${twist}<span class="cname">${esc(o.name)}</span><span class="ccount">${o.count}</span>${acts}
+    </div>`;
+  };
+
+  let html = `<div class="coltree-head"><span class="t">合集</span><button class="cls" id="colClose" title="关闭">✕</button></div>`;
+  html += nodeRow({ id: COL_ALL, name: '全部', count: curItems().length, active: sel === COL_ALL, depth: 0, virtual: true });
+  html += nodeRow({ id: NONE_ID, name: '未分类', count: unassigned, active: sel == null, depth: 0, virtual: true });
+
+  const walk = (parentId, depth) => {
+    let s = '';
+    for (const c of collectionChildren(cols, parentId)) {
+      const kids = collectionChildren(cols, c.id);
+      const collapsed = colCollapsed.has(c.id);
+      s += nodeRow({ id: c.id, name: c.name, count: subtree.get(c.id) || 0, active: sel === c.id, depth, hasKids: !!kids.length, collapsed });
+      if (kids.length && !collapsed) s += walk(c.id, depth + 1);
+    }
+    return s;
+  };
+  const tree = walk(null, 0);
+  html += tree || '<div class="col-empty">还没有合集。点下面「＋ 新建合集」开始，或先把几条内容归进去。</div>';
+  html += `<button class="coltree-new" id="colNew">＋ 新建合集</button>`;
+  colTreeEl.innerHTML = html;
+  colTreeEl.scrollTop = st;
+
+  colTreeEl.querySelectorAll('[data-crow]').forEach(el => {
+    el.onclick = e => {
+      if (e.target.closest('[data-cnew],[data-cedit],[data-cdel],[data-twist]')) return;
+      const raw = el.dataset.crow;
+      v.collectionFilter = raw === NONE_ID ? null : raw;   // COL_ALL 原样保留
+      applyFilters();
+      closeColDrawerIfNarrow();
+    };
+  });
+  colTreeEl.querySelectorAll('[data-twist]').forEach(el => {
+    el.onclick = e => {
+      e.stopPropagation();
+      const id = el.dataset.twist;
+      colCollapsed.has(id) ? colCollapsed.delete(id) : colCollapsed.add(id);
+      renderColTree();
+    };
+  });
+  colTreeEl.querySelectorAll('[data-cnew]').forEach(b => b.onclick = e => { e.stopPropagation(); createCollection(b.dataset.cnew); });
+  colTreeEl.querySelectorAll('[data-cedit]').forEach(b => b.onclick = e => { e.stopPropagation(); renameCollectionPrompt(b.dataset.cedit); });
+  colTreeEl.querySelectorAll('[data-cdel]').forEach(b => b.onclick = e => { e.stopPropagation(); deleteCollectionPrompt(b.dataset.cdel); });
+  const nb = colTreeEl.querySelector('#colNew');
+  if (nb) nb.onclick = () => createCollection(null);
+  const cb = colTreeEl.querySelector('#colClose');
+  if (cb) cb.onclick = () => closeColDrawer();
+}
+
+const NONE_ID = '__none__';   // 侧栏「未分类」虚拟行的 id
+
+function createCollection(parentId) {
+  const kind = colKind();
+  const name = prompt(parentId ? '新建子合集名称：' : '新建合集名称：');
+  if (name == null) return;
+  if (addCollectionQuick(kind, parentId, name)) { renderColTree(); applyFilters(); }
+}
+
+function renameCollectionPrompt(id) {
+  const kind = colKind();
+  const c = collectionById(kind, id);
+  if (!c) return;
+  const name = prompt('重命名合集：', c.name);
+  if (name == null) return;
+  const nm = name.trim();
+  if (!nm || nm === c.name) return;
+  if (collectionChildren(colList(kind), c.parentId || null).filter(x => x.id !== id).some(x => x.name === nm)) {
+    alert(`同级下已存在同名合集「${nm}」。`);
+    return;
+  }
+  colStores[kind] = renameCollection(colList(kind), id, nm, Date.now());
+  saveCols(kind);
+  renderColTree();
+  applyFilters();
+}
+
+function deleteCollectionPrompt(id) {
+  const kind = colKind();
+  const cols = colList(kind);
+  const c = collectionById(kind, id);
+  if (!c) return;
+  const ids = collectionSubtreeIds(cols, id);
+  const extra = ids.size - 1;
+  const n = (collectionCounts(curItems(), cols).subtree.get(id)) || 0;
+  const msg = `删除合集「${c.name}」？`
+    + (extra ? `其下 ${extra} 个子合集会一并删除。` : '')
+    + (n ? `\n其中 ${n} 条内容会回到「未分类」。` : '')
+    + '\n此操作不可撤销。';
+  if (!confirm(msg)) return;
+  colStores[kind] = deleteCollection(cols, id).cols;
+  let changed = false;
+  for (const it of curItems()) {
+    if (it.collectionId && ids.has(it.collectionId)) { it.collectionId = null; changed = true; }
+  }
+  saveCols(kind);
+  if (changed) saveActive();
+  const v = cur();
+  if (v.collectionFilter && ids.has(v.collectionFilter)) v.collectionFilter = COL_ALL;
+  render();
+}
+
 /* ===================== ui ===================== */
 function debounce(fn, ms) {
   let t;
@@ -1133,7 +1342,12 @@ function switchView(v) {
     if (el) el.style.display = isPaper ? 'none' : '';
   });
   addBtn.textContent = isPaper ? '+ 新增试卷' : DEF[v].addLabel;
+  // 试卷视图不涉及合集，侧栏与入口一并隐藏
+  if (colTreeEl) colTreeEl.style.display = isPaper ? 'none' : '';
+  const colTgl = document.getElementById('colToggle');
+  if (colTgl) colTgl.style.display = isPaper ? 'none' : '';
   if (isPaper) {
+    closeColDrawer();
     document.getElementById('toolbar').style.display = 'none';
     document.getElementById('loadMoreRow').style.display = 'none';
     refreshTagPicker();
@@ -1234,6 +1448,42 @@ document.getElementById('batchTag').onclick = () => {
   refreshTagPicker();
   render();
 };
+/* 批量移动到合集 */
+const moveModal = document.getElementById('moveModal');
+const moveSelect = document.getElementById('moveSelect');
+document.getElementById('batchMove').onclick = () => {
+  const v = cur();
+  if (!v.selected.size) return alert('还没选任何项。');
+  // 默认选当前正在筛选的合集，省一步
+  const def = (v.collectionFilter && v.collectionFilter !== COL_ALL) ? v.collectionFilter : null;
+  moveSelect.innerHTML = collectionOptionsHtml(active, def);
+  moveModal.classList.add('open');
+};
+document.getElementById('moveCancel').onclick = () => moveModal.classList.remove('open');
+moveModal.onclick = e => { if (e.target === moveModal) moveModal.classList.remove('open'); };
+moveSelect.onchange = () => {
+  if (moveSelect.value !== '__new__') return;
+  const name = prompt('新建合集名称：');
+  const id = name == null ? null : addCollectionQuick(active, null, name);
+  moveSelect.innerHTML = collectionOptionsHtml(active, id);
+};
+document.getElementById('moveConfirm').onclick = () => {
+  const v = cur();
+  let target = moveSelect.value;
+  if (target === '__new__') {
+    const name = prompt('新建合集名称：');
+    target = name == null ? null : addCollectionQuick(active, null, name);
+  }
+  if (target === '__new__') return;
+  target = target || null;
+  curItems().forEach(it => {
+    if (v.selected.has(it.id)) { it.collectionId = target; it.updatedAt = Date.now(); }
+  });
+  saveActive();
+  moveModal.classList.remove('open');
+  render();
+};
+
 document.getElementById('batchDelete').onclick = () => {
   const v = cur();
   if (!v.selected.size) return alert('还没选任何项。');
@@ -1254,6 +1504,9 @@ const addImgRow = document.getElementById('addImgRow');
 
 /* 导入时临时配图（只有解析出 1 项时可用） */
 let pendingImgs = [];
+// 新增/粘贴导入时的「所属合集」选择（null = 未分类）
+let addCollectionId = null;
+const addColSel = document.getElementById('addCollection');
 function renderPendingThumbs() {
   renderThumbs(document.getElementById('addThumbs'), pendingImgs, id => {
     pendingImgs = pendingImgs.filter(x => x !== id);
@@ -1343,11 +1596,29 @@ document.getElementById('paperImportBtn').onclick = () => {
   renderPapers();
 };
 
+// 新增弹窗「所属合集」下拉：与侧栏共用同一棵合集树
+function refreshAddCollection() {
+  addColSel.innerHTML = collectionOptionsHtml(active, addCollectionId);
+}
+function newCollectionFromAdd() {
+  const name = prompt('新建合集名称：');
+  const id = name == null ? null : addCollectionQuick(active, null, name);
+  if (id != null) addCollectionId = id;
+  refreshAddCollection();
+}
+addColSel.onchange = () => {
+  if (addColSel.value === '__new__') newCollectionFromAdd();
+  else addCollectionId = addColSel.value || null;
+};
+document.getElementById('addColNew').onclick = newCollectionFromAdd;
+
 addBtn.onclick = () => {
   if (active === 'p') { openPaperAdd(); return; }
   const d = DEF[active];
   pending = [];
   resetPendingImgs();
+  addCollectionId = null;
+  refreshAddCollection();
   document.getElementById('addTitle').textContent = active === 'q' ? '粘贴 AI 内容 / 手动填写' : '粘贴 / 手动新增知识点';
   document.getElementById('addHint').innerHTML = `按固定格式粘贴，点「拆分预览」自动拆成字段。多项之间用单独一行 <b>===</b> 分隔。`;
   document.getElementById('formatHint').textContent = '格式示例：\n' + d.importExample;
@@ -1412,7 +1683,11 @@ document.getElementById('importBtn').onclick = () => {
   if (checked.length === 1 && pendingImgs.length) pending[checked[0]].images = pendingImgs.slice();
 
   const norm = stores[active].norm;
-  for (const i of checked) stores[active].items.push(norm(pending[i]));
+  for (const i of checked) {
+    const obj = norm(pending[i]);
+    obj.collectionId = addCollectionId;
+    stores[active].items.push(obj);
+  }
   saveActive();
   refreshTagPicker();
   resetPendingImgs();
@@ -1457,9 +1732,18 @@ function openEdit(it) {
   `).join('') + `
     <label>标签（英文逗号分隔）</label>
     <input id="ef_tags" class="field-input" type="text" placeholder="导数, 极值">
+    <label>所属合集</label>
+    <select id="ef_collection" class="field-input">${collectionOptionsHtml(active, it.collectionId)}</select>
   `;
   for (const key of Object.keys(d.fieldLabels)) document.getElementById('ef_' + key).value = it[key];
   document.getElementById('ef_tags').value = it.tags.join(', ');
+  const colSel = document.getElementById('ef_collection');
+  colSel.onchange = () => {
+    if (colSel.value !== '__new__') return;
+    const name = prompt('新建合集名称：');
+    const id = name == null ? null : addCollectionQuick(active, null, name);
+    colSel.innerHTML = collectionOptionsHtml(active, id != null ? id : it.collectionId);
+  };
   document.getElementById('editImgMsg').textContent = '';
   renderEditThumbs();
   editModal.classList.add('open');
@@ -1480,6 +1764,8 @@ document.getElementById('editSave').onclick = () => {
   if (!it) return;
   for (const key of Object.keys(DEF[active].fieldLabels)) it[key] = document.getElementById('ef_' + key).value.trim();
   it.tags = document.getElementById('ef_tags').value.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+  const colVal = document.getElementById('ef_collection').value;
+  it.collectionId = (colVal && colVal !== '__new__') ? colVal : null;
   it.updatedAt = Date.now();
   // 图片：提交草稿，并删除被移除的 blob
   if (editOrig) [...editOrig].filter(id => !editImgs.includes(id)).forEach(dropImage);
@@ -1532,7 +1818,7 @@ function downloadBlob(name, blob) {
 
 // 体积小的纯文字备份（不含配图）
 document.getElementById('exportBtn').onclick = () => {
-  const payload = { version: 2, questions: stores.q.items, knowledge: stores.k.items };
+  const payload = { version: 4, questions: stores.q.items, knowledge: stores.k.items, collections: { q: colStores.q, k: colStores.k } };
   downloadBlob(`数学复习本-${dateStamp()}.json`,
     new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
   setBackupMeta(Object.assign(getBackupMeta(), { json: Date.now() }));
@@ -1542,7 +1828,7 @@ document.getElementById('exportBtn').onclick = () => {
 // 完整备份：把配图以 base64 一并写入，换设备后可完整还原
 document.getElementById('exportFullBtn').onclick = async () => {
   settingsDrawer.classList.remove('open');
-  const payload = { version: 3, questions: stores.q.items, knowledge: stores.k.items, images: {} };
+  const payload = { version: 4, questions: stores.q.items, knowledge: stores.k.items, collections: { q: colStores.q, k: colStores.k }, images: {} };
   try {
     for (const id of referencedImageIds()) {
       const rec = await idbGet(id);
@@ -1571,13 +1857,14 @@ document.getElementById('fileInput').onchange = e => {
     let data;
     try { data = JSON.parse(reader.result); } catch (err) { alert('文件不是合法的 JSON。'); return; }
 
-    let qs = null, ks = null, imgs = null;
+    let qs = null, ks = null, imgs = null, cols = null;
     if (Array.isArray(data)) {
       qs = data; // 兼容旧版：数组即错题列表
     } else if (data && typeof data === 'object') {
       if (Array.isArray(data.questions)) qs = data.questions;
       if (Array.isArray(data.knowledge)) ks = data.knowledge;
       if (data.images && typeof data.images === 'object') imgs = data.images;
+      if (data.collections && typeof data.collections === 'object') cols = data.collections;
     }
     if (qs === null && ks === null) { alert('文件结构不符合要求，未做任何修改。'); return; }
     if (qs && !qs.every(x => x && typeof x === 'object')) { alert('questions 结构非法，未做任何修改。'); return; }
@@ -1596,6 +1883,15 @@ document.getElementById('fileInput').onchange = e => {
     }
     if (qs) { const inc = qs.map(normalizeQuestion); stores.q.items = mode ? inc : stores.q.items.concat(inc); saveStore(K_Q, stores.q.items); }
     if (ks) { const inc = ks.map(normalizeKp); stores.k.items = mode ? inc : stores.k.items.concat(inc); saveStore(K_K, stores.k.items); }
+
+    // 合集树：替换模式整体替换（文件不含合集则清空）；追加模式并入现有树，再修正非法引用
+    for (const kind of ['q', 'k']) {
+      const incoming = (cols && Array.isArray(cols[kind])) ? cols[kind] : null;
+      if (incoming) colStores[kind] = settleCollections(mode ? incoming : colStores[kind].concat(incoming));
+      else if (mode) colStores[kind] = [];
+      saveCols(kind);
+      if (sanitizeItemCollections(stores[kind].items, colStores[kind])) saveStore(stores[kind].key, stores[kind].items);
+    }
 
     // 还原配图（完整备份）：写入 IndexedDB，使条目里的图片 id 能取到
     let restored = 0;
@@ -1687,7 +1983,7 @@ function renderStats() {
 /* ---------- 导出 Markdown ---------- */
 function toMarkdown() {
   const isQ = active === 'q';
-  const items = curItems().slice().sort((a, b) => b.updatedAt - a.updatedAt);
+  const items = curItems().slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const out = [`# 数学复习本 · ${isQ ? '错题' : '知识点'}`, '', `> 导出时间：${new Date().toLocaleString('zh-CN')} · 共 ${items.length} 项`, ''];
   items.forEach((it, idx) => {
     const tags = it.tags.join('、') || '—';
@@ -1733,7 +2029,7 @@ document.getElementById('exportMdBtn').onclick = () => {
 document.getElementById('printBtn').onclick = () => {
   settingsDrawer.classList.remove('open');
   const isQ = active === 'q';
-  const items = curItems().slice().sort((a, b) => b.updatedAt - a.updatedAt);
+  const items = curItems().slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   if (!items.length) { alert(`当前${isQ ? '错题' : '知识点'}库是空的。`); return; }
   const area = document.getElementById('printArea');
   const head = `<h1>数学复习本 · ${isQ ? '错题' : '知识点'}</h1>

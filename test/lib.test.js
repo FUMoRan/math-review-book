@@ -12,6 +12,10 @@ const {
   normalizeSrs, scheduleSrs, isDue, dueLabel,
   normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers, paperWrongToQuestion,
   parseText, parsePaper, parseSearch,
+  normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
+  collectionPath, flattenCollections, addCollection, renameCollection,
+  canMoveCollection, moveCollection, deleteCollection,
+  filterItemsByCollection, collectionCounts, sanitizeItemCollections,
   bareMathSegments,
 } = MQ;
 
@@ -580,3 +584,142 @@ test('粘贴文本经解析归一化后可正确排程', () => {
   assert.equal(item.srs.interval, 1);
   assert.equal(isDue(item, Date.now()), false);        // 已排到 1 天后
 });
+
+/* ===================== 合集（集合树） ===================== */
+// 构造一棵固定树：a(根) > b(子) ；c(根)
+function tree() {
+  return [
+    { id: 'a', name: '高数', parentId: null, createdAt: 1, updatedAt: 1 },
+    { id: 'b', name: '极限', parentId: 'a', createdAt: 2, updatedAt: 2 },
+    { id: 'c', name: '线代', parentId: null, createdAt: 3, updatedAt: 3 },
+  ];
+}
+
+test('normalizeCollection 补默认值并 trim 名称', () => {
+  const c = normalizeCollection({ name: '  极限  ' });
+  assert.equal(c.name, '极限');
+  assert.equal(c.parentId, null);
+  assert.ok(c.id && typeof c.id === 'string');
+  assert.equal(normalizeCollection({}).name, '未命名合集');
+  assert.equal(normalizeCollection({ name: 'x', parentId: '' }).parentId, null);
+});
+
+test('settleCollections 修正悬空 parentId 并断开环', () => {
+  const cols = settleCollections([
+    { id: 'a', name: 'A', parentId: 'ghost' },          // 父不存在 → 提到根
+    { id: 'b', name: 'B', parentId: 'b' },              // 自环 → 断开
+    { id: 'c', name: 'C', parentId: 'd' },              // c↔d 互指 → 断环
+    { id: 'd', name: 'D', parentId: 'c' },
+  ]);
+  const byId = new Map(cols.map(c => [c.id, c]));
+  assert.equal(byId.get('a').parentId, null);
+  assert.equal(byId.get('b').parentId, null);
+  assert.ok(byId.get('c').parentId === null || byId.get('d').parentId === null);
+});
+
+test('collectionSubtreeIds 含自身、跨层、对环安全', () => {
+  assert.deepEqual([...collectionSubtreeIds(tree(), 'a')].sort(), ['a', 'b']);
+  assert.deepEqual([...collectionSubtreeIds(tree(), 'b')], ['b']);
+  assert.deepEqual([...collectionSubtreeIds(tree(), 'c')], ['c']);
+});
+
+test('collectionChildren 按创建时间稳定排序', () => {
+  assert.deepEqual(collectionChildren(tree(), null).map(c => c.id), ['a', 'c']);
+  assert.deepEqual(collectionChildren(tree(), 'a').map(c => c.id), ['b']);
+});
+
+test('flattenCollections 带层级深度，深度优先', () => {
+  assert.deepEqual(flattenCollections(tree()).map(c => [c.id, c.depth]),
+    [['a', 0], ['b', 1], ['c', 0]]);
+});
+
+test('collectionPath 返回从根到自身的路径', () => {
+  assert.deepEqual(collectionPath(tree(), 'b').map(c => c.id), ['a', 'b']);
+  assert.deepEqual(collectionPath(tree(), 'a').map(c => c.id), ['a']);
+  assert.deepEqual(collectionPath(tree(), 'none'), []);
+});
+
+test('addCollection / renameCollection', () => {
+  const { cols, node } = addCollection([], '高数', null, 100);
+  assert.equal(cols.length, 1);
+  assert.equal(node.name, '高数');
+  assert.equal(node.createdAt, 100);
+  const child = addCollection(cols, '极限', node.id, 101);
+  assert.equal(child.node.parentId, node.id);
+  const renamed = renameCollection(child.cols, child.node.id, ' 数列极限 ', 102);
+  assert.equal(renamed.find(c => c.id === child.node.id).name, '数列极限');
+  assert.equal(renamed.find(c => c.id === child.node.id).updatedAt, 102);
+  // 空名不生效
+  assert.equal(renameCollection(child.cols, node.id, '   ')[0].name, '高数');
+});
+
+test('moveCollection 拒绝移入自身子树，允许合法移动', () => {
+  assert.equal(canMoveCollection(tree(), 'a', 'b'), false);   // b 是 a 的子
+  assert.equal(canMoveCollection(tree(), 'a', 'a'), false);   // 自身
+  assert.equal(canMoveCollection(tree(), 'b', 'a'), true);     // 原地
+  assert.equal(canMoveCollection(tree(), 'c', 'a'), true);     // 换父
+  const bad = moveCollection(tree(), 'a', 'b');
+  assert.equal(bad.ok, false);
+  const good = moveCollection(tree(), 'c', 'a', 9);
+  assert.equal(good.ok, true);
+  assert.equal(good.cols.find(c => c.id === 'c').parentId, 'a');
+});
+
+test('deleteCollection 删除整棵子树并返回 removedIds/parentId', () => {
+  const r = deleteCollection(tree(), 'a');
+  assert.deepEqual(r.removedIds.sort(), ['a', 'b']);
+  assert.equal(r.parentId, null);
+  assert.deepEqual(r.cols.map(c => c.id), ['c']);
+});
+
+test('filterItemsByCollection 三种口径：全部 / 未分类 / 子树', () => {
+  const items = [
+    { id: '1', collectionId: 'a' },
+    { id: '2', collectionId: 'b' },
+    { id: '3', collectionId: 'c' },
+    { id: '4', collectionId: null },
+    { id: '5', collectionId: 'ghost' },   // 指向已删合集
+  ];
+  const cols = tree();
+  assert.equal(filterItemsByCollection(items, cols, '__all__').length, 5);
+  assert.deepEqual(filterItemsByCollection(items, cols, null).map(i => i.id), ['4']);
+  assert.deepEqual(filterItemsByCollection(items, cols, 'a').map(i => i.id), ['1', '2']);
+  assert.deepEqual(filterItemsByCollection(items, cols, 'c').map(i => i.id), ['3']);
+});
+
+test('collectionCounts 计数含子树，非法引用计入未分类', () => {
+  const items = [
+    { id: '1', collectionId: 'a' },
+    { id: '2', collectionId: 'b' },
+    { id: '3', collectionId: 'c' },
+    { id: '4', collectionId: null },
+    { id: '5', collectionId: 'ghost' },
+  ];
+  const { direct, subtree, unassigned } = collectionCounts(items, tree());
+  assert.equal(direct.get('a'), 1);
+  assert.equal(direct.get('b'), 1);
+  assert.equal(subtree.get('a'), 2);       // a + b
+  assert.equal(subtree.get('c'), 1);
+  assert.equal(unassigned, 2);             // null + ghost
+});
+
+test('sanitizeItemCollections 把非法引用纠正为未分类', () => {
+  const items = [{ id: '1', collectionId: 'a' }, { id: '2', collectionId: 'ghost' }, { id: '3', collectionId: null }];
+  const changed = sanitizeItemCollections(items, tree());
+  assert.equal(changed, true);
+  assert.equal(items[1].collectionId, null);
+  assert.equal(items[0].collectionId, 'a');
+  assert.equal(sanitizeItemCollections(items, tree()), false);   // 再跑一次无变化
+});
+
+test('条目归一化带上 collectionId；来自试卷的错题默认未分类', () => {
+  assert.equal(normalizeQuestion({ collectionId: 'a' }).collectionId, 'a');
+  assert.equal(normalizeQuestion({}).collectionId, null);
+  assert.equal(normalizeKp({ collectionId: 'k1' }).collectionId, 'k1');
+  assert.equal(normalizeKp({ collectionId: '' }).collectionId, null);
+  const paper = normalizePaper({ id: 'p1', questions: [{ id: 'q1', stem: 'x', wrong: 'wrong' }] });
+  const [converted] = paperWrongToQuestion(paper, 0);
+  assert.equal(converted.collectionId, null);
+  assert.equal(converted.fromPaper.paperId, 'p1');
+});
+
