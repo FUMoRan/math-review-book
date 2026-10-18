@@ -756,7 +756,143 @@ function makeCard(it) {
   return card;
 }
 
-function openPaper() {}
+let curPaperId = null;
+let paperWrongOnly = false;
+let pqEditing = null;   // { paperId, questionId }
+
+function addPaperWrongToBook() {}
+
+function paperOf(id) { return stores.p.items.find(p => p.id === id); }
+
+function openPaper(id) {
+  curPaperId = id;
+  paperWrongOnly = false;
+  renderPaperDetail();
+  document.getElementById('paperModal').classList.add('open');
+}
+
+function renderPaperDetail() {
+  const p = paperOf(curPaperId);
+  const modal = document.getElementById('paperModal');
+  if (!p) { modal.classList.remove('open'); return; }
+  document.getElementById('paperModalTitle').textContent = p.title;
+  const qs = p.questions.filter(q => !paperWrongOnly || q.wrong === 'wrong');
+  const body = document.getElementById('paperBody');
+  const wrongN = p.questions.filter(q => q.wrong === 'wrong').length;
+  body.innerHTML = `
+    <div class="paper-head">
+      <input id="paperTitleInput" value="${esc(p.title)}" placeholder="试卷名">
+      <input id="paperDateInput" type="date" value="${esc(p.date)}">
+    </div>
+    <div class="badge-note">共 ${p.questions.length} 题 · 已标错 ${wrongN}${paperWrongOnly ? ' · 仅看错题' : ''}</div>
+    <div class="paper-qs">
+      ${qs.map(q => `
+        <div class="paper-q" data-qid="${q.id}">
+          <div class="paper-q-head"><span class="section-label">第 ${q.no} 题</span>
+            ${q.linkedQid ? '<span class="badge-note">已在错题本</span>' : ''}</div>
+          <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
+          ${q.answer ? `<details><summary>查看答案</summary><div class="body">${renderMath(q.answer)}</div></details>` : ''}
+          <div class="paper-q-acts">
+            <select data-act="wrong" data-qid="${q.id}">
+              <option value="unset"${q.wrong === 'unset' ? ' selected' : ''}>未标</option>
+              <option value="right"${q.wrong === 'right' ? ' selected' : ''}>做对</option>
+              <option value="wrong"${q.wrong === 'wrong' ? ' selected' : ''}>错题</option>
+            </select>
+            <button class="link" data-act="editq" data-qid="${q.id}">编辑</button>
+            <button class="link" data-act="delq" data-qid="${q.id}">删除</button>
+          </div>
+        </div>`).join('') || '<div class="empty">没有可显示的题。</div>'}
+    </div>
+    <div class="row paper-foot">
+      <button id="paperAllWrong">全部标错</button>
+      <button id="paperAllRight">全部标对</button>
+      <button id="paperWrongOnly">${paperWrongOnly ? '显示全部' : '仅看错题'}</button>
+      <span class="spacer"></span>
+      <button class="primary" id="paperToWrong">把已标错题加入错题本</button>
+    </div>`;
+
+  const setQ = (qid, patch) => {
+    const q = p.questions.find(x => x.id === qid);
+    if (!q) return;
+    Object.assign(q, patch);
+    p.updatedAt = Date.now();
+    savePapers();
+  };
+
+  document.getElementById('paperTitleInput').onchange = e => {
+    p.title = e.target.value.trim() || '未命名试卷';
+    p.updatedAt = Date.now();
+    savePapers();
+    document.getElementById('paperModalTitle').textContent = p.title;
+  };
+  document.getElementById('paperDateInput').onchange = e => {
+    p.date = e.target.value;
+    p.updatedAt = Date.now();
+    savePapers();
+  };
+  body.querySelectorAll('select[data-act="wrong"]').forEach(sel => {
+    sel.onchange = () => { setQ(sel.dataset.qid, { wrong: sel.value }); renderPaperDetail(); };
+  });
+  body.querySelectorAll('[data-act="delq"]').forEach(btn => {
+    btn.onclick = () => {
+      if (!confirm('删除这道题？（若已加入错题本，错题条目会保留）')) return;
+      p.questions = p.questions.filter(x => x.id !== btn.dataset.qid);
+      p.updatedAt = Date.now();
+      savePapers();
+      renderPaperDetail();
+    };
+  });
+  body.querySelectorAll('[data-act="editq"]').forEach(btn => {
+    btn.onclick = () => openPaperQ(p.id, btn.dataset.qid);
+  });
+  document.getElementById('paperAllWrong').onclick = () => {
+    p.questions.forEach(q => { q.wrong = 'wrong'; });
+    p.updatedAt = Date.now(); savePapers(); renderPaperDetail();
+  };
+  document.getElementById('paperAllRight').onclick = () => {
+    p.questions.forEach(q => { q.wrong = 'right'; });
+    p.updatedAt = Date.now(); savePapers(); renderPaperDetail();
+  };
+  document.getElementById('paperWrongOnly').onclick = () => { paperWrongOnly = !paperWrongOnly; renderPaperDetail(); };
+  document.getElementById('paperToWrong').onclick = addPaperWrongToBook;
+}
+
+document.getElementById('paperDetailClose').onclick = () => {
+  document.getElementById('paperModal').classList.remove('open');
+  renderPapers();
+};
+document.getElementById('paperModal').onclick = e => {
+  if (e.target === document.getElementById('paperModal')) { document.getElementById('paperModal').classList.remove('open'); renderPapers(); }
+};
+
+/* 题目编辑小弹层 */
+function openPaperQ(paperId, qid) {
+  const p = paperOf(paperId);
+  const q = p && p.questions.find(x => x.id === qid);
+  if (!q) return;
+  pqEditing = { paperId, questionId: qid };
+  document.getElementById('pqNo').value = q.no;
+  document.getElementById('pqStem').value = q.stem;
+  document.getElementById('pqAnswer').value = q.answer;
+  document.getElementById('paperQModal').classList.add('open');
+}
+document.getElementById('pqCancel').onclick = () => document.getElementById('paperQModal').classList.remove('open');
+document.getElementById('pqSave').onclick = () => {
+  if (!pqEditing) return;
+  const p = paperOf(pqEditing.paperId);
+  const q = p && p.questions.find(x => x.id === pqEditing.questionId);
+  if (q) {
+    const no = parseInt(document.getElementById('pqNo').value, 10);
+    q.no = Number.isFinite(no) ? no : q.no;
+    q.stem = document.getElementById('pqStem').value;
+    q.answer = document.getElementById('pqAnswer').value;
+    p.updatedAt = Date.now();
+    savePapers();
+  }
+  pqEditing = null;
+  document.getElementById('paperQModal').classList.remove('open');
+  renderPaperDetail();
+};
 
 function savePapers() { return persist(K_P, stores.p.items); }
 
