@@ -197,6 +197,28 @@
       .filter(o => Object.values(map).some(k => (k === 'tags' ? o.tags.length : o[k])) || o.preText.trim());
   }
 
+  /* ---------- 整卷文本解析：=== 分隔每题，【答案】/【解析】都记为 answer ---------- */
+  const PAPER_FIELD_MAP = { 题目: 'stem', 答案: 'answer', 解析: 'answer', 标签: 'tags' };
+
+  function parsePaper(text, now) {
+    const t = now || Date.now();
+    const questions = [];
+    String(text == null ? '' : text)
+      .split(/^[ \t]*={3,}[ \t]*$/m)
+      .forEach(block => {
+        const o = parseBlockGeneric(block, PAPER_FIELD_MAP, '题目');
+        if (!o.stem) return;                       // 无题干的块（含前导空块）跳过
+        questions.push(normalizePaperQuestion({
+          id: uid(),
+          no: questions.length + 1,
+          stem: o.stem,
+          answer: o.answer,
+          tags: o.tags,
+        }));
+      });
+    return normalizePaper({ id: uid(), createdAt: t, updatedAt: t, questions });
+  }
+
   /* ---------- 搜索语法 ----------
      tag:导数  #导数    status:mastered/已掌握    star    due/今天
      其余词按普通关键词处理（AND）。 */
@@ -343,7 +365,7 @@
     normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
     SRS_DEF, normalizeSrs, scheduleSrs, isDue, dueLabel,
     normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper,
-    parseBlockGeneric, parseText,
+    parseBlockGeneric, parseText, parsePaper,
     parseSearch,
     bareMathSegments,
   };

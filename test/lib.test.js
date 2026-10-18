@@ -11,7 +11,7 @@ const {
   normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
   normalizeSrs, scheduleSrs, isDue, dueLabel,
   normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper,
-  parseText, parseSearch,
+  parseText, parsePaper, parseSearch,
   bareMathSegments,
 } = MQ;
 
@@ -206,6 +206,33 @@ test('normalizePaper 补全试卷字段并逐题归一化', () => {
 test('normalizePaper 对非对象入参安全', () => {
   assert.equal(normalizePaper(null).title, '未命名试卷');
   assert.deepEqual(normalizePaper(undefined).questions, []);
+});
+
+test('parsePaper 按 === 拆分整卷并顺次编号', () => {
+  const text = [
+    '【题目】', '第1题 $x=1$', '【答案】', '$x=1$',
+    '===',
+    '【题目】', '第2题 $y=2$', '【解析】', '$y=2$',
+  ].join('\n');
+  const p = parsePaper(text, 1000);
+  assert.equal(p.questions.length, 2);
+  assert.deepEqual(p.questions.map(q => q.no), [1, 2]);
+  assert.equal(p.questions[0].stem, '第1题 $x=1$');
+  assert.equal(p.questions[0].answer, '$x=1$');
+  assert.equal(p.questions[1].stem, '第2题 $y=2$');
+  assert.equal(p.questions[1].answer, '$y=2$');   // 【解析】也写入 answer
+  assert.equal(p.createdAt, 1000);
+});
+
+test('parsePaper 缺答案仍可解析', () => {
+  const p = parsePaper('【题目】\n只有题干', 2000);
+  assert.equal(p.questions.length, 1);
+  assert.equal(p.questions[0].answer, '');
+});
+
+test('parsePaper 空输入与无题目块返回空试卷', () => {
+  assert.equal(parsePaper('', 0).questions.length, 0);
+  assert.equal(parsePaper('【答案】\n$1$', 0).questions.length, 0);   // 没有【题目】的块跳过
 });
 
 /* ===================== 粘贴文本解析 ===================== */
