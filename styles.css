@@ -154,6 +154,8 @@ details .body{margin-top:8px; font-size:var(--body-size); color:var(--text-2); o
   align-items:flex-start; justify-content:center; padding:40px 16px; overflow:auto; z-index:50;
 }
 .modal.open{display:flex;}
+/* 试卷编辑页内的单题编辑弹层需盖在编辑页(#paperEdit, z-index:66)之上 */
+#paperQModal{z-index:75;}
 .panel{
   background:var(--card); border-radius:16px; width:100%; max-width:700px; padding:22px;
   box-shadow:var(--shadow-lg);
