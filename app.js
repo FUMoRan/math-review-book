@@ -26,7 +26,7 @@ const {
 
 /* ===================== 设置（偏好，与数据分开存） ===================== */
 const K_SET = 'mq_settings';
-const SET_DEF = { cols: 'auto', theme: 'system', density: 'comfortable', anim: 'on' };
+const SET_DEF = { cols: 'auto', theme: 'system', density: 'comfortable', anim: 'on', rail: 'off' };
 
 function readSettings() {
   try {
@@ -71,6 +71,13 @@ function applySettings() {
   document.querySelectorAll('#setTheme button').forEach(b => b.classList.toggle('on', b.dataset.theme === settings.theme));
   document.querySelectorAll('#setDensity button').forEach(b => b.classList.toggle('on', b.dataset.density === settings.density));
   document.querySelectorAll('#setAnim button').forEach(b => b.classList.toggle('on', b.dataset.anim === settings.anim));
+  document.querySelectorAll('#setRail button').forEach(b => b.classList.toggle('on', b.dataset.rail === settings.rail));
+
+  // 宽屏且已「收起」→ 侧栏切成窄竖条；窄屏（<1024）始终是抽屉，不加该类
+  if (colTreeEl) {
+    colTreeEl.classList.toggle('rail', settings.rail === 'on' && window.innerWidth >= 1024);
+    renderColTree();
+  }
 
   const note = document.getElementById('colsNote');
   if (note) {
@@ -1136,6 +1143,14 @@ const colBackdrop = document.getElementById('colBackdrop');
 const colCollapsed = new Set();   // 被折叠的合集 id（默认展开）
 
 const colKind = () => active === 'k' ? 'k' : 'q';
+
+// 「侧栏收起为竖条」的偏好：全局（错题 / 知识点共用），存于 mq_settings.rail（'on' | 'off'）
+const colRailOn = () => settings.rail === 'on';
+function setColRail(on) {
+  settings.rail = on ? 'on' : 'off';
+  saveSettings();
+  applySettings();
+}
 const colList = kind => (colStores[kind] || []);
 function collectionById(kind, id) { return colList(kind).find(c => c.id === id); }
 function collectionName(kind, id) { const c = collectionById(kind, id); return c ? c.name : '未分类'; }
