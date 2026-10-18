@@ -10,7 +10,7 @@ const {
   DAY, STATUS, STATUS_NEXT, uid,
   normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
   normalizeSrs, scheduleSrs, isDue, dueLabel,
-  normalizeQuestion, normalizeKp,
+  normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper,
   parseText, parseSearch,
   bareMathSegments,
 } = MQ;
@@ -172,6 +172,40 @@ test('normalizeQuestion / normalizeKp 对非对象入参安全', () => {
   assert.equal(normalizeQuestion(null).stem, '');
   assert.equal(normalizeKp(undefined).title, '');
   assert.equal(normalizeKp('nonsense').title, '');
+});
+
+test('normalizePaperQuestion 补全字段并容错', () => {
+  const q = normalizePaperQuestion({ stem: 'x', tags: ['a', '', 1, 'b'], wrong: '不存在', no: '3' });
+  assert.ok(q.id);
+  assert.equal(q.stem, 'x');
+  assert.equal(q.answer, '');
+  assert.equal(q.wrong, 'unset');
+  assert.equal(q.no, 3);
+  assert.deepEqual(q.tags, ['a', 'b']);
+  assert.equal(q.linkedQid, null);
+});
+
+test('normalizePaperQuestion 保留合法三态与已加入错题', () => {
+  const q = normalizePaperQuestion({ wrong: 'wrong', linkedQid: 'q1', answer: 'A' });
+  assert.equal(q.wrong, 'wrong');
+  assert.equal(q.linkedQid, 'q1');
+  assert.equal(q.answer, 'A');
+});
+
+test('normalizePaper 补全试卷字段并逐题归一化', () => {
+  const p = normalizePaper({ title: '  ', questions: [{ stem: 'a' }, null] });
+  assert.ok(p.id);
+  assert.equal(p.title, '未命名试卷');
+  assert.equal(p.note, '');
+  assert.equal(p.questions.length, 2);
+  assert.equal(p.questions[0].no, 0);
+  assert.equal(p.questions[1].stem, '');
+  assert.ok(p.createdAt > 0 && p.updatedAt > 0);
+});
+
+test('normalizePaper 对非对象入参安全', () => {
+  assert.equal(normalizePaper(null).title, '未命名试卷');
+  assert.deepEqual(normalizePaper(undefined).questions, []);
 });
 
 /* ===================== 粘贴文本解析 ===================== */

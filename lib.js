@@ -120,6 +120,38 @@
     };
   }
 
+  /* ---------- 试卷（paper） ---------- */
+  const WRONG_STATES = ['unset', 'right', 'wrong'];
+
+  function normalizePaperQuestion(o) {
+    const p = o && typeof o === 'object' ? o : {};
+    let no = p.no;
+    if (typeof no === 'string') no = parseInt(no, 10);
+    if (!Number.isFinite(no)) no = 0;
+    return {
+      id: p.id || uid(),
+      no,
+      stem: typeof p.stem === 'string' ? p.stem : '',
+      answer: typeof p.answer === 'string' ? p.answer : '',
+      wrong: WRONG_STATES.includes(p.wrong) ? p.wrong : 'unset',
+      tags: Array.isArray(p.tags) ? p.tags.filter(t => typeof t === 'string' && t.trim()) : [],
+      linkedQid: typeof p.linkedQid === 'string' && p.linkedQid ? p.linkedQid : null,
+    };
+  }
+
+  function normalizePaper(o) {
+    const p = o && typeof o === 'object' ? o : {};
+    return {
+      id: p.id || uid(),
+      title: typeof p.title === 'string' && p.title.trim() ? p.title.trim() : '未命名试卷',
+      date: typeof p.date === 'string' ? p.date : '',
+      note: typeof p.note === 'string' ? p.note : '',
+      createdAt: p.createdAt || Date.now(),
+      updatedAt: p.updatedAt || Date.now(),
+      questions: Array.isArray(p.questions) ? p.questions.map(normalizePaperQuestion) : [],
+    };
+  }
+
   /* ---------- 粘贴文本解析（【题目】/【解析】… / === 分隔） ---------- */
   function parseBlockGeneric(block, map, requiredLabel) {
     const labels = Object.keys(map);
@@ -310,7 +342,7 @@
     STATUS, STATUS_NEXT, uid,
     normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
     SRS_DEF, normalizeSrs, scheduleSrs, isDue, dueLabel,
-    normalizeQuestion, normalizeKp,
+    normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper,
     parseBlockGeneric, parseText,
     parseSearch,
     bareMathSegments,
