@@ -960,11 +960,22 @@ function renderPaperView() {
   if (!qs.some(q => q.id === paperState.curId)) paperState.curId = qs.length ? qs[0].id : null;
 
   renderPaperNav(p, qs);
-  renderPaperList(p, qs, document.getElementById('paperQs'));
 
+  const qsEl = document.getElementById('paperQs');
+  const focusEl = document.getElementById('paperFocus');
   const footEl = document.getElementById('paperFoot');
-  footEl.innerHTML = '<span class="spacer"></span><button class="primary" id="paperNextUnmarked">跳到下一道未标</button>';
-  footEl.querySelector('#paperNextUnmarked').onclick = jumpToNextUnmarked;
+  if (paperState.focus) {
+    qsEl.style.display = 'none'; focusEl.style.display = '';
+    renderPaperFocus(p, qs, focusEl);
+    footEl.innerHTML = '<button id="paperPrev">‹ 上一题</button><button id="paperNext">下一题 ›</button>';
+    footEl.querySelector('#paperPrev').onclick = () => paperStep(-1);
+    footEl.querySelector('#paperNext').onclick = () => paperStep(1);
+  } else {
+    qsEl.style.display = ''; focusEl.style.display = 'none';
+    renderPaperList(p, qs, qsEl);
+    footEl.innerHTML = '<span class="spacer"></span><button class="primary" id="paperNextUnmarked">跳到下一道未标</button>';
+    footEl.querySelector('#paperNextUnmarked').onclick = jumpToNextUnmarked;
+  }
 
   const body2 = document.querySelector('.paperview-body');
   if (body2) body2.scrollTop = keepTop;
@@ -1023,6 +1034,35 @@ function paperRenderAnswer(q) {
     return `<div class="paper-q-answer"><span class="section-label">答案</span><div class="body">${renderMath(q.answer)}</div></div>`;
   }
   return `<button class="paper-reveal" data-reveal="${q.id}">👁 显示答案</button>`;
+}
+
+// 专注模式（一题一屏）：顶部进度条 + 题干/答案 + 大按钮「做对/做错」
+function renderPaperFocus(p, qs, host) {
+  const q = qs.find(x => x.id === paperState.curId) || qs[0];
+  if (!q) { host.innerHTML = '<div class="empty">没有可显示的题。</div>'; return; }
+  const idx = qs.findIndex(x => x.id === q.id);
+  const pct = qs.length ? Math.round(((idx + 1) / qs.length) * 100) : 0;
+  host.innerHTML = `
+    <div class="paper-focus-progress"><div class="paper-focus-bar" style="width:${pct}%"></div></div>
+    <div class="paper-focus-card">
+      <div class="paper-focus-head">
+        <span class="section-label">第 ${q.no} 题</span>
+        <span class="spacer"></span>
+        <span class="section-label">${idx + 1} / ${qs.length}</span>
+      </div>
+      <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
+      ${paperRenderAnswer(q)}
+      <div class="paper-focus-acts">
+        <button class="paper-big right ${q.wrong === 'right' ? 'on' : ''}" data-wrong="right">做对</button>
+        <button class="paper-big wrong ${q.wrong === 'wrong' ? 'on' : ''}" data-wrong="wrong">做错</button>
+      </div>
+    </div>`;
+  host.querySelectorAll('.paper-big').forEach(b => {
+    b.onclick = () => markPaperQuestion(q.id, b.dataset.wrong);
+  });
+  host.querySelectorAll('.paper-reveal').forEach(b => {
+    b.onclick = () => { paperState.revealed.add(b.dataset.reveal); renderPaperView(); };
+  });
 }
 
 function markPaperQuestion(qid, wrong) {
@@ -1086,6 +1126,7 @@ function handlePaperKey(e) {
 }
 
 document.getElementById('paperBack').onclick = closePaperView;
+document.getElementById('paperFocusBtn').onclick = () => { paperState.focus = !paperState.focus; renderPaperView(); };
 document.getElementById('paperWrongOnlyBtn').onclick = () => { paperState.wrongOnly = !paperState.wrongOnly; renderPaperView(); };
 document.getElementById('paperAnsBtn').onclick = () => {
   paperState.showAnswers = !paperState.showAnswers;
