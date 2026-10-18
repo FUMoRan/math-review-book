@@ -1068,6 +1068,23 @@ function jumpToNextUnmarked() {
   if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
+function isPaperViewOpen() {
+  return document.getElementById('paperView').classList.contains('open');
+}
+// 试卷页快捷键：仅当焦点不在 input/textarea/select 时生效
+function handlePaperKey(e) {
+  const t = e.target;
+  const tag = t && t.tagName ? t.tagName.toLowerCase() : '';
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return false;
+  if (e.key === '1') { if (paperState.curId) markPaperQuestion(paperState.curId, 'right'); e.preventDefault(); return true; }
+  if (e.key === '2') { if (paperState.curId) markPaperQuestion(paperState.curId, 'wrong'); e.preventDefault(); return true; }
+  if (e.key === '0') { if (paperState.curId) markPaperQuestion(paperState.curId, 'unset'); e.preventDefault(); return true; }
+  if (e.key === 'ArrowUp' || e.key === 'p' || e.key === 'P') { paperStep(-1); e.preventDefault(); return true; }
+  if (e.key === 'ArrowDown' || e.key === 'n' || e.key === 'N') { paperStep(1); e.preventDefault(); return true; }
+  if (e.key === 'Escape') { closePaperView(); return true; }
+  return false;
+}
+
 document.getElementById('paperBack').onclick = closePaperView;
 document.getElementById('paperWrongOnlyBtn').onclick = () => { paperState.wrongOnly = !paperState.wrongOnly; renderPaperView(); };
 document.getElementById('paperAnsBtn').onclick = () => {
@@ -2485,6 +2502,7 @@ document.addEventListener('keydown', e => {
     else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); revealNext(); }
     return;
   }
+  if (isPaperViewOpen() && handlePaperKey(e)) return;
   if (e.key === 'Escape' && settingsDrawer.classList.contains('open')) settingsDrawer.classList.remove('open');
 });
 
