@@ -756,9 +756,68 @@ function makeCard(it) {
   return card;
 }
 
+function openPaper() {}
+
+function savePapers() { return persist(K_P, stores.p.items); }
+
 function renderPapers() {
+  const list = stores.p.items.slice().sort((a, b) => b.updatedAt - a.updatedAt);
   countEl.textContent = `共 ${stores.p.items.length} 张试卷`;
   listEl.innerHTML = '';
+  document.getElementById('loadMoreRow').style.display = 'none';
+  if (!list.length) {
+    listEl.innerHTML = '<div class="empty">还没有试卷。点右上角「+ 新增试卷」粘贴整卷试试。</div>';
+    return;
+  }
+  const box = document.createElement('div');
+  box.className = 'paper-list';
+  list.forEach(p => {
+    const wrongN = p.questions.filter(q => q.wrong === 'wrong').length;
+    const card = document.createElement('div');
+    card.className = 'card paper-card';
+    card.dataset.id = p.id;
+    card.innerHTML = `
+      <div class="stem"><b>${esc(p.title)}</b></div>
+      <div class="meta">
+        <span class="tag">${p.questions.length} 题</span>
+        <span class="tag${wrongN ? ' ' : ''}">错 ${wrongN}</span>
+        ${p.date ? `<span class="tag">${esc(p.date)}</span>` : ''}
+        <div class="cardacts">
+          <button class="link" data-act="open">打开</button>
+          <button class="link" data-act="rename">改名</button>
+          <button class="link" data-act="delete">删除</button>
+        </div>
+      </div>`;
+    box.appendChild(card);
+  });
+  listEl.appendChild(box);
+  // 事件委托：一次绑定，避免逐卡绑定
+  box.querySelectorAll('.paper-card').forEach(card => {
+    card.onclick = e => {
+      const act = e.target.dataset && e.target.dataset.act;
+      const paper = stores.p.items.find(x => x.id === card.dataset.id);
+      if (!paper) return;
+      if (act === 'delete') {
+        if (confirm(`删除试卷「${paper.title}」？已加入错题本的题会保留。`)) {
+          stores.p.items = stores.p.items.filter(x => x.id !== paper.id);
+          savePapers();
+          renderPapers();
+        }
+        return;
+      }
+      if (act === 'rename') {
+        const name = prompt('试卷名：', paper.title);
+        if (name != null && name.trim()) {
+          paper.title = name.trim();
+          paper.updatedAt = Date.now();
+          savePapers();
+          renderPapers();
+        }
+        return;
+      }
+      openPaper(paper.id);
+    };
+  });
 }
 
 function render() {
