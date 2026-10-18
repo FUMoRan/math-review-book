@@ -6,6 +6,7 @@
 /* ===================== storage ===================== */
 const K_Q = 'mq_items';
 const K_K = 'mq_kps';
+const K_P = 'mq_papers';
 
 /* 纯逻辑统一放在 lib.js（浏览器与单测共用），此处引用即可 */
 const {
@@ -13,6 +14,7 @@ const {
   makeGramProfile, simFromProfile,
   parseText, parseSearch,
   normalizeQuestion, normalizeKp, scheduleSrs, isDue, dueLabel, DAY,
+  normalizePaper, parsePaper, paperWrongToQuestion,
   bareMathSegments,
 } = MQ;
 
@@ -438,20 +440,19 @@ function seedKps() {
 const stores = {
   q: { key: K_Q, norm: normalizeQuestion, items: [] },
   k: { key: K_K, norm: normalizeKp, items: [] },
+  p: { key: K_P, norm: normalizePaper, items: [] },
 };
 
 // 启动时从 IndexedDB 载入（并把旧版 localStorage 数据迁移过来）
 async function loadInitial() {
-  for (const kind of ['q', 'k']) {
+  for (const kind of ['q', 'k', 'p']) {
     const key = stores[kind].key;
     let raw = await kvGet(key);
-    if (!Array.isArray(raw)) raw = lsRead(key); // IDB 无记录时，检查旧版 localStorage
-    if (Array.isArray(raw)) {
-      stores[kind].items = raw.map(stores[kind].norm);
-    } else {
-      stores[kind].items = (kind === 'q' ? seedQuestions() : seedKps()).map(stores[kind].norm);
-    }
-    await persist(key, stores[kind].items); // 迁移或首次种子都落盘
+    if (!Array.isArray(raw)) raw = lsRead(key);
+    stores[kind].items = Array.isArray(raw)
+      ? raw.map(stores[kind].norm)
+      : (kind === 'q' ? seedQuestions() : (kind === 'k' ? seedKps() : [])).map(stores[kind].norm);
+    await persist(key, stores[kind].items);
   }
   let t = await kvGet(K_TRASH);
   if (!Array.isArray(t)) t = lsRead(K_TRASH);
@@ -523,12 +524,14 @@ const DEF = {
     previewMain: o => o.title || '（无名称）',
     previewInfo: o => `讲解 ${o.content ? '✓' : '✗'} · 标签 ${o.tags.length}`,
   },
+  p: { noun: '张试卷', addLabel: '+ 新增试卷', randomLabel: '随机一题' },
 };
 
 const PAGE = 30;
 const views = {
   q: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), tagMode: 'all', search: '', status: '', starOnly: false, dueOnly: false },
   k: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), tagMode: 'all', search: '', status: '', starOnly: false, dueOnly: false },
+  p: { visibleCount: PAGE, selected: new Set(), selectMode: false, groupMode: false, activeTags: new Set(), tagMode: 'all', search: '', status: '', starOnly: false, dueOnly: false },
 };
 let active = 'q';
 let editingId = null;
@@ -753,7 +756,13 @@ function makeCard(it) {
   return card;
 }
 
+function renderPapers() {
+  countEl.textContent = `共 ${stores.p.items.length} 张试卷`;
+  listEl.innerHTML = '';
+}
+
 function render() {
+  if (active === 'p') return renderPapers();
   const v = cur();
   const filtered = currentFiltered();
   const shown = filtered.slice(0, v.visibleCount);
@@ -870,7 +879,24 @@ function syncHeader() {
 function switchView(v) {
   active = v;
   tabEls.forEach(t => t.classList.toggle('active', t.dataset.view === v));
-  addBtn.textContent = DEF[v].addLabel;
+  const isPaper = v === 'p';
+  // 试卷栏目不需要错题/知识点那套筛选控件
+  ['search', 'statusFilter'].forEach(id => { document.getElementById(id).style.display = isPaper ? 'none' : ''; });
+  const tagPick = document.querySelector('.tagpick');
+  if (tagPick) tagPick.style.display = isPaper ? 'none' : '';
+  ['selectBtn', 'groupBtn', 'starBtn', 'dueBtn', 'randomBtn', 'cramBtn', 'aiBtn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isPaper ? 'none' : '';
+  });
+  addBtn.textContent = isPaper ? '+ 新增试卷' : DEF[v].addLabel;
+  if (isPaper) {
+    document.getElementById('toolbar').style.display = 'none';
+    document.getElementById('loadMoreRow').style.display = 'none';
+    refreshTagPicker();
+    pendingAnim = true;
+    render();
+    return;
+  }
   randomBtn.textContent = DEF[v].randomLabel;
   syncHeader();
   refreshTagPicker();
@@ -1010,7 +1036,10 @@ document.getElementById('addImgInput').onchange = async e => {
   renderPendingThumbs();
 };
 
+function openPaperAdd() {}
+
 addBtn.onclick = () => {
+  if (active === 'p') { openPaperAdd(); return; }
   const d = DEF[active];
   pending = [];
   resetPendingImgs();
