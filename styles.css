@@ -417,3 +417,16 @@ img.thumb.broken{opacity:.35;}
   max-width:100%; max-height:200px; border-radius:10px;
   border:1px solid var(--line); cursor:zoom-in;
 }
+
+/* ---------- 试卷栏目 ---------- */
+.paper-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.paper-card { cursor: pointer; }
+.paper-head { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.paper-head input { flex: 1; min-width: 140px; }
+.paper-qs { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.paper-q { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.paper-q-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.paper-q-stem { margin-bottom: 8px; }
+.paper-q-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.paper-foot { flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.modal .panel.wide { max-width: 860px; width: 92vw; max-height: 88vh; overflow: auto; }
