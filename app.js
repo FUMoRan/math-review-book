@@ -1065,6 +1065,70 @@ function renderPaperFocus(p, qs, host) {
   });
 }
 
+/* ===================== 试卷编辑页（独立入口，可改题）===================== */
+const paperEditState = { paperId: null };
+
+function openPaperEdit(id) {
+  paperEditState.paperId = id;
+  renderPaperEdit();
+  document.getElementById('paperEdit').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closePaperEdit() {
+  document.getElementById('paperEdit').classList.remove('open');
+  document.body.style.overflow = '';
+  paperEditState.paperId = null;
+  renderPapers();       // 刷新卡片标题/错数统计
+}
+
+function renderPaperEdit() {
+  const p = paperOf(paperEditState.paperId);
+  if (!p) { closePaperEdit(); return; }
+  const host = document.getElementById('paperEditBody');
+  host.innerHTML = `
+    <div class="paperedit-head">
+      <input id="paperEditTitle" value="${esc(p.title)}" placeholder="试卷名">
+      <input id="paperEditDate" type="date" value="${esc(p.date)}">
+    </div>
+    <div class="paperedit-qs">
+      ${p.questions.map(q => `
+        <div class="paperedit-q" data-qid="${q.id}">
+          <div class="paper-q-head">
+            <span class="section-label">第 ${q.no} 题</span>
+            <span class="spacer"></span>
+            <button class="link" data-act="editq" data-qid="${q.id}">编辑</button>
+            <button class="link" data-act="delq" data-qid="${q.id}">删除</button>
+          </div>
+          <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
+          ${q.answer ? `<div class="body">${renderMath(q.answer)}</div>` : ''}
+        </div>`).join('') || '<div class="empty">这张试卷还没有题目。</div>'}
+    </div>`;
+  document.getElementById('paperEditTitle').onchange = e => {
+    p.title = e.target.value.trim() || '未命名试卷';
+    p.updatedAt = Date.now();
+    savePapers();
+  };
+  document.getElementById('paperEditDate').onchange = e => {
+    p.date = e.target.value;
+    p.updatedAt = Date.now();
+    savePapers();
+  };
+  host.querySelectorAll('[data-act="editq"]').forEach(b => {
+    b.onclick = () => openPaperQ(paperEditState.paperId, b.dataset.qid);
+  });
+  host.querySelectorAll('[data-act="delq"]').forEach(b => {
+    b.onclick = () => {
+      if (!confirm('删除这道题？（若已加入错题本，错题条目会保留）')) return;
+      p.questions = p.questions.filter(x => x.id !== b.dataset.qid);
+      p.updatedAt = Date.now();
+      savePapers();
+      renderPaperEdit();
+    };
+  });
+}
+
+document.getElementById('paperEditBack').onclick = closePaperEdit;
+
 function markPaperQuestion(qid, wrong) {
   setPaperQ(qid, { wrong });
   renderPaperView();
@@ -1144,7 +1208,7 @@ document.getElementById('paperModeSec').querySelectorAll('button').forEach(b => 
 });
 
 
-/* 题目编辑小弹层 */
+/* 题目编辑小弹层：仅供编辑页调用 */
 function openPaperQ(paperId, qid) {
   const p = paperOf(paperId);
   const q = p && p.questions.find(x => x.id === qid);
@@ -1157,19 +1221,21 @@ function openPaperQ(paperId, qid) {
 }
 document.getElementById('pqCancel').onclick = () => document.getElementById('paperQModal').classList.remove('open');
 document.getElementById('pqSave').onclick = () => {
-  if (!pqEditing) return;
-  const p = paperOf(pqEditing.paperId);
-  const q = p && p.questions.find(x => x.id === pqEditing.questionId);
-  if (q) {
-    const no = parseInt(document.getElementById('pqNo').value, 10);
-    q.no = Number.isFinite(no) ? no : q.no;
-    q.stem = document.getElementById('pqStem').value;
-    q.answer = document.getElementById('pqAnswer').value;
-    p.updatedAt = Date.now();
-    savePapers();
+  if (pqEditing) {
+    const p = paperOf(pqEditing.paperId);
+    const q = p && p.questions.find(x => x.id === pqEditing.questionId);
+    if (q) {
+      const no = parseInt(document.getElementById('pqNo').value, 10);
+      q.no = Number.isFinite(no) ? no : q.no;
+      q.stem = document.getElementById('pqStem').value;
+      q.answer = document.getElementById('pqAnswer').value;
+      p.updatedAt = Date.now();
+      savePapers();
+    }
+    pqEditing = null;
+    document.getElementById('paperQModal').classList.remove('open');
+    renderPaperEdit();
   }
-  pqEditing = null;
-  document.getElementById('paperQModal').classList.remove('open');
 };
 
 function savePapers() { return persist(K_P, stores.p.items); }
