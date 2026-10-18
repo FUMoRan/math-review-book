@@ -1508,7 +1508,7 @@ document.getElementById('exitSelect').onclick = () => {
 };
 
 /* ---------- 拖拽手动排序 ----------
-   仅「列表视图 + 未搜索 + 无标签/状态/收藏/待复习筛选 + 未分组 + 合集为全部 + 未背题」时可用。
+   仅「列表视图 + 未搜索 + 无标签/状态/收藏/待复习筛选 + 未分组 + 合集为全部 + 未背题 + 未随机复习」时可用。
    指针事件实现（pointerdown/move/up），桌面与触屏通用，不依赖 HTML5 DnD；长按多选不受影响。 */
 let dragState = null;
 
@@ -1517,7 +1517,7 @@ function dragAllowed() {
   const v = cur();
   return !v.search && !v.status && !v.starOnly && !v.dueOnly
     && v.activeTags.size === 0 && !v.groupMode && v.collectionFilter === COL_ALL
-    && !cram.open;
+    && !cram.open && !randomModal.classList.contains('open');
 }
 
 function dragPointerDown(e) {
