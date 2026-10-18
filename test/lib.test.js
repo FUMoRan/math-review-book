@@ -11,6 +11,7 @@ const {
   normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
   normalizeSrs, scheduleSrs, isDue, dueLabel,
   normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers, paperWrongToQuestion, nextUnmarked,
+  paperProgress,
   sortItems, materializeOrder, reorderItems,
   parseText, parsePaper, parseSearch,
   normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
@@ -314,6 +315,24 @@ test('nextUnmarked 全部已标返回 null，fromId 不存在时从开头找', (
     { id: 'b', wrong: 'right' },
   ];
   assert.equal(nextUnmarked(qs, 'nope').id, 'a');    // fromId 不存在 → 从头找
+});
+
+test('paperProgress 统计对/错/未标与已标数', () => {
+  const qs = [
+    { wrong: 'right' }, { wrong: 'right' }, { wrong: 'wrong' }, { wrong: 'unset' },
+  ];
+  const pr = paperProgress(qs);
+  assert.equal(pr.total, 4);
+  assert.equal(pr.right, 2);
+  assert.equal(pr.wrong, 1);
+  assert.equal(pr.unset, 1);
+  assert.equal(pr.marked, 3);
+});
+
+test('paperProgress 空与非法入参安全，缺字段按未标计', () => {
+  assert.deepEqual(paperProgress([]), { total: 0, right: 0, wrong: 0, unset: 0, marked: 0 });
+  assert.deepEqual(paperProgress(null), { total: 0, right: 0, wrong: 0, unset: 0, marked: 0 });
+  assert.equal(paperProgress([{ id: 'a' }]).unset, 1);
 });
 
 test('mergeSeedPapers 只追加本地没有的试卷', () => {

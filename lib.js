@@ -281,6 +281,18 @@
     return null;
   }
 
+  /* 统计整卷三态：total 题数、right/wrong/unset 各计数、marked = right + wrong */
+  function paperProgress(questions) {
+    const qs = Array.isArray(questions) ? questions : [];
+    let right = 0, wrong = 0, unset = 0;
+    for (const q of qs) {
+      if (q && q.wrong === 'right') right++;
+      else if (q && q.wrong === 'wrong') wrong++;
+      else unset++;
+    }
+    return { total: qs.length, right, wrong, unset, marked: right + wrong };
+  }
+
   /* ---------- 排序 ----------
      自动（auto）：创建时间倒序，新增的排最前，与现有行为一致。
      手动（manual）：order 升序；order===null 的（新加入、未参与拖拽）排最前，
@@ -645,6 +657,7 @@
     parseBlockGeneric, parseText, parsePaper,
     paperWrongToQuestion,
     nextUnmarked,
+    paperProgress,
     sortItems,
     materializeOrder,
     reorderItems,
