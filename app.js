@@ -1095,7 +1095,68 @@ document.getElementById('addImgInput').onchange = async e => {
   renderPendingThumbs();
 };
 
-function openPaperAdd() {}
+let pendingPaper = null;
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function openPaperAdd() {
+  pendingPaper = null;
+  const modal = document.getElementById('paperAddModal');
+  document.getElementById('paperNameInput').value = '';
+  document.getElementById('paperAddDate').value = todayStr();
+  document.getElementById('paperRawInput').value = '';
+  document.getElementById('paperPreview').innerHTML = '';
+  document.getElementById('paperParseMsg').textContent = '';
+  document.getElementById('paperImportRow').style.display = 'none';
+  modal.classList.add('open');
+  document.getElementById('paperRawInput').focus();
+}
+
+document.getElementById('paperAddClose').onclick = () => document.getElementById('paperAddModal').classList.remove('open');
+document.getElementById('paperAddModal').onclick = e => {
+  if (e.target === document.getElementById('paperAddModal')) document.getElementById('paperAddModal').classList.remove('open');
+};
+
+document.getElementById('paperParseBtn').onclick = () => {
+  pendingPaper = parsePaper(document.getElementById('paperRawInput').value, Date.now());
+  const msg = document.getElementById('paperParseMsg');
+  const preview = document.getElementById('paperPreview');
+  const importRow = document.getElementById('paperImportRow');
+  if (!pendingPaper.questions.length) {
+    preview.innerHTML = '';
+    importRow.style.display = 'none';
+    msg.textContent = '没解析到内容，检查一下格式（每题要有【题目】，题间用 === 分隔）。';
+    return;
+  }
+  msg.textContent = `解析到 ${pendingPaper.questions.length} 题。`;
+  importRow.style.display = 'flex';
+  preview.innerHTML = pendingPaper.questions.map((q, i) => `
+    <div class="pvi">
+      <div class="row" style="margin:0 0 8px"><span class="section-label">第 ${i + 1} 题</span>
+        <span class="badge-note">答案 ${q.answer ? '✓' : '✗'}</span></div>
+      <div class="stem">${renderMath(q.stem)}</div>
+    </div>
+  `).join('');
+};
+
+document.getElementById('paperImportBtn').onclick = () => {
+  if (!pendingPaper || !pendingPaper.questions.length) return;
+  const name = document.getElementById('paperNameInput').value.trim();
+  const date = document.getElementById('paperAddDate').value;
+  const paper = normalizePaper(Object.assign({}, pendingPaper, {
+    id: uid(), title: name || '未命名试卷', date, createdAt: Date.now(), updatedAt: Date.now(),
+  }));
+  const dup = stores.p.items.some(p => p.title === paper.title);
+  if (dup && !confirm(`已存在同名试卷「${paper.title}」，仍要导入吗？`)) return;
+  stores.p.items.push(paper);
+  savePapers();
+  pendingPaper = null;
+  document.getElementById('paperAddModal').classList.remove('open');
+  renderPapers();
+};
 
 addBtn.onclick = () => {
   if (active === 'p') { openPaperAdd(); return; }
