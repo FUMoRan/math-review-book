@@ -10,7 +10,7 @@ const {
   DAY, STATUS, STATUS_NEXT, uid,
   normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
   normalizeSrs, scheduleSrs, isDue, dueLabel,
-  normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers, paperWrongToQuestion,
+  normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers, paperWrongToQuestion, nextUnmarked,
   sortItems, materializeOrder, reorderItems,
   parseText, parsePaper, parseSearch,
   normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
@@ -272,6 +272,48 @@ test('paperWrongToQuestion 只挑标错且未加入的题', () => {
 test('paperWrongToQuestion 无错题时返回空数组', () => {
   const paper = normalizePaper({ questions: [{ stem: 'a', wrong: 'right' }] });
   assert.deepEqual(paperWrongToQuestion(paper, 0), []);
+});
+
+test('nextUnmarked 从 fromId 之后返回第一个未标题', () => {
+  const qs = [
+    { id: 'a', wrong: 'right' },
+    { id: 'b', wrong: 'unset' },
+    { id: 'c', wrong: 'unset' },
+  ];
+  assert.equal(nextUnmarked(qs, 'a').id, 'b');
+  assert.equal(nextUnmarked(qs, 'b').id, 'c');
+});
+
+test('nextUnmarked 到末尾后回绕到开头', () => {
+  const qs = [
+    { id: 'a', wrong: 'unset' },
+    { id: 'b', wrong: 'right' },
+    { id: 'c', wrong: 'right' },
+  ];
+  assert.equal(nextUnmarked(qs, 'c').id, 'a');       // 末尾回绕
+});
+
+test('nextUnmarked 不含当前题本身，唯一未标题回绕到自身', () => {
+  const qs = [
+    { id: 'a', wrong: 'unset' },
+    { id: 'b', wrong: 'unset' },
+  ];
+  assert.equal(nextUnmarked(qs, 'a').id, 'b');       // 跳过自身
+  assert.equal(nextUnmarked([{ id: 'only', wrong: 'unset' }], 'only').id, 'only');  // 回绕到自身
+});
+
+test('nextUnmarked 全部已标返回 null，fromId 不存在时从开头找', () => {
+  const all = [
+    { id: 'a', wrong: 'right' },
+    { id: 'b', wrong: 'wrong' },
+  ];
+  assert.equal(nextUnmarked(all, 'a'), null);
+  assert.equal(nextUnmarked([], 'x'), null);
+  const qs = [
+    { id: 'a', wrong: 'unset' },
+    { id: 'b', wrong: 'right' },
+  ];
+  assert.equal(nextUnmarked(qs, 'nope').id, 'a');    // fromId 不存在 → 从头找
 });
 
 test('mergeSeedPapers 只追加本地没有的试卷', () => {

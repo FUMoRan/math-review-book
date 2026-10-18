@@ -266,6 +266,21 @@
       }));
   }
 
+  /* 从 fromId 之后向后找第一个 wrong==='unset' 的题；到末尾回绕到开头；
+     fromId 不存在时从开头找；全部已标则返回 null。 */
+  function nextUnmarked(questions, fromId) {
+    const qs = Array.isArray(questions) ? questions : [];
+    const n = qs.length;
+    if (!n) return null;
+    const start = qs.findIndex(q => q.id === fromId);
+    const base = start < 0 ? -1 : start;              // 不存在时 base=-1，从索引 0 开始
+    for (let k = 1; k <= n; k++) {
+      const i = (base + k + n) % n;
+      if (qs[i] && qs[i].wrong === 'unset') return qs[i];
+    }
+    return null;
+  }
+
   /* ---------- 排序 ----------
      自动（auto）：创建时间倒序，新增的排最前，与现有行为一致。
      手动（manual）：order 升序；order===null 的（新加入、未参与拖拽）排最前，
@@ -629,6 +644,7 @@
     normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers,
     parseBlockGeneric, parseText, parsePaper,
     paperWrongToQuestion,
+    nextUnmarked,
     sortItems,
     materializeOrder,
     reorderItems,
