@@ -286,6 +286,12 @@
     return arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }
 
+  /* 把当前顺序固化为显式 order（0..n-1）。
+     入参应按「当前显示顺序」传入（进入手动模式时传 sortItems(items,'auto') 的结果）。 */
+  function materializeOrder(items) {
+    return (Array.isArray(items) ? items : []).map((it, i) => Object.assign({}, it, { order: i }));
+  }
+
   /* ---------- 搜索语法 ----------
      tag:导数  #导数    status:mastered/已掌握    star    due/今天
      其余词按普通关键词处理（AND）。 */
@@ -610,6 +616,7 @@
     parseBlockGeneric, parseText, parsePaper,
     paperWrongToQuestion,
     sortItems,
+    materializeOrder,
     normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
     collectionPath, flattenCollections, addCollection, renameCollection,
     canMoveCollection, moveCollection, deleteCollection,

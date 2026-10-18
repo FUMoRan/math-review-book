@@ -11,7 +11,7 @@ const {
   normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
   normalizeSrs, scheduleSrs, isDue, dueLabel,
   normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers, paperWrongToQuestion,
-  sortItems,
+  sortItems, materializeOrder,
   parseText, parsePaper, parseSearch,
   normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
   collectionPath, flattenCollections, addCollection, renameCollection,
@@ -779,5 +779,18 @@ test('sortItems 不修改入参，且非法入参安全', () => {
   assert.deepEqual(items, copy);
   assert.deepEqual(sortItems(null, 'auto'), []);
   assert.deepEqual(sortItems(undefined, 'auto'), []);
+});
+
+test('materializeOrder 按输入顺序产出 order 0..n-1，且不改入参', () => {
+  const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const out = materializeOrder(items);
+  assert.deepEqual(out.map(i => [i.id, i.order]), [['a', 0], ['b', 1], ['c', 2]]);
+  assert.deepEqual(items.map(i => i.order), [undefined, undefined, undefined]);
+  assert.deepEqual(out.map(i => i.id), ['a', 'b', 'c']);   // 顺序与输入一致
+});
+
+test('materializeOrder 非法入参安全', () => {
+  assert.deepEqual(materializeOrder(null), []);
+  assert.deepEqual(materializeOrder(undefined), []);
 });
 
