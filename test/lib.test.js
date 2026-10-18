@@ -723,3 +723,22 @@ test('条目归一化带上 collectionId；来自试卷的错题默认未分类'
   assert.equal(converted.fromPaper.paperId, 'p1');
 });
 
+/* ===================== 排序（order 字段） ===================== */
+test('normalizeQuestion / normalizeKp 保留数字 order，非法值归 null', () => {
+  assert.equal(normalizeQuestion({ order: 3 }).order, 3);
+  assert.equal(normalizeQuestion({ order: 0 }).order, 0);
+  assert.equal(normalizeQuestion({ order: '3' }).order, null);   // 字符串不是 number
+  assert.equal(normalizeQuestion({ order: NaN }).order, null);   // NaN 是非法的 number
+  assert.equal(normalizeQuestion({ order: Infinity }).order, null);
+  assert.equal(normalizeQuestion({}).order, null);
+  assert.equal(normalizeKp({ title: 't', order: 5 }).order, 5);
+  assert.equal(normalizeKp({ title: 't', order: -2 }).order, -2);
+  assert.equal(normalizeKp({ title: 't', order: null }).order, null);
+});
+
+test('paperWrongToQuestion 生成的错题默认 order=null', () => {
+  const paper = normalizePaper({ id: 'p1', questions: [{ id: 'q1', stem: 'x', wrong: 'wrong' }] });
+  const [converted] = paperWrongToQuestion(paper, 0);
+  assert.equal(converted.order, null);
+});
+

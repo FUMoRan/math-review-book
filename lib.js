@@ -100,6 +100,7 @@
       images: Array.isArray(o.images) ? o.images.filter(s => typeof s === 'string' && s) : [],
       collectionId: typeof o.collectionId === 'string' && o.collectionId ? o.collectionId : null,
       srs: normalizeSrs(o.srs),
+      order: Number.isFinite(o.order) ? o.order : null,
       createdAt: o.createdAt || Date.now(),
       fromPaper: (o.fromPaper && typeof o.fromPaper === 'object' && o.fromPaper.paperId)
         ? { paperId: o.fromPaper.paperId, questionId: o.fromPaper.questionId || null } : null,
@@ -119,6 +120,7 @@
       images: Array.isArray(o.images) ? o.images.filter(s => typeof s === 'string' && s) : [],
       collectionId: typeof o.collectionId === 'string' && o.collectionId ? o.collectionId : null,
       srs: normalizeSrs(o.srs),
+      order: Number.isFinite(o.order) ? o.order : null,
       createdAt: o.createdAt || Date.now(),
       updatedAt: o.updatedAt || Date.now(),
     };
@@ -257,6 +259,7 @@
         images: [],
         collectionId: null,
         srs: normalizeSrs(undefined),
+        order: null,
         createdAt: t,
         updatedAt: t,
         fromPaper: { paperId: paper.id, questionId: q.id },
