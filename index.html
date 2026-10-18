@@ -20,6 +20,7 @@
   <div class="tabs">
     <button class="tab active" data-view="q">错题</button>
     <button class="tab" data-view="k">知识点</button>
+    <button class="tab" data-view="p">试卷</button>
   </div>
   <input id="search" class="search" placeholder="搜索…（支持 tag:导数、status:已掌握、star、due）">
   <select id="statusFilter">
@@ -123,6 +124,59 @@
     <div class="row">
       <button class="primary" id="editSave">保存</button>
       <button class="ghost" id="editCancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增试卷（粘贴整卷） -->
+<div class="modal" id="paperAddModal">
+  <div class="panel">
+    <h2>新增试卷（粘贴整卷）</h2>
+    <p class="hint">把整卷粘进来：每题用 <b>【题目】</b> 与 <b>【答案】</b>（或【解析】）标记，题与题之间用单独一行 <b>===</b> 分隔。</p>
+    <div class="row">
+      <input id="paperNameInput" placeholder="试卷名（可留空，默认「未命名试卷」）" style="flex:1">
+      <input id="paperAddDate" type="date">
+    </div>
+    <textarea id="paperRawInput" placeholder="【题目】&#10;…&#10;【答案】&#10;…&#10;===&#10;【题目】&#10;…"></textarea>
+    <div class="row">
+      <button class="primary" id="paperParseBtn">拆分预览</button>
+      <button class="ghost" id="paperAddClose">关闭</button>
+      <span class="spacer"></span>
+      <span id="paperParseMsg" class="badge-note"></span>
+    </div>
+    <div class="preview" id="paperPreview"></div>
+    <div class="row" style="display:none" id="paperImportRow">
+      <button class="primary" id="paperImportBtn">导入本卷</button>
+    </div>
+  </div>
+</div>
+
+<!-- 试卷详情 -->
+<div class="modal" id="paperModal">
+  <div class="panel wide">
+    <h2 id="paperModalTitle">试卷</h2>
+    <div id="paperBody"></div>
+    <div class="row">
+      <button class="ghost" id="paperDetailClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 试卷题目编辑 -->
+<div class="modal" id="paperQModal">
+  <div class="panel">
+    <h2>编辑题目</h2>
+    <div class="row">
+      <label style="min-width:56px">题号</label>
+      <input id="pqNo" type="number" min="0" step="1">
+    </div>
+    <label class="section-label">题干（公式用 $...$）</label>
+    <textarea id="pqStem"></textarea>
+    <label class="section-label">答案（可选）</label>
+    <textarea id="pqAnswer"></textarea>
+    <div class="row">
+      <button class="primary" id="pqSave">保存</button>
+      <button class="ghost" id="pqCancel">取消</button>
     </div>
   </div>
 </div>
