@@ -100,6 +100,8 @@
       images: Array.isArray(o.images) ? o.images.filter(s => typeof s === 'string' && s) : [],
       srs: normalizeSrs(o.srs),
       createdAt: o.createdAt || Date.now(),
+      fromPaper: (o.fromPaper && typeof o.fromPaper === 'object' && o.fromPaper.paperId)
+        ? { paperId: o.fromPaper.paperId, questionId: o.fromPaper.questionId || null } : null,
       updatedAt: o.updatedAt || Date.now(),
     };
   }
@@ -217,6 +219,29 @@
         }));
       });
     return normalizePaper({ id: uid(), createdAt: t, updatedAt: t, questions });
+  }
+
+  /* ---------- 把试卷里「标为错题」且尚未加入的题转成错题本条目（纯函数，不改原对象） ---------- */
+  function paperWrongToQuestion(paper, now) {
+    const t = now || Date.now();
+    const qs = (paper && paper.questions) || [];
+    return qs
+      .filter(q => q.wrong === 'wrong' && !q.linkedQid)
+      .map(q => ({
+        id: uid(),
+        stem: q.stem,
+        analysis: '',
+        knowledge: '',
+        myAnswer: '',
+        tags: Array.isArray(q.tags) ? q.tags.slice() : [],
+        status: 'new',
+        star: false,
+        images: [],
+        srs: normalizeSrs(undefined),
+        createdAt: t,
+        updatedAt: t,
+        fromPaper: { paperId: paper.id, questionId: q.id },
+      }));
   }
 
   /* ---------- 搜索语法 ----------
@@ -366,6 +391,7 @@
     SRS_DEF, normalizeSrs, scheduleSrs, isDue, dueLabel,
     normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper,
     parseBlockGeneric, parseText, parsePaper,
+    paperWrongToQuestion,
     parseSearch,
     bareMathSegments,
   };

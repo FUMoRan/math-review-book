@@ -10,7 +10,7 @@ const {
   DAY, STATUS, STATUS_NEXT, uid,
   normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
   normalizeSrs, scheduleSrs, isDue, dueLabel,
-  normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper,
+  normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, paperWrongToQuestion,
   parseText, parsePaper, parseSearch,
   bareMathSegments,
 } = MQ;
@@ -233,6 +233,40 @@ test('parsePaper 缺答案仍可解析', () => {
 test('parsePaper 空输入与无题目块返回空试卷', () => {
   assert.equal(parsePaper('', 0).questions.length, 0);
   assert.equal(parsePaper('【答案】\n$1$', 0).questions.length, 0);   // 没有【题目】的块跳过
+});
+
+test('normalizeQuestion 保留 fromPaper 来源', () => {
+  const a = normalizeQuestion({ stem: 'x' });
+  assert.equal(a.fromPaper, null);
+  const b = normalizeQuestion({ stem: 'x', fromPaper: { paperId: 'p1', questionId: 'q1' } });
+  assert.deepEqual(b.fromPaper, { paperId: 'p1', questionId: 'q1' });
+  const c = normalizeQuestion({ stem: 'x', fromPaper: 'nonsense' });
+  assert.equal(c.fromPaper, null);
+});
+
+test('paperWrongToQuestion 只挑标错且未加入的题', () => {
+  const paper = normalizePaper({
+    id: 'p1',
+    questions: [
+      { stem: 'a', wrong: 'wrong' },
+      { stem: 'b', wrong: 'right' },
+      { stem: 'c', wrong: 'unset' },
+      { stem: 'd', wrong: 'wrong', linkedQid: 'q9' },
+    ],
+  });
+  const out = paperWrongToQuestion(paper, 5000);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].stem, 'a');
+  assert.equal(out[0].analysis, '');
+  assert.deepEqual(out[0].tags, []);
+  assert.equal(out[0].status, 'new');
+  assert.deepEqual(out[0].fromPaper, { paperId: 'p1', questionId: paper.questions[0].id });
+  assert.equal(out[0].createdAt, 5000);
+});
+
+test('paperWrongToQuestion 无错题时返回空数组', () => {
+  const paper = normalizePaper({ questions: [{ stem: 'a', wrong: 'right' }] });
+  assert.deepEqual(paperWrongToQuestion(paper, 0), []);
 });
 
 /* ===================== 粘贴文本解析 ===================== */
