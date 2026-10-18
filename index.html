@@ -43,6 +43,7 @@
   <button id="importBtn2">导入</button>
   <button class="primary" id="addBtn">+ 新增错题</button>
   <button id="aiBtn" title="上传题目图片，让 AI 识别并按格式整理">📷 AI 识题</button>
+  <button id="colToggle" title="合集">☰ 合集</button>
   <button id="settingsBtn" title="设置" aria-label="设置">⚙️ 设置</button>
   <input type="file" id="fileInput" accept="application/json,.json" hidden>
   <input type="file" id="aiImgInput" accept="image/*" hidden>
@@ -50,6 +51,8 @@
   <input type="file" id="editImgInput" accept="image/*" multiple hidden>
 </header>
 
+<div class="shell" id="shell">
+<aside class="coltree" id="colTree" aria-label="合集"></aside>
 <main>
   <div class="backupbar" id="backupBar" style="display:none">
     <span id="backupText"></span>
@@ -68,6 +71,7 @@
     <button data-batch-status="reviewing">标记复习中</button>
     <button data-batch-status="mastered">标记已掌握</button>
     <button id="batchTag">加标签</button>
+    <button id="batchMove">移动到合集</button>
     <button id="batchDelete" class="danger">删除</button>
     <span class="spacer"></span>
     <button id="exitSelect">退出多选</button>
@@ -79,6 +83,8 @@
     <button id="loadMoreBtn">加载更多</button>
   </div>
 </main>
+</div>
+<button class="coltree-backdrop" id="colBackdrop" aria-hidden="true" title="关闭合集"></button>
 
 <!-- 新增 / 粘贴导入 -->
 <div class="modal" id="modal">
@@ -105,6 +111,11 @@
     <div class="row" id="importRow" style="display:none">
       <button class="primary" id="importBtn">导入选中项</button>
     </div>
+    <div class="row">
+      <label style="min-width:56px">所属合集</label>
+      <select id="addCollection" style="flex:1"></select>
+      <button class="ghost" id="addColNew">＋ 新建合集</button>
+    </div>
   </div>
 </div>
 
@@ -124,6 +135,19 @@
     <div class="row">
       <button class="primary" id="editSave">保存</button>
       <button class="ghost" id="editCancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 批量移动到合集 -->
+<div class="modal" id="moveModal">
+  <div class="panel">
+    <h2>移动到合集</h2>
+    <label>目标合集（选「未分类」即移出合集）</label>
+    <select id="moveSelect" class="field-input"></select>
+    <div class="row">
+      <button class="primary" id="moveConfirm">移动</button>
+      <button class="ghost" id="moveCancel">取消</button>
     </div>
   </div>
 </div>

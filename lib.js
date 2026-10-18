@@ -98,6 +98,7 @@
       status: STATUS[o.status] ? o.status : 'new',
       star: !!o.star,
       images: Array.isArray(o.images) ? o.images.filter(s => typeof s === 'string' && s) : [],
+      collectionId: typeof o.collectionId === 'string' && o.collectionId ? o.collectionId : null,
       srs: normalizeSrs(o.srs),
       createdAt: o.createdAt || Date.now(),
       fromPaper: (o.fromPaper && typeof o.fromPaper === 'object' && o.fromPaper.paperId)
@@ -116,6 +117,7 @@
       status: STATUS[o.status] ? o.status : 'new',
       star: !!o.star,
       images: Array.isArray(o.images) ? o.images.filter(s => typeof s === 'string' && s) : [],
+      collectionId: typeof o.collectionId === 'string' && o.collectionId ? o.collectionId : null,
       srs: normalizeSrs(o.srs),
       createdAt: o.createdAt || Date.now(),
       updatedAt: o.updatedAt || Date.now(),
@@ -253,6 +255,7 @@
         status: 'new',
         star: false,
         images: [],
+        collectionId: null,
         srs: normalizeSrs(undefined),
         createdAt: t,
         updatedAt: t,
@@ -400,6 +403,181 @@
     return out;
   }
 
+  /* ---------- 合集（文件夹式：一条内容只属一个合集；每库一棵可嵌套的树） ---------- */
+
+  function normalizeCollection(o) {
+    const p = o && typeof o === 'object' ? o : {};
+    const name = typeof p.name === 'string' ? p.name.trim() : '';
+    return {
+      id: p.id || uid(),
+      name: name || '未命名合集',
+      parentId: typeof p.parentId === 'string' && p.parentId ? p.parentId : null,
+      createdAt: p.createdAt || Date.now(),
+      updatedAt: p.updatedAt || Date.now(),
+    };
+  }
+
+  // 归一化整棵树：修正指向不存在父节点的 parentId，并断开自环/父链环
+  function settleCollections(list) {
+    const cols = (Array.isArray(list) ? list : []).map(normalizeCollection);
+    const byId = new Map(cols.map(c => [c.id, c]));
+    for (const c of cols) {
+      if (c.parentId && (!byId.has(c.parentId) || c.parentId === c.id)) c.parentId = null;
+    }
+    for (const c of cols) {
+      const seen = new Set([c.id]);
+      let p = c.parentId;
+      while (p) {
+        if (seen.has(p)) { c.parentId = null; break; }
+        seen.add(p);
+        const node = byId.get(p);
+        p = node ? node.parentId : null;
+      }
+    }
+    return cols;
+  }
+
+  function collectionChildren(cols, parentId) {
+    const pid = parentId == null ? null : parentId;
+    return (Array.isArray(cols) ? cols : [])
+      .filter(c => (c.parentId || null) === pid)
+      .sort((a, b) => (a.createdAt - b.createdAt) || a.name.localeCompare(b.name, 'zh'));
+  }
+
+  // 某节点及其全部后代（含自身）；对环安全
+  function collectionSubtreeIds(cols, id) {
+    const arr = Array.isArray(cols) ? cols : [];
+    const out = new Set([id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const c of arr) {
+        if (c.parentId && out.has(c.parentId) && !out.has(c.id)) { out.add(c.id); changed = true; }
+      }
+    }
+    return out;
+  }
+
+  // 从根到该节点的路径（含自身），供面包屑
+  function collectionPath(cols, id) {
+    const byId = new Map((Array.isArray(cols) ? cols : []).map(c => [c.id, c]));
+    const path = [];
+    const seen = new Set();
+    let cur = id;
+    while (cur && byId.has(cur) && !seen.has(cur)) {
+      seen.add(cur);
+      const n = byId.get(cur);
+      path.unshift(n);
+      cur = n.parentId;
+    }
+    return path;
+  }
+
+  // 深度优先展开，附带 depth，供侧栏与下拉使用
+  function flattenCollections(cols) {
+    const out = [];
+    const walk = (parentId, depth) => {
+      for (const c of collectionChildren(cols, parentId)) {
+        out.push(Object.assign({}, c, { depth }));
+        walk(c.id, depth + 1);
+      }
+    };
+    walk(null, 0);
+    return out;
+  }
+
+  function addCollection(cols, name, parentId, now) {
+    const t = now || Date.now();
+    const node = normalizeCollection({
+      id: uid(),
+      name,
+      parentId: (typeof parentId === 'string' && parentId) ? parentId : null,
+      createdAt: t, updatedAt: t,
+    });
+    return { cols: (Array.isArray(cols) ? cols : []).concat([node]), node };
+  }
+
+  function renameCollection(cols, id, name, now) {
+    const t = now || Date.now();
+    const nm = typeof name === 'string' ? name.trim() : '';
+    if (!nm) return Array.isArray(cols) ? cols : [];
+    return (Array.isArray(cols) ? cols : [])
+      .map(c => c.id === id ? Object.assign({}, c, { name: nm, updatedAt: t }) : c);
+  }
+
+  function canMoveCollection(cols, id, newParentId) {
+    const pid = (typeof newParentId === 'string' && newParentId) ? newParentId : null;
+    if (!pid) return true;
+    if (pid === id) return false;
+    return !collectionSubtreeIds(cols, id).has(pid);
+  }
+
+  function moveCollection(cols, id, newParentId, now) {
+    const arr = Array.isArray(cols) ? cols : [];
+    if (!canMoveCollection(arr, id, newParentId)) return { cols: arr, ok: false };
+    const t = now || Date.now();
+    const pid = (typeof newParentId === 'string' && newParentId) ? newParentId : null;
+    return {
+      ok: true,
+      cols: arr.map(c => c.id === id ? Object.assign({}, c, { parentId: pid, updatedAt: t }) : c),
+    };
+  }
+
+  // 删除整棵子树，返回剩余树、被删 id 集合与该子树的父节点 id
+  function deleteCollection(cols, id) {
+    const arr = Array.isArray(cols) ? cols : [];
+    const removedIds = collectionSubtreeIds(arr, id);
+    const node = arr.find(c => c.id === id);
+    return {
+      cols: arr.filter(c => !removedIds.has(c.id)),
+      removedIds: [...removedIds],
+      parentId: node ? node.parentId : null,
+    };
+  }
+
+  /* 按合集筛选条目。
+     filterId：'__all__' 全部；null 未分类；其余 = 该合集及其子合集 */
+  function filterItemsByCollection(items, cols, filterId) {
+    const arr = Array.isArray(items) ? items : [];
+    if (filterId === '__all__') return arr.slice();
+    if (filterId == null) return arr.filter(it => !it.collectionId);
+    const ids = collectionSubtreeIds(cols, filterId);
+    return arr.filter(it => !!it.collectionId && ids.has(it.collectionId));
+  }
+
+  /* 计数：各节点「直接归属」数、含子树的数、未分类数。
+     指向已不存在合集的条目计入未分类，与筛选口径保持一致。 */
+  function collectionCounts(items, cols) {
+    const arr = Array.isArray(items) ? items : [];
+    const colsArr = Array.isArray(cols) ? cols : [];
+    const valid = new Set(colsArr.map(c => c.id));
+    const direct = new Map();
+    let unassigned = 0;
+    for (const it of arr) {
+      const cid = it && it.collectionId;
+      if (!cid || !valid.has(cid)) { unassigned++; continue; }
+      direct.set(cid, (direct.get(cid) || 0) + 1);
+    }
+    const subtree = new Map();
+    for (const c of colsArr) {
+      const ids = collectionSubtreeIds(colsArr, c.id);
+      let n = 0;
+      for (const id of ids) n += direct.get(id) || 0;
+      subtree.set(c.id, n);
+    }
+    return { direct, subtree, unassigned };
+  }
+
+  // 把指向不存在合集的条目纠正为「未分类」；返回是否需要落盘
+  function sanitizeItemCollections(items, cols) {
+    const valid = new Set((Array.isArray(cols) ? cols : []).map(c => c.id));
+    let changed = false;
+    for (const it of (Array.isArray(items) ? items : [])) {
+      if (it && it.collectionId && !valid.has(it.collectionId)) { it.collectionId = null; changed = true; }
+    }
+    return changed;
+  }
+
   return {
     DAY,
     STATUS, STATUS_NEXT, uid,
@@ -408,6 +586,10 @@
     normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers,
     parseBlockGeneric, parseText, parsePaper,
     paperWrongToQuestion,
+    normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
+    collectionPath, flattenCollections, addCollection, renameCollection,
+    canMoveCollection, moveCollection, deleteCollection,
+    filterItemsByCollection, collectionCounts, sanitizeItemCollections,
     parseSearch,
     bareMathSegments,
   };

@@ -430,3 +430,74 @@ img.thumb.broken{opacity:.35;}
 .paper-q-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .paper-foot { flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .modal .panel.wide { max-width: 860px; width: 92vw; max-height: 88vh; overflow: auto; }
+
+/* ---------- 合集侧栏（移动优先：抽屉；宽屏常驻） ---------- */
+#colToggle{display:inline-block;}
+.coltree{
+  position:fixed; top:0; left:0; bottom:0; width:82vw; max-width:320px;
+  background:var(--card); border-right:1px solid var(--line);
+  transform:translateX(-102%); transition:transform .2s ease;
+  z-index:40; overflow:auto; padding:10px 8px 22px;
+  display:flex; flex-direction:column; gap:1px;
+}
+.coltree.open{transform:none; box-shadow:var(--shadow-lg);}
+.coltree-backdrop{
+  display:none; position:fixed; inset:0; z-index:39; border:0; padding:0;
+  background:rgba(20,25,40,.4);
+}
+.coltree-backdrop.show{display:block;}
+.coltree-head{
+  display:flex; align-items:center; gap:6px; padding:4px 8px 8px;
+  font-size:13px; color:var(--muted);
+}
+.coltree-head .t{font-weight:700; color:var(--text-2); font-size:13px; flex:1;}
+.coltree-head .cls{border:0; background:transparent; color:var(--muted); font-size:16px; padding:0 4px; cursor:pointer;}
+.colrow{
+  display:flex; align-items:center; gap:6px; padding:5px 8px; border-radius:8px;
+  cursor:pointer; font-size:13.5px; color:var(--text-2); white-space:nowrap; user-select:none;
+}
+.colrow:hover{background:var(--sunken);}
+.colrow.active{background:var(--brand-soft); color:var(--brand); font-weight:600;}
+.colrow.drop{outline:2px dashed var(--brand); outline-offset:-2px;}
+.colrow .twist{flex:0 0 14px; width:14px; text-align:center; color:var(--muted); font-size:11px;}
+.colrow .cname{flex:1; overflow:hidden; text-overflow:ellipsis;}
+.colrow .ccount{
+  flex:0 0 auto; font-size:11px; color:var(--muted); background:var(--sunken);
+  border-radius:10px; padding:0 6px; min-width:20px; text-align:center;
+}
+.colrow.active .ccount{color:var(--brand); background:transparent;}
+.colrow .cacts{display:none; gap:1px; flex:0 0 auto;}
+.colrow:hover .cacts, .colrow:focus-within .cacts{display:flex;}
+.colrow .cacts button{
+  border:0; background:transparent; color:var(--muted); padding:1px 4px;
+  font-size:12px; border-radius:6px; cursor:pointer; line-height:1;
+}
+.colrow .cacts button:hover{color:var(--brand); background:var(--brand-soft);}
+.colrow .cacts button.del:hover{color:var(--danger); background:var(--danger-bg);}
+.col-empty{color:var(--muted); font-size:12.5px; padding:8px; line-height:1.5;}
+.coltree-new{
+  margin-top:8px; border:1px dashed var(--line); background:transparent; color:var(--brand);
+  border-radius:8px; padding:6px 8px; font-size:13px; cursor:pointer;
+}
+.coltree-new:hover{border-color:var(--brand); background:var(--brand-soft);}
+.colchip{
+  font-size:12px; color:var(--brand); background:var(--brand-soft); border:1px solid var(--line);
+  border-radius:20px; padding:2px 9px; cursor:pointer;
+}
+.colchip:hover{border-color:var(--brand);}
+/* 触屏没有 hover，常显节点操作按钮 */
+@media (hover:none){ .colrow .cacts{display:flex;} }
+
+@media (min-width: 1024px){
+  #colToggle{display:none;}
+  .shell{display:flex; align-items:flex-start;}
+  .coltree{
+    position:sticky; top:var(--hdr,64px); left:auto; bottom:auto;
+    width:238px; flex:0 0 238px; max-width:none; height:calc(100vh - var(--hdr,64px));
+    transform:none; transition:none; box-shadow:none; z-index:1;
+  }
+  .coltree-backdrop{display:none !important;}
+  .coltree-head .cls{display:none;}
+  main{flex:1 1 auto; min-width:0;}
+}
+
