@@ -1200,6 +1200,12 @@ function renderColTree() {
   const sel = v.collectionFilter;
   const st = colTreeEl.scrollTop;
 
+  // 宽屏 + 已收起 → 渲染窄竖条（平铺所有合集）；否则保持现有完整树
+  if (colRailOn() && window.innerWidth >= 1024) {
+    renderColRail(kind, cols, subtree, unassigned, sel);
+    return;
+  }
+
   const nodeRow = o => {
     const pad = 6 + o.depth * 14;
     const twist = o.hasKids
@@ -1216,7 +1222,7 @@ function renderColTree() {
     </div>`;
   };
 
-  let html = `<div class="coltree-head"><span class="t">合集</span><button class="cls" id="colClose" title="关闭">✕</button></div>`;
+  let html = `<div class="coltree-head"><span class="t">合集</span><button class="railbtn" id="colCollapse" title="收起侧栏">«</button><button class="cls" id="colClose" title="关闭">✕</button></div>`;
   html += nodeRow({ id: COL_ALL, name: '全部', count: curItems().length, active: sel === COL_ALL, depth: 0, virtual: true });
   html += nodeRow({ id: NONE_ID, name: '未分类', count: unassigned, active: sel == null, depth: 0, virtual: true });
 
@@ -1260,6 +1266,51 @@ function renderColTree() {
   if (nb) nb.onclick = () => createCollection(null);
   const cb = colTreeEl.querySelector('#colClose');
   if (cb) cb.onclick = () => closeColDrawer();
+  const cc = colTreeEl.querySelector('#colCollapse');
+  if (cc) cc.onclick = () => setColRail(true);
+}
+
+// 首字（竖条方块上显示一个字符；对代理对/emoji 安全）
+const firstChar = s => { const t = String(s == null ? '' : s).trim(); return t ? [...t][0] : '?'; };
+
+// 窄竖条：平铺「全部」「未分类」+ 所有合集（含子合集，不体现缩进），复用同一份 collectionFilter 选中态
+function renderColRail(kind, cols, subtree, unassigned, sel) {
+  const v = cur();
+  // 保留竖条内部滚动位置
+  const prev = colTreeEl.querySelector('.colrail-items');
+  const st = prev ? prev.scrollTop : 0;
+
+  const item = (id, name, active, tip) =>
+    `<button class="colrail-item${active ? ' active' : ''}" data-rrow="${esc(id)}" title="${esc(tip)}">${esc(firstChar(name))}</button>`;
+
+  let items = '';
+  items += item(COL_ALL, '全部', sel === COL_ALL, `全部 · ${curItems().length} 条`);
+  items += item(NONE_ID, '未分类', sel == null, `未分类 · ${unassigned} 条`);
+  for (const c of flattenCollections(cols)) {
+    const path = collectionPath(cols, c.id).map(x => x.name).join(' / ');
+    items += item(c.id, c.name, sel === c.id, `${path} · ${subtree.get(c.id) || 0} 条`);
+  }
+
+  colTreeEl.innerHTML = '<div class="colrail">'
+    + '<button class="colrail-btn" id="colRailExpand" title="展开合集侧栏">»</button>'
+    + `<div class="colrail-items">${items}</div>`
+    + '<button class="colrail-btn" id="colRailNew" title="新建合集">＋</button>'
+    + '</div>';
+
+  const itemsEl = colTreeEl.querySelector('.colrail-items');
+  if (itemsEl) itemsEl.scrollTop = st;
+
+  colTreeEl.querySelectorAll('[data-rrow]').forEach(el => {
+    el.onclick = () => {
+      const raw = el.dataset.rrow;
+      v.collectionFilter = raw === NONE_ID ? null : raw;   // COL_ALL 原样保留
+      applyFilters();                                       // 重渲染 → 竖条高亮与列表同步更新
+    };
+  });
+  const ex = colTreeEl.querySelector('#colRailExpand');
+  if (ex) ex.onclick = () => setColRail(false);
+  const nw = colTreeEl.querySelector('#colRailNew');
+  if (nw) nw.onclick = () => createCollection(null);
 }
 
 const NONE_ID = '__none__';   // 侧栏「未分类」虚拟行的 id
