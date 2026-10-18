@@ -11,6 +11,7 @@ const {
   normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
   normalizeSrs, scheduleSrs, isDue, dueLabel,
   normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers, paperWrongToQuestion,
+  sortItems,
   parseText, parsePaper, parseSearch,
   normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
   collectionPath, flattenCollections, addCollection, renameCollection,
@@ -740,5 +741,43 @@ test('paperWrongToQuestion 生成的错题默认 order=null', () => {
   const paper = normalizePaper({ id: 'p1', questions: [{ id: 'q1', stem: 'x', wrong: 'wrong' }] });
   const [converted] = paperWrongToQuestion(paper, 0);
   assert.equal(converted.order, null);
+});
+
+test('sortItems auto 按 createdAt 倒序', () => {
+  const items = [
+    { id: 'a', createdAt: 100 },
+    { id: 'b', createdAt: 300 },
+    { id: 'c', createdAt: 200 },
+  ];
+  assert.deepEqual(sortItems(items, 'auto').map(i => i.id), ['b', 'c', 'a']);
+});
+
+test('sortItems manual 按 order 升序，order=null 排最前并按 createdAt 倒序', () => {
+  const items = [
+    { id: 'a', order: 1, createdAt: 100 },
+    { id: 'b', order: 0, createdAt: 100 },
+    { id: 'new1', order: null, createdAt: 100 },
+    { id: 'new2', order: null, createdAt: 200 },
+    { id: 'c', order: 2, createdAt: 100 },
+  ];
+  assert.deepEqual(sortItems(items, 'manual').map(i => i.id), ['new2', 'new1', 'b', 'a', 'c']);
+});
+
+test('sortItems manual：order 相同用 createdAt 倒序兜底', () => {
+  const items = [
+    { id: 'a', order: 0, createdAt: 100 },
+    { id: 'b', order: 0, createdAt: 300 },
+    { id: 'c', order: 0, createdAt: 200 },
+  ];
+  assert.deepEqual(sortItems(items, 'manual').map(i => i.id), ['b', 'c', 'a']);
+});
+
+test('sortItems 不修改入参，且非法入参安全', () => {
+  const items = [{ id: 'a', createdAt: 1 }, { id: 'b', createdAt: 2 }];
+  const copy = items.slice();
+  sortItems(items, 'auto');
+  assert.deepEqual(items, copy);
+  assert.deepEqual(sortItems(null, 'auto'), []);
+  assert.deepEqual(sortItems(undefined, 'auto'), []);
 });
 

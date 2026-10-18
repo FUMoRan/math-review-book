@@ -266,6 +266,26 @@
       }));
   }
 
+  /* ---------- 排序 ----------
+     自动（auto）：创建时间倒序，新增的排最前，与现有行为一致。
+     手动（manual）：order 升序；order===null 的（新加入、未参与拖拽）排最前，
+     其内部按 createdAt 倒序；order 相同用 createdAt 倒序兜底。 */
+  function sortItems(items, mode) {
+    const arr = Array.isArray(items) ? items.slice() : [];
+    if (mode === 'manual') {
+      return arr.sort((a, b) => {
+        const ao = (a && typeof a.order === 'number') ? a.order : null;
+        const bo = (b && typeof b.order === 'number') ? b.order : null;
+        if (ao === null && bo === null) return (b.createdAt || 0) - (a.createdAt || 0);
+        if (ao === null) return -1;                      // 新条目排最前
+        if (bo === null) return 1;
+        if (ao !== bo) return ao - bo;                   // order 升序
+        return (b.createdAt || 0) - (a.createdAt || 0);  // order 相同兜底
+      });
+    }
+    return arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }
+
   /* ---------- 搜索语法 ----------
      tag:导数  #导数    status:mastered/已掌握    star    due/今天
      其余词按普通关键词处理（AND）。 */
@@ -589,6 +609,7 @@
     normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers,
     parseBlockGeneric, parseText, parsePaper,
     paperWrongToQuestion,
+    sortItems,
     normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
     collectionPath, flattenCollections, addCollection, renameCollection,
     canMoveCollection, moveCollection, deleteCollection,
