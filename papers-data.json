@@ -1,0 +1,2340 @@
+[
+ {
+  "id": "seed-math1-2010",
+  "title": "2010 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2010-q1",
+    "no": 1,
+    "stem": "极限  $\\lim_{x \\to \\infty} \\left[ \\frac{x^2}{(x-a)(x+b)} \\right]^x = (\\quad)$\nA. 1.\nB. e.\nC. $e^{a-b}$.\nD. $e^{b-a}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q2",
+    "no": 2,
+    "stem": "设函数  $z = z(x, y)$ 由方程  $F\\left(\\frac{y}{x}, \\frac{z}{x}\\right) = 0$ 确定，其中 F 为可微函数，且  $F_{2}^{'} \\neq 0$，则  $x \\frac{\\partial z}{\\partial x} + y \\frac{\\partial z}{\\partial y} = (\\quad)$\nA. x.\nB. z.\nC. -x.\nD. -z.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q3",
+    "no": 3,
+    "stem": "设 m, n 均是正整数, 则反常积分  $\\int_{0}^{1} \\frac{m\\sqrt{\\ln^2(1-x)}}{n\\sqrt{x}} \\, dx$ 的收敛性 ( )\nA. 仅与 m 的取值有关.\nB. 仅与 n 的取值有关.\nC. 与 m, n 的取值都有关.\nD. 与 m, n 的取值都无关.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q4",
+    "no": 4,
+    "stem": "$\\lim_{n \\to \\infty} \\sum_{i=1}^{n} \\sum_{j=1}^{n} \\frac{n}{(n+i)(n^2 + j^2)} = (\\quad)$\nA. $\\int_0^1 dx \\int_0^x \\frac{1}{(1+x)(1+y^2)} \\, \\mathrm{d}y.$\nB. $\\int_0^1 dx \\int_0^x \\frac{1}{(1+x)(1+y)} \\, \\mathrm{d}y.$\nC. $\\int_0^1 dx \\int_0^1 \\frac{1}{(1+x)(1+y)} \\, \\mathrm{d}y.$\nD. $\\int_0^1 dx \\int_0^1 \\frac{1}{(1+x)(1+y^2)} \\, \\mathrm{d}y.$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q5",
+    "no": 5,
+    "stem": "设 A 为  $m \\times n$ 矩阵, B 为  $n \\times m$ 矩阵, E 为 m 阶单位矩阵, 若 AB = E, 则 ( )\nA. 秩  $r(A) = m$, 秩  $r(B) = m$.\nB. 秩  $r(A) = m$, 秩  $r(B) = n$.\nC. 秩  $r(A) = n$, 秩  $r(B) = m$.\nD. 秩  $r(A) = n$, 秩  $r(B) = n$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q6",
+    "no": 6,
+    "stem": "设  $A$ 为 4 阶实对称矩阵, 且  $A^2 + A = O$. 若  $A$ 的秩为 3, 则  $A$ 相似于 ( )\nA. $\\begin{pmatrix} 1 & & \\\\ & 1 & \\\\ & & 1 \\end{pmatrix}$.\nB. $\\begin{pmatrix} 1 & & \\\\ & 1 & \\\\ & & -1 \\end{pmatrix}$.\nC. $\\begin{pmatrix} 1 & & \\\\ & -1 & \\\\ & & -1 \\end{pmatrix}$.\nD. $\\begin{pmatrix} -1 & & \\\\ & -1 & \\\\ & & -1 \\end{pmatrix}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q7",
+    "no": 7,
+    "stem": "设随机变量  $X$ 的分布函数  $F(x) = \\begin{cases} 0, & x < 0, \\\\ \\frac{1}{2}, & 0 \\leq x < 1, \\\\ 1 - e^{-x}, & x \\geq 1, \\end{cases}$ 则  $P\\{X = 1\\} =$ ( )\nA. 0.\nB. $\\frac{1}{2}$.\nC. $\\frac{1}{2} - e^{-1}$.\nD. $1 - e^{-1}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q8",
+    "no": 8,
+    "stem": "设  $f_{1}(x)$ 为标准正态分布的概率密度,  $f_{2}(x)$ 为  $[-1,3]$ 上均匀分布的概率密度, 若\n$$\nf(x)=\\begin{cases}af_{1}(x),&x\\leq0,\\\\bf_{2}(x),&x>0\\end{cases}(a>0,b>0)\n$$\n为概率密度，则a,b应满足()\nA. $2a + 3b = 4.$\nB. $3a + 2b = 4.$\nC. $a + b = 1.$\nD. $a + b = 2.$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q9",
+    "no": 9,
+    "stem": "设  $\\begin{cases} x = e^{-t}, \\\\ y = \\int_{0}^{t} \\ln(1 + u^2) \\, du, \\end{cases}$ 则  $\\left. \\frac{d^2y}{dx^2} \\right|_{t=0} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q10",
+    "no": 10,
+    "stem": "$\\int_{0}^{\\pi^{2}}\\sqrt{x}\\cos\\sqrt{x}dx=$________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q11",
+    "no": 11,
+    "stem": "已知曲线  $L$ 的方程为  $y = 1 - |x|(x \\in [-1,1])$，起点是  $(-1,0)$，终点为  $(1,0)$，则曲线积分  $\\int_L xy \\, dx + x^2 \\, dy =$ ________。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q12",
+    "no": 12,
+    "stem": "设  $\\Omega = \\{(x, y, z) \\mid x^2 + y^2 \\leq z \\leq 1\\}$，则  $\\Omega$ 的形心的竖坐标  $\\overline{z} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q13",
+    "no": 13,
+    "stem": "设  $\\alpha_{1}=(1,2,-1,0)^{T}$,  $\\alpha_{2}=(1,1,0,2)^{T}$,  $\\alpha_{3}=(2,1,1,a)^{T}$. 若由  $\\alpha_{1},\\alpha_{2},\\alpha_{3}$ 生成的向量空间的维数为 2, 则 a= ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q14",
+    "no": 14,
+    "stem": "设随机变量  $X$ 的概率分布为  $P\\{X=k\\}=\\frac{C}{k!}, k=0,1,2,\\cdots$，则  $E(X^2)=$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q15",
+    "no": 15,
+    "stem": "求微分方程  $y'' - 3y' + 2y = 2xe^{x}$ 的通解.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q16",
+    "no": 16,
+    "stem": "求函数  $f(x)=\\int_{1}^{x^{2}}(x^{2}-t)e^{-t^{2}}dt$ 的单调区间与极值.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q17",
+    "no": 17,
+    "stem": "(I) 比较  $\\int_{0}^{1}|\\ln t|[\\ln(1+t)]^{n}dt$ 与  $\\int_{0}^{1}t^{n}|\\ln t|dt(n=1,2,\\cdots)$ 的大小，说明理由；\n(II) 记  $u_n = \\int_0^1 |\\ln t| [\\ln(1+t)]^n dt$ ( $n=1,2,\\cdots$)，求极限  $\\lim_{n \\to \\infty} u_n$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q18",
+    "no": 18,
+    "stem": "求幂级数  $\\sum_{n=1}^{\\infty}\\frac{(-1)^{n-1}}{2n-1}x^{2n}$ 的收敛域及和函数.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q19",
+    "no": 19,
+    "stem": "设 $P$ 为椭球面 $S: x^2 + y^2 + z^2 - yz = 1$ 上的动点，若 $S$ 在点 $P$ 处的切平面与 $xOy$ 面垂直，求点 $P$ 的轨迹 $C$，并计算曲面积分 $I = \\iint_{\\Sigma} \\frac{(x + \\sqrt{3})|y - 2z|}{\\sqrt{4 + y^2 + z^2 - 4yz}} dS$，其中 $\\Sigma$ 是椭球面 $S$ 位于曲线 $C$ 上方的部分。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q20",
+    "no": 20,
+    "stem": "设  $A=\\begin{pmatrix}\\lambda&1&1\\\\0&\\lambda-1&0\\\\1&1&\\lambda\\end{pmatrix},b=\\begin{pmatrix}a\\\\1\\\\1\\end{pmatrix}$. 已知线性方程组 Ax=b 存在 2 个不同的解.\n(I) 求  $\\lambda, a$;\n(II) 求方程组 Ax = b 的通解.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q21",
+    "no": 21,
+    "stem": "已知二次型 $f(x_{1},x_{2},x_{3})=x^{T}Ax$在正交变换x=Qy下的标准形为 $y_{1}^{2}+y_{2}^{2}$，且Q的第三列为 $\\left(\\frac{\\sqrt{2}}{2},0,\\frac{\\sqrt{2}}{2}\\right)^{T}$.\n(I) 求矩阵 A;\n库.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q22",
+    "no": 22,
+    "stem": "设二维随机变量 $(X,Y)$的概率密度为\n$$\nf(x,y)=Ae^{-2x^{2}+2xy-y^{2}},~-\\infty<x<+\\infty,~-\\infty<y<+\\infty,\n$$\n求常数 A 及条件概率密度  $f_{Y\\mid X}(y\\mid x)$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2010-q23",
+    "no": 23,
+    "stem": "设总体X的概率分布为\n| $X$ | 1 | 2 | 3 |\n| --- | --- | --- | --- |\n| $P$ | $1-\\theta$ | $\\theta-\\theta^{2}$ | $\\theta^{2}$ |\n其中参数  $\\theta \\in (0,1)$ 未知. 以  $N_i$ 表示来自总体 X 的简单随机样本 (样本容量为 n) 中等于 i 的个数  $(i=1,2,3)$. 试求常数  $a_1, a_2, a_3$，使  $T = \\sum_{i=1}^{3} a_i N_i$ 为  $\\theta$ 的无偏估计量，并求 T 的方差.",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2011",
+  "title": "2011 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2011-q1",
+    "no": 1,
+    "stem": "曲线  $y=(x-1)(x-2)^{2}(x-3)^{3}(x-4)^{4}$ 的拐点是（）\nA. (1,0).\nB. (2,0).\nC. (3,0).\nD. (4,0).",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q2",
+    "no": 2,
+    "stem": "设数列  $\\{a_{n}\\}$ 单调减少,  $\\lim_{n\\to\\infty}a_n=0$,  $S_{n}=\\sum_{k=1}^{n}a_k$ ( $n=1,2,\\cdots$) 无界, 幂级数  $\\sum_{n=1}^{\\infty}a_{n}(x-1)^{n}$ 的收敛域为()\nA. $(-1,1]$.\nB. $[-1,1)$.\nC. $[0,2)$.\nD. $(0,2]$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q3",
+    "no": 3,
+    "stem": "设函数  $f(x)$ 具有二阶连续导数，且  $f(x) > 0$,  $f'(0) = 0$，则函数  $z = f(x) \\ln f(y)$ 在点  $(0,0)$ 处取得极小值的一个充分条件是（）\nA. $f(0)>1,f''(0)>0.$\nB. $f(0)>1,f''(0)0.$\nD. $f(0)<1,f''(0)<0.$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q4",
+    "no": 4,
+    "stem": "设  $I=\\int_{0}^{\\frac{\\pi}{4}}\\ln(\\sin x)dx$,  $J=\\int_{0}^{\\frac{\\pi}{4}}\\ln(\\cot x)dx$,  $K=\\int_{0}^{\\frac{\\pi}{4}}\\ln(\\cos x)dx$, 则 I, J, K 的大小关系为 ( )\nA. I < J < K.\nB. I < K < J.\nC. J < I < K.\nD. K < J < I.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q5",
+    "no": 5,
+    "stem": "设 A 为 3 阶矩阵，将 A 的第 2 列加到第 1 列得矩阵 B，再交换 B 的第 2 行与第 3 行得单位矩阵。记  $P_{1}=\\begin{pmatrix}1&0&0\\\\1&1&0\\\\0&0&1\\end{pmatrix},P_{2}=\\begin{pmatrix}1&0&0\\\\0&0&1\\\\0&1&0\\end{pmatrix}$，则 A = ( )\nA. $P_{1}P_{2}$.\nB. $P_{1}^{-1}P_{2}$.\nC. $P_{2}P_{1}$.\nD. $P_{2}P_{1}^{-1}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q6",
+    "no": 6,
+    "stem": "设  $A = (a_1, a_2, a_3, a_4)$ 是 4 阶矩阵， $A^*$ 为  $A$ 的伴随矩阵。若  $(1, 0, 1, 0)^T$ 是方程组  $Ax = 0$ 的一个基础解系，则  $A^*x = 0$ 的基础解系可为（ ）\nA. $a_1, a_3$.\nB. $a_1, a_2$.\nC. $a_1, a_2, a_3$.\nD. $a_2, a_3, a_4$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q7",
+    "no": 7,
+    "stem": "设  $F_{1}(x)$ 与  $F_{2}(x)$ 为两个分布函数, 其相应的概率密度  $f_{1}(x)$ 与  $f_{2}(x)$ 是连续函数, 则必为概率密度的是()\nA. $f_{1}(x)f_{2}(x).$\nB. $2f_{2}(x)F_{1}(x).$\nC. $f_{1}(x)F_{2}(x).$\nD. $f_{1}(x)F_{2}(x)+f_{2}(x)F_{1}(x).$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q8",
+    "no": 8,
+    "stem": "设随机变量  $X$ 与  $Y$ 相互独立，且  $E(X)$ 与  $E(Y)$ 存在，记  $U = \\max\\{X, Y\\}$， $V = \\min\\{X, Y\\}$，则  $E(UV) =$ ( )\nA. $E(U) \\cdot E(V)$. \\quad\nB. $E(X) \\cdot E(Y)$. \\quad\nC. $E(U) \\cdot E(Y)$. \\quad\nD. $E(X) \\cdot E(V)$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q9",
+    "no": 9,
+    "stem": "曲线  $y = \\int_0^x \\tan t \\, dt$  $(0 \\leq x \\leq \\frac{\\pi}{4})$ 的弧长  $s =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q10",
+    "no": 10,
+    "stem": "微分方程  $y' + y = e^{-x} \\cos x$ 满足条件  $y(0) = 0$ 的解为  $y =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q11",
+    "no": 11,
+    "stem": "设函数  $F(x,y)=\\int_{0}^{xy}\\frac{\\sin t}{1+t^{2}}dt$，则  $\\left.\\frac{\\partial^{2}F}{\\partial x^{2}}\\right|_{x=0\\atop y=2}=$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q12",
+    "no": 12,
+    "stem": "设  $L$ 是柱面  $x^2 + y^2 = 1$ 与平面  $z = x + y$ 的交线, 从  $z$ 轴正向往  $z$ 轴负向看去为逆时针方向, 则曲线积分  $\\oint_L x z dx + x dy + \\frac{y^2}{2} dz =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q13",
+    "no": 13,
+    "stem": "若二次曲面的方程 $x^2 + 3y^2 + z^2 + 2axy + 2xz + 2yz = 4$经正交变换化为 $y_1^2 + 4z_1^2 = 4$，则 $a =$________。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q14",
+    "no": 14,
+    "stem": "设二维随机变量  $(X,Y)$ 服从正态分布  $N(\\mu,\\mu;\\sigma^2,\\sigma^2;0)$，则  $E(XY^2)=$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q15",
+    "no": 15,
+    "stem": "（原始来源未提取到本题内容，请对照原卷补录）",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q16",
+    "no": 16,
+    "stem": "设函数  $z = f(xy, yg(x))$，其中函数 f 具有二阶连续偏导数，函数  $g(x)$ 可导，且在 x = 1 处取得极值  $g(1) = 1$。求  $\\left.\\frac{\\partial^2 z}{\\partial x \\partial y}\\right|_{x=1, y=1}$。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q17",
+    "no": 17,
+    "stem": "求方程  $k\\arctan x - x = 0$ 不同实根的个数，其中 k 为参数.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q18",
+    "no": 18,
+    "stem": "(I) 证明: 对任意的正整数 n, 都有  $\\frac{1}{n+1} < \\ln\\left(1 + \\frac{1}{n}\\right) < \\frac{1}{n}$ 成立;\n(II) 设  $a_n = 1 + \\frac{1}{2} + \\cdots + \\frac{1}{n} - \\ln n (n = 1, 2, \\cdots)$，证明数列  $\\{a_n\\}$ 收敛.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q19",
+    "no": 19,
+    "stem": "已知函数  $f(x,y)$ 具有二阶连续偏导数，且  $f(1,y)=0$,  $f(x,1)=0$,  $\\iint_{D}f(x,y)dxdy=a$，其中  $D=\\{(x,y)\\mid0\\leqslant x\\leqslant1,0\\leqslant y\\leqslant1\\}$，计算二重积分  $I=\\iint_{D}xyf_{xy}^{\\prime\\prime}(x,y)dxdy$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q20",
+    "no": 20,
+    "stem": "设向量组  $\\alpha_{1}=(1,0,1)^{T}$， $\\alpha_{2}=(0,1,1)^{T}$， $\\alpha_{3}=(1,3,5)^{T}$ 不能由向量组  $\\beta_{1}=(1,1,1)^{T}$， $\\beta_{2}=(1,2,3)^{T}$， $\\beta_{3}=(3,4,a)^{T}$ 线性表示.\n(I) 求 a 的值;\n(II) 将  $\\beta_{1}, \\beta_{2}, \\beta_{3}$ 用  $a_{1}, a_{2}, a_{3}$ 线性表示.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q21",
+    "no": 21,
+    "stem": "设A为3阶实对称矩阵，A的秩为2，且 $A\\begin{pmatrix}1&1\\\\0&0\\\\-1&1\\end{pmatrix}=\\begin{pmatrix}-1&1\\\\0&0\\\\1&1\\end{pmatrix}$.\n(I) 求 A 的所有特征值与特征向量;\n(II) 求矩阵\nA.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q22",
+    "no": 22,
+    "stem": "设随机变量 X 与 Y 的概率分布分别为\nX01P$\\frac{1}{3}$$\\frac{2}{3}$\nY-101P$\\frac{1}{3}$$\\frac{1}{3}$$\\frac{1}{3}$\n且 $P\\{X^{2}=Y^{2}\\}=1$\n(I) 求二维随机变量  $(X, Y)$ 的概率分布;\n(II) 求 Z = XY 的概率分布;\n(III) 求 X 与 Y 的相关系数  $\\rho_{XY}$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2011-q23",
+    "no": 23,
+    "stem": "设  $X_1, X_2, \\cdots, X_n$ 为来自正态总体  $N(\\mu_0, \\sigma^2)$ 的简单随机样本，其中  $\\mu_0$ 已知， $\\sigma^2 > 0$ 未知， $\\overline{X}$ 和  $S^2$ 分别表示样本均值和样本方差.\n(I) 求参数  $\\sigma^{2}$ 的最大似然估计  $\\widehat{\\sigma}^{2}$;\n(II) 计算  $E(\\widehat{\\sigma}^{2})$ 和  $D(\\widehat{\\sigma}^{2})$.",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2012",
+  "title": "2012 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2012-q1",
+    "no": 1,
+    "stem": "曲线  $y = \\frac{x^{2} + x}{x^{2} - 1}$ 的渐近线的条数为()\nA. 0.\nB. 1.\nC. 2.\nD. 3.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q2",
+    "no": 2,
+    "stem": "设函数  $f(x) = (\\mathrm{e}^{x}-1)(\\mathrm{e}^{2x}-2)\\cdots(\\mathrm{e}^{nx}-n)$，其中  $n$ 为正整数，则  $f'(0) = (\\quad)$\nA. $(-1)^{n-1}(n-1)!$.\nB. $(-1)^n(n-1)!$.\nC. $(-1)^{n-1}n!$.\nD. $(-1)^n n!$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q3",
+    "no": 3,
+    "stem": "如果函数  $f(x,y)$ 在点  $(0,0)$ 处连续, 那么下列命题正确的是 ( )\nA. 若极限  $\\lim_{{x \\to 0 \\atop y \\to 0}} \\frac{f(x,y)}{|x|+|y|}$ 存在, 则  $f(x,y)$ 在点  $(0,0)$ 处可微.\nB. 若极限  $\\lim_{{x \\to 0 \\atop y \\to 0}} \\frac{f(x,y)}{x^2 + y^2}$ 存在, 则  $f(x,y)$ 在点  $(0,0)$ 处可微.\nC. 若  $f(x,y)$ 在点  $(0,0)$ 处可微, 则极限  $\\lim_{{x \\to 0 \\atop y \\to 0}} \\frac{f(x,y)}{|x|+|y|}$ 存在.\nD. 若  $f(x,y)$ 在点  $(0,0)$ 处可微, 则极限  $\\lim_{{x \\to 0 \\atop y \\to 0}} \\frac{f(x,y)}{x^2 + y^2}$ 存在.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q4",
+    "no": 4,
+    "stem": "设  $I_{k} = \\int_{0}^{k\\pi} e^{x^{2}} \\sin x \\, dx$ (k=1,2,3), 则有 ( )\nA. $I_{1}<I_{2}<I_{3}.$\nB. $I_{3}<I_{2}<I_{1}.$\nC. $I_{2}<I_{3}<I_{1}.$\nD. $I_{2}<I_{1}<I_{3}.$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q5",
+    "no": 5,
+    "stem": "设  $a_{1}=\\begin{pmatrix}0\\\\ 0\\\\ c_{1}\\end{pmatrix}, a_{2}=\\begin{pmatrix}0\\\\ 1\\\\ c_{2}\\end{pmatrix}, a_{3}=\\begin{pmatrix}1\\\\ -1\\\\ c_{3}\\end{pmatrix}, a_{4}=\\begin{pmatrix}-1\\\\ 1\\\\ c_{4}\\end{pmatrix}$，其中  $c_{1}, c_{2}, c_{3}, c_{4}$ 为任意常数，则下列向量组线性相关的为()\nA. $a_{1}, a_{2}, a_{3}$.\nB. $a_{1}, a_{2}, a_{4}$.\nC. $a_{1}, a_{3}, a_{4}$.\nD. $a_{2}, a_{3}, a_{4}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q6",
+    "no": 6,
+    "stem": "设  $A$ 为 3 阶矩阵,  $P$ 为 3 阶可逆矩阵, 且  $P^{-1}AP=\\begin{pmatrix}1&0&0\\\\0&1&0\\\\0&0&2\\end{pmatrix}$. 若  $P=(\\alpha_1,\\alpha_2,\\alpha_3)$,\n$Q=(\\alpha_1+\\alpha_2,\\alpha_2,\\alpha_3)$, 则  $Q^{-1}AQ=(\\quad)$\nA. $\\begin{pmatrix}1&0&0\\\\0&2&0\\\\0&0&1\\end{pmatrix}$.\nB. $\\begin{pmatrix}1&0&0\\\\0&1&0\\\\0&0&2\\end{pmatrix}$.\nC. $\\begin{pmatrix}2&0&0\\\\0&1&0\\\\0&0&2\\end{pmatrix}$.\nD. $\\begin{pmatrix}2&0&0\\\\0&2&0\\\\0&0&1\\end{pmatrix}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q7",
+    "no": 7,
+    "stem": "设随机变量 X 与 Y 相互独立, 且分别服从参数为 1 与参数为 4 的指数分布, 则  $P\\{X < Y\\} = (\\quad)$\nA. $\\frac{1}{5}$.\nB. $\\frac{1}{3}$.\nC. $\\frac{2}{3}$.\nD. $\\frac{4}{5}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q8",
+    "no": 8,
+    "stem": "将长度为  $1 \\, m$ 的木棒随机地截成两段，则两段长度的相关系数为（）\nA. 1.\nB. $\\frac{1}{2}$.\nC. $-\\frac{1}{2}$.\nD. -1.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q9",
+    "no": 9,
+    "stem": "若函数  $f(x)$ 满足方程  $f''(x) + f'(x) - 2f(x) = 0$ 及  $f''(x) + f(x) = 2\\mathrm{e}^{x}$，则  $f(x) =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q10",
+    "no": 10,
+    "stem": "$\\int_{0}^{2}x\\sqrt{2x-x^{2}}dx=$________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q11",
+    "no": 11,
+    "stem": "$\\text{grad} \\left( xy + \\frac{z}{y} \\right) \\bigg|_{(2,1,1)} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q12",
+    "no": 12,
+    "stem": "设  $\\Sigma = \\{(x,y,z) \\mid x + y + z = 1, x \\geqslant 0, y \\geqslant 0, z \\geqslant 0\\}$，则  $\\iint_{\\Sigma} y^2 dS =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q13",
+    "no": 13,
+    "stem": "设 a 为 3 维单位列向量, E 为 3 阶单位矩阵, 则矩阵  $E - \\alpha\\alpha^{T}$ 的秩为 ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q14",
+    "no": 14,
+    "stem": "设  $A, B, C$ 是随机事件,  $A$ 与  $C$ 互不相容,  $P(AB) = \\frac{1}{2}$,  $P(C) = \\frac{1}{3}$, 则  $P(AB \\mid \\overline{C}) =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q15",
+    "no": 15,
+    "stem": "证明： $x\\ln\\frac{1+x}{1-x}+\\cos x\\geqslant1+\\frac{x^2}{2}(-1<x<1)$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q16",
+    "no": 16,
+    "stem": "求函数  $f(x,y)=xe^{-\\frac{x^{2}+y^{2}}{2}}$ 的极值.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q17",
+    "no": 17,
+    "stem": "求幂级数  $\\sum_{n=0}^{\\infty}\\frac{4n^{2}+4n+3}{2n+1}x^{2n}$ 的收敛域及和函数.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q18",
+    "no": 18,
+    "stem": "已知曲线  $L:\\left\\{\\begin{aligned}x=f(t),\\\\ y=\\cos t\\end{aligned}\\right.$  $(0\\leq t0$  $(0<t<\\frac{\\pi}{2})$。若曲线 L 的切线与 x 轴的交点到切点的距离恒为 1，求函数  $f(t)$ 的表达式，并求以曲线 L 及 x 轴和 y 轴为边界的区域的面积。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q19",
+    "no": 19,
+    "stem": "已知 L 是第一象限中从点  $(0,0)$ 沿圆周  $x^{2}+y^{2}=2x$ 到点  $(2,0)$，再沿圆周  $x^{2}+y^{2}=4$ 到点  $(0,2)$ 的曲线段，计算曲线积分  $I=\\int_{L}3x^{2}y\\mathrm{d}x+(x^{3}+x-2y)\\mathrm{d}y$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q20",
+    "no": 20,
+    "stem": "设 $A=\\begin{pmatrix}1&a&0&0\\\\0&1&a&0\\\\0&0&1&a\\\\a&0&0&1\\end{pmatrix},\\beta=\\begin{pmatrix}1\\\\-1\\\\0\\\\0\\end{pmatrix}$\n(I) 计算行列式  $\\left|A\\right|$;\n(II) 当实数 a 为何值时，方程组  $Ax = \\beta$ 有无穷多解，并求其通解.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q21",
+    "no": 21,
+    "stem": "已知  $A=\\begin{pmatrix}1&0&1\\\\0&1&1\\\\-1&0&a\\\\0&a&-1\\end{pmatrix}$，二次型  $f(x_{1},x_{2},x_{3})=x^{T}(A^{T}A)x$ 的秩为2.\n(I) 求实数 a 的值;\n(II) 求正交变换 x = Qy 将二次型 f 化为标准形.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q22",
+    "no": 22,
+    "stem": "设二维离散型随机变量  $(X,Y)$ 的概率分布为\nX\\Y0120$\\frac{1}{4}$0$\\frac{1}{4}$10$\\frac{1}{3}$02$\\frac{1}{12}$0$\\frac{1}{12}$\n(I) 求  $P\\{X=2Y\\}$;\n(II) 求  $Cov(X-Y, Y)$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2012-q23",
+    "no": 23,
+    "stem": "设随机变量  $X$ 与  $Y$ 相互独立且分别服从正态分布  $N(\\mu, \\sigma^2)$ 与  $N(\\mu, 2\\sigma^2)$，其中  $\\sigma$ 是未知参数且  $\\sigma > 0$。记  $Z = X - Y$。\n(I) 求 Z 的概率密度  $f(z; \\sigma^{2})$;\n(II) 设  $Z_1, Z_2, \\cdots, Z_n$ 为来自总体  $Z$ 的简单随机样本，求  $\\sigma^2$ 的最大似然估计量  $\\hat{\\sigma}^2$;\n(III) 证明  $\\widehat{\\sigma}^{2}$ 为  $\\sigma^{2}$ 的无偏估计量.",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2013",
+  "title": "2013 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2013-q1",
+    "no": 1,
+    "stem": "已知极限  $\\lim_{x \\to 0} \\frac{x - \\arctan x}{x^k} = c$，其中  $k, c$ 为常数，且  $c \\neq 0$，则 ( )\nA. $k = 2, c = -\\frac{1}{2}$.\nB. $k = 2, c = \\frac{1}{2}$.\nC. $k = 3, c = -\\frac{1}{3}$.\nD. $k = 3, c = \\frac{1}{3}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q2",
+    "no": 2,
+    "stem": "曲面  $x^{2} + \\cos(xy) + yz + x = 0$ 在点  $(0,1,-1)$ 处的切平面方程为 ( )\nA. $x - y + z = -2.$\nB. $x + y + z = 0.$\nC. x - 2y + z = -3.\nD. x - y - z = 0.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q3",
+    "no": 3,
+    "stem": "设  $f(x) = \\left| x - \\frac{1}{2} \\right|$,  $b_n = 2 \\int_0^1 f(x) \\sin n\\pi x \\, dx$ ( $n = 1, 2, \\cdots$). 令  $S(x) = \\sum_{n=1}^{\\infty} b_n \\sin n\\pi x$, 则  $S\\left(-\\frac{9}{4}\\right) = (\\quad)$\nA. $\\frac{3}{4}$.\nB. $\\frac{1}{4}$.\nC. $-\\frac{1}{4}$.\nD. $-\\frac{3}{4}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q4",
+    "no": 4,
+    "stem": "设  $L_1: x^2 + y^2 = 1$,  $L_2: x^2 + y^2 = 2$,  $L_3: x^2 + 2y^2 = 2$,  $L_4: 2x^2 + y^2 = 2$ 为四条逆时针方向的平面曲线。记  $I_i = \\oint_{L_i} (y + \\frac{y^3}{6}) \\, \\mathrm{d}x + (2x - \\frac{x^3}{3}) \\, \\mathrm{d}y$ ( $i = 1, 2, 3, 4$)，则  $\\max\\{I_1, I_2, I_3, I_4\\} = (\\quad)$\nA. $I_1$.\nB. $I_2$.\nC. $I_3$.\nD. $I_4$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q5",
+    "no": 5,
+    "stem": "设 A, B, C 均为 n 阶矩阵, 若 AB = C, 且 B 可逆, 则 ( )\nA. 矩阵 C 的行向量组与矩阵 A 的行向量组等价.\nB. 矩阵 C 的列向量组与矩阵 A 的列向量组等价.\nC. 矩阵 C 的行向量组与矩阵 B 的行向量组等价.\nD. 矩阵 C 的列向量组与矩阵 B 的列向量组等价.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q6",
+    "no": 6,
+    "stem": "矩阵  $\\begin{pmatrix} 1 & a & 1 \\\\ a & b & a \\\\ 1 & a & 1 \\end{pmatrix}$ 与  $\\begin{pmatrix} 2 & 0 & 0 \\\\ 0 & b & 0 \\\\ 0 & 0 & 0 \\end{pmatrix}$ 相似的充分必要条件为 ( )\nA. a=0, b=2.\nB. a=0, b 为任意常数.\nC. a=2, b=0.\nD. a=2, b 为任意常数.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q7",
+    "no": 7,
+    "stem": "设  $X_1, X_2, X_3$ 是随机变量, 且  $X_1 \\sim N(0,1)$,  $X_2 \\sim N(0,2^2)$,  $X_3 \\sim N(5,3^2)$,  $p_i = P\\{-2 \\leq X_i \\leq 2\\}$ ( $i=1,2,3$), 则 ( )\nA. $p_1 > p_2 > p_3$.\nB. $p_2 > p_1 > p_3$.\nC. $p_3 > p_1 > p_2$.\nD. $p_1 > p_3 > p_2$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q8",
+    "no": 8,
+    "stem": "设随机变量  $X \\sim t(n)$,  $Y \\sim F(1,n)$, 给定  $a (0  c\\} = a$, 则  $P\\{Y > c^2\\} = (\\quad)$\nA. $\\alpha$.\nB. $1-\\alpha$.\nC. $2\\alpha$.\nD. $1-2\\alpha$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q9",
+    "no": 9,
+    "stem": "设函数  $y = f(x)$ 由方程  $y - x = e^{x(1-y)}$ 确定，则  $\\lim_{n \\to \\infty} n f\\left(\\frac{1}{n}\\right) - 1 =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q10",
+    "no": 10,
+    "stem": "已知  $y_1 = e^{3x} - xe^{2x}$,  $y_2 = e^x - xe^{2x}$,  $y_3 = -xe^{2x}$ 是某二阶常系数非齐次线性微分方程的 3 个解, 则该方程的通解为  $y =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q11",
+    "no": 11,
+    "stem": "设  $\\begin{cases} x = \\sin t, \\\\ y = t \\sin t + \\cos t \\end{cases}$ (t 为参数), 则  $\\left. \\frac{d^2 y}{d x^2} \\right|_{t=\\frac{\\pi}{4}} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q12",
+    "no": 12,
+    "stem": "$\\int_{1}^{+\\infty}\\frac{\\ln x}{(1+x)^{2}}dx=$________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q13",
+    "no": 13,
+    "stem": "设  $A = (a_{ij})$ 是 3 阶非零矩阵,  $|A|$ 为 A 的行列式,  $A_{ij}$ 为  $a_{ij}$ 的代数余子式. 若  $a_{ij} + A_{ij} = 0 (i, j = 1, 2, 3)$, 则  $|A| =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q14",
+    "no": 14,
+    "stem": "设随机变量  $Y$ 服从参数为 1 的指数分布,  $a$ 为常数且大于零, 则  $P\\{Y \\leq a + 1 \\mid Y > a\\} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q15",
+    "no": 15,
+    "stem": "计算 $\\int_{0}^{1}\\frac{f(x)}{\\sqrt{x}}dx$，其中 $f(x)=\\int_{1}^{x}\\frac{\\ln(t+1)}{t}dt$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q16",
+    "no": 16,
+    "stem": "设数列  $\\{a_{n}\\}$ 满足条件:  $a_{0}=3, a_{1}=1, a_{n-2}-n(n-1)a_{n}=0(n \\geqslant 2)$,  $S(x)$ 是幂级数  $\\sum_{n=0}^{\\infty} a_{n} x^{n}$ 的和函数.\n(I) 证明  $S''(x) - S(x) = 0$;\n(II) 求  $S(x)$ 的表达式.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q17",
+    "no": 17,
+    "stem": "求函数 $f(x,y)=\\left(y+\\frac{x^{3}}{3}\\right)\\mathrm{e}^{x+y}$的极值.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q18",
+    "no": 18,
+    "stem": "设奇函数  $f(x)$ 在  $[-1,1]$ 上具有二阶导数，且  $f(1)=1$ 。证明：\n(I) 存在  $\\xi \\in (0,1)$，使得  $f'(\\xi) = 1$;\n(II) 存在  $\\eta \\in (-1,1)$，使得  $f''(\\eta) + f'(\\eta) = 1$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q19",
+    "no": 19,
+    "stem": "设直线  $L$ 过  $A(1,0,0), B(0,1,1)$ 两点，将  $L$ 绕  $z$ 轴旋转一周得到曲面  $\\Sigma$， $\\Sigma$ 与平面  $z=0, z=2$ 所围成的立体为  $\\Omega$。\n(I) 求曲面  $\\Sigma$ 的方程;\n(II) 求  $\\Omega$ 的形心坐标.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q20",
+    "no": 20,
+    "stem": "设  $A=\\begin{pmatrix}1&a\\\\ 1&0\\end{pmatrix}, B=\\begin{pmatrix}0&1\\\\ 1&b\\end{pmatrix}$. 当 a,b 为何值时，存在矩阵 C 使得 AC-CA=B，并求所有矩阵\nC.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q21",
+    "no": 21,
+    "stem": "设二次型  $f(x_{1},x_{2},x_{3})=2(a_{1}x_{1}+a_{2}x_{2}+a_{3}x_{3})^{2}+(b_{1}x_{1}+b_{2}x_{2}+b_{3}x_{3})^{2}$，记  $\\alpha=\\begin{pmatrix}a_{1}\\\\a_{2}\\\\a_{3}\\end{pmatrix},\\beta=\\begin{pmatrix}b_{1}\\\\b_{2}\\\\b_{3}\\end{pmatrix}$.\n(I) 证明二次型 f 对应的矩阵为  $2\\alpha\\alpha^{T} + \\beta\\beta^{T}$;\n(II) 若  $\\alpha, \\beta$ 正交且均为单位向量，证明 f 在正交变换下的标准形为  $2y_{1}^{2} + y_{2}^{2}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q22",
+    "no": 22,
+    "stem": "设随机变量 X 的概率密度为  $f(x)=\\left\\{\\begin{aligned}&\\frac{1}{9}x^{2},&0<x<3,\\\\&0,& 其他.\\end{aligned}\\right.$，令随机变量  $Y=\\left\\{\\begin{aligned}&2,&X\\leq1,\\\\&X,&1<X<2,\\\\&1,&X\\geq2.\\end{aligned}\\right.$\n(I) 求 Y 的分布函数;\n(II) 求概率  $P\\{X \\leq Y\\}$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2013-q23",
+    "no": 23,
+    "stem": "设总体 X 的概率密度为  $f(x;\\theta)=\\left\\{\\begin{aligned}&\\frac{\\theta^{2}}{x^{3}}\\mathrm{e}^{-\\frac{\\theta}{x}},&x>0,\\\\ &0,& 其他,\\end{aligned}\\right.$，其中  $\\theta$ 为未知参数且大于零.  $X_{1},X_{2},\\cdots,X_{n}$ 为来自总体 X 的简单随机样本.\n(I) 求  $\\theta$ 的矩估计量;\n(II) 求  $\\theta$ 的最大似然估计量.",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2014",
+  "title": "2014 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2014-q1",
+    "no": 1,
+    "stem": "下列曲线中有渐近线的是( )\nA. $y = x + \\sin x$.\nB. $y = x^2 + \\sin x$.\nC. $y = x + \\sin \\frac{1}{x}$.\nD. $y = x^2 + \\sin \\frac{1}{x}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q2",
+    "no": 2,
+    "stem": "设函数  $f(x)$ 具有 2 阶导数,  $g(x) = f(0)(1 - x) + f(1)x$, 则在区间  $[0,1]$ 上 ( )\nA. 当  $f'(x) \\geqslant 0$ 时,  $f(x) \\geqslant g(x)$.\nB. 当  $f'(x) \\geqslant 0$ 时,  $f(x) \\leqslant g(x)$.\nC. 当  $f''(x) \\geqslant 0$ 时,  $f(x) \\geqslant g(x)$.\nD. 当  $f''(x) \\geqslant 0$ 时,  $f(x) \\leqslant g(x)$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q3",
+    "no": 3,
+    "stem": "设  $f(x,y)$ 是连续函数，则  $\\int_{0}^{1}dy\\int_{-\\sqrt{1-y^{2}}}^{1-y}f(x,y)\\mathrm{d}x=$ ( )\nA. $\\int_{0}^{1}dx\\int_{0}^{x-1}f(x,y)\\mathrm{d}y+\\int_{-1}^{0}dx\\int_{0}^{\\sqrt{1-x^{2}}}f(x,y)\\mathrm{d}y.$\nB. $\\int_{0}^{1}dx\\int_{0}^{1-x}f(x,y)\\mathrm{d}y+\\int_{-1}^{0}dx\\int_{-\\sqrt{1-x^{2}}}^{0}f(x,y)\\mathrm{d}y.$\nC. $\\int_{0}^{\\frac{\\pi}{2}}d\\theta\\int_{0}^{\\frac{1}{\\cos\\theta+\\sin\\theta}}f(r\\cos\\theta,r\\sin\\theta)dr+\\int_{\\frac{\\pi}{2}}^{\\pi}d\\theta\\int_{0}^{1}f(r\\cos\\theta,r\\sin\\theta)dr.$\nD. $\\int_{0}^{\\frac{\\pi}{2}}d\\theta\\int_{0}^{\\frac{1}{\\cos\\theta+\\sin\\theta}}f(r\\cos\\theta,r\\sin\\theta)rdr+\\int_{\\frac{\\pi}{2}}^{\\pi}d\\theta\\int_{0}^{1}f(r\\cos\\theta,r\\sin\\theta)rdr.$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q4",
+    "no": 4,
+    "stem": "若  $\\int_{-\\pi}^{\\pi}(x-a_1\\cos x-b_1\\sin x)^2\\,dx = \\min_{a,b \\in \\mathbb{R}} \\left\\{ \\int_{-\\pi}^{\\pi} (x-a\\cos x-b\\sin x)^2\\,dx \\right\\}$，则  $a_1\\cos x + b_1\\sin x = (\\quad)$\nA. $2\\sin x$.\nB. $2\\cos x$.\nC. $2\\pi\\sin x$.\nD. $2\\pi\\cos x$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q5",
+    "no": 5,
+    "stem": "行列式  $\\begin{vmatrix} 0 & a & b & 0 \\\\ a & 0 & 0 & b \\\\ 0 & c & d & 0 \\\\ c & 0 & 0 & d \\end{vmatrix} = (\\ )$.\nA. $(ad-bc)^{2}.$\nB. $-(ad-bc)^{2}.$\nC. $a^{2}d^{2}-b^{2}c^{2}.$\nD. $b^{2}c^{2}-a^{2}d^{2}.$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q6",
+    "no": 6,
+    "stem": "设  $\\alpha_{1}, \\alpha_{2}, \\alpha_{3}$ 均为 3 维向量，则对任意常数 k, l，向量组  $\\alpha_{1} + k\\alpha_{3}, \\alpha_{2} + l\\alpha_{3}$ 线性无关是向量组  $\\alpha_{1}, \\alpha_{2}, \\alpha_{3}$ 线性无关的（）\nA. 必要非充分条件.\nB. 充分非必要条件.\nC. 充分必要条件.\nD. 既非充分也非必要条件.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q7",
+    "no": 7,
+    "stem": "设随机事件 A 与 B 相互独立，且  $P(B) = 0.5$,  $P(A - B) = 0.3$，则  $P(B - A) = (\\quad)$\nA. 0.1.\nB. 0.2.\nC. 0.3.\nD. 0.4.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q8",
+    "no": 8,
+    "stem": "设连续型随机变量  $X_1$ 与  $X_2$ 相互独立且方差均存在,  $X_1$ 与  $X_2$ 概率密度分别为  $f_1(x)$ 与  $f_2(x)$, 随机变量  $Y_1$ 的概率密度为  $f_{Y_1}(y) = \\frac{1}{2}[f_1(y) + f_2(y)]$, 随机变量  $Y_2 = \\frac{1}{2}(X_1 + X_2)$, 则 ( )\nA. $E(Y_1) > E(Y_2)$,  $D(Y_1) > D(Y_2)$.\nB. $E(Y_1) = E(Y_2)$,  $D(Y_1) = D(Y_2)$.\nC. $E(Y_1) = E(Y_2)$,  $D(Y_1)  D(Y_2)$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q9",
+    "no": 9,
+    "stem": "曲面  $z = x^{2}(1 - \\sin y) + y^{2}(1 - \\sin x)$ 在点  $(1,0,1)$ 处的切平面方程为 ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q10",
+    "no": 10,
+    "stem": "设  $f(x)$ 是周期为4的可导奇函数, 且  $f'(x) = 2(x-1), x \\in [0,2]$, 则  $f(7) =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q11",
+    "no": 11,
+    "stem": "微分方程  $xy' + y(\\ln x - \\ln y) = 0$ 满足条件  $y(1) = e^3$ 的解为  $y =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q12",
+    "no": 12,
+    "stem": "设  $L$ 是柱面  $x^2 + y^2 = 1$ 与平面  $y + z = 0$ 的交线, 从  $z$ 轴正向往  $z$ 轴负向看去为逆时针方向, 则曲线积分  $\\oint_L z \\, dx + y \\, dz =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q13",
+    "no": 13,
+    "stem": "设二次型  $f(x_1, x_2, x_3) = x_1^2 - x_2^2 + 2ax_1x_3 + 4x_2x_3$ 的负惯性指数为 1，则  $a$ 的取值范围是 ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q14",
+    "no": 14,
+    "stem": "设总体  $X$ 的概率密度为  $f(x; \\theta) = \\begin{cases} \\frac{2x}{3\\theta^2}, & \\theta < x < 2\\theta, \\\\ 0, & \\text{其他}, \\end{cases}$ 其中  $\\theta$ 是未知参数,  $X_1, X_2, \\cdots, X_n$ 为来自总体  $X$ 的简单随机样本, 若  $c \\sum_{i=1}^{n} X_i^2$ 是  $\\theta^2$ 的无偏估计, 则  $c =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q15",
+    "no": 15,
+    "stem": "求极限  $\\lim_{x \\to +\\infty} \\frac{\\int_1^x [t^2 (e^{\\frac{1}{t}} - 1) - t] dt}{x^2 \\ln (1 + \\frac{1}{x})}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q16",
+    "no": 16,
+    "stem": "设函数  $y=f(x)$ 由方程  $y^{3}+xy^{2}+x^{2}y+6=0$ 确定，求  $f(x)$ 的极值.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q17",
+    "no": 17,
+    "stem": "设函数 $f(u)$具有二阶连续导数， $z=f(\\mathrm{e}^{x}\\mathrm{cos}y)$满足 $\\frac{\\partial^{2}z}{\\partial x^{2}}+\\frac{\\partial^{2}z}{\\partial y^{2}}=(4z+\\mathrm{e}^{x}\\mathrm{cos}y)\\mathrm{e}^{2x}$。若 $f(0)=0,f'(0)=0$，求 $f(u)$的表达式。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q18",
+    "no": 18,
+    "stem": "设  $\\Sigma$ 为曲面  $z = x^2 + y^2 (z \\leq 1)$ 的上侧，计算曲面积分  $I = \\iint_{\\Sigma} (x-1)^3 \\, \\mathrm{d}y \\, \\mathrm{d}z + (y-1)^3 \\, \\mathrm{d}z \\, \\mathrm{d}x + (z-1) \\, \\mathrm{d}x \\, \\mathrm{d}y$。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q19",
+    "no": 19,
+    "stem": "设数列  $\\{a_{n}\\}$， $\\{b_{n}\\}$ 满足  $0 < a_{n} < \\frac{\\pi}{2}$， $0 < b_{n} < \\frac{\\pi}{2}$， $\\cos a_{n} - a_{n} = \\cos b_{n}$，且级数  $\\sum_{n=1}^{\\infty} b_{n}$ 收敛.\n(I) 证明  $\\lim_{n\\to\\infty}a_n=0$;\n(II) 证明级数  $\\sum_{n=1}^{\\infty}\\frac{a_{n}}{b_{n}}$ 收敛.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q20",
+    "no": 20,
+    "stem": "设 $A=\\begin{pmatrix}1&-2&3&-4\\\\0&1&-1&1\\\\1&2&0&-3\\end{pmatrix}$，E为3阶单位矩阵.\n(I) 求方程组 Ax = 0 的一个基础解系;\n(II) 求满足 AB = E 的所有矩阵\nB.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q21",
+    "no": 21,
+    "stem": "证明 n 阶矩阵  $\\begin{pmatrix}1&1&\\cdots&1\\\\1&1&\\cdots&1\\\\\\vdots&\\vdots&&\\vdots\\\\1&1&\\cdots&1\\end{pmatrix}$ 与  $\\begin{pmatrix}0&\\cdots&0&1\\\\0&\\cdots&0&2\\\\\\vdots&&\\vdots&\\vdots\\\\0&\\cdots&0&n\\end{pmatrix}$ 相似.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q22",
+    "no": 22,
+    "stem": "设随机变量X的概率分布为 $P\\{X=1\\}=P\\{X=2\\}=\\frac{1}{2}$.在给定X=i的条件下，随机变量Y服从均匀分布 $U(0,i)(i=1,2)$.\n(I) 求 Y 的分布函数  $F_{Y}(y)$;\n(II) 求  $E(Y)$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2014-q23",
+    "no": 23,
+    "stem": "设总体 X 的分布函数为  $F(x;\\theta)=\\left\\{\\begin{aligned}&1-\\mathrm{e}^{-\\frac{x^{2}}{\\theta}},&x\\geqslant0,\\\\ &0,&x 0$，都有  $\\lim_{n \\to \\infty} P \\left\\{ \\left| \\hat{\\theta}_n - a \\right| \\geq \\varepsilon \\right\\} = 0$？",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2015",
+  "title": "2015 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2015-q1",
+    "no": 1,
+    "stem": "设函数  $f(x)$ 在  $(-\\infty, +\\infty)$ 上连续，其 2 阶导函数  $f''(x)$ 的图形如右图所示，则曲线  $y = f(x)$ 的拐点个数为 ( )\nA. 0.\nB. 1.\nC. 2.\nD. 3.\n```function-plot\n{\"width\":760,\"height\":260,\"grid\":true,\"xAxis\":{\"label\":\"x\",\"domain\":[-4,4]},\"yAxis\":{\"label\":\"f''(x)\",\"domain\":[-2,3]},\"data\":[{\"fn\":\"0.35*(x+2)^2-0.8\",\"range\":[-4,0],\"color\":\"#374151\"},{\"fn\":\"0.3*(x-1.5)^2-1.1\",\"range\":[0.15,4],\"color\":\"#374151\"}]}\n```",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q2",
+    "no": 2,
+    "stem": "设  $y = \\frac{1}{2} e^{2x} + \\left( x - \\frac{1}{3} \\right) e^x$ 是二阶常系数非齐次线性微分方程  $y'' + ay' + by = ce^x$ 的一个特解，则 ( )\nA. $a = -3, b = 2, c = -1$.\nB. $a = 3, b = 2, c = -1$.\nC. $a = -3, b = 2, c = 1$.\nD. $a = 3, b = 2, c = 1$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q3",
+    "no": 3,
+    "stem": "若级数  $\\sum_{n=1}^{\\infty}a_{n}$ 条件收敛，则  $x=\\sqrt{3}$ 与 x=3 依次为幂级数  $\\sum_{n=1}^{\\infty}na_{n}(x-1)^{n}$ 的（）\nA. 收敛点，收敛点.\nB. 收敛点，发散点.\nC. 发散点，收敛点.\nD. 发散点，发散点.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q4",
+    "no": 4,
+    "stem": "设 $D$ 是第一象限中的曲线 $2xy = 1, 4xy = 1$ 与直线 $y = x, y = \\sqrt{3}x$ 围成的平面区域，函数 $f(x, y)$ 在 $D$ 上连续，则 $\\iint_{D} f(x, y) \\, \\mathrm{d}x \\, \\mathrm{d}y = (\\quad)$\nA. $\\int_{\\frac{\\pi}{4}}^{\\frac{\\pi}{3}} d\\theta \\int_{\\frac{1}{2\\sin2\\theta}}^{\\frac{1}{\\sin2\\theta}} f(r\\cos\\theta, r\\sin\\theta) r \\, \\mathrm{d}r$.\nB. $\\int_{\\frac{\\pi}{4}}^{\\frac{\\pi}{3}} d\\theta \\int_{\\frac{1}{\\sqrt{2}\\sin2\\theta}}^{\\frac{1}{\\sqrt{2}\\sin2\\theta}} f(r\\cos\\theta, r\\sin\\theta) r \\, \\mathrm{d}r$.\nC. $\\int_{\\frac{\\pi}{4}}^{\\frac{\\pi}{3}} d\\theta \\int_{\\frac{1}{2\\sin2\\theta}}^{\\frac{1}{\\sin2\\theta}} f(r\\cos\\theta, r\\sin\\theta) r \\, \\mathrm{d}r$.\nD. $\\int_{\\frac{\\pi}{4}}^{\\frac{\\pi}{3}} d\\theta \\int_{\\frac{1}{\\sqrt{2}\\sin2\\theta}}^{\\frac{1}{\\sqrt{2}\\sin2\\theta}} f(r\\cos\\theta, r\\sin\\theta) r \\, \\mathrm{d}r$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q5",
+    "no": 5,
+    "stem": "设矩阵  $A = \\begin{pmatrix} 1 & 1 & 1 \\\\ 1 & 2 & a \\\\ 1 & 4 & a^2 \\end{pmatrix}$,  $b = \\begin{pmatrix} 1 & & \\\\ d & & d^2 \\end{pmatrix}$. 若集合  $\\Omega = \\{1,2\\}$，则线性方程组 Ax = b 有无穷多解的充分必要条件为 ( )\nA. $a \\notin \\Omega, d \\notin \\Omega$.\nB. $a \\notin \\Omega, d \\in \\Omega$.\nC. $a \\in \\Omega, d \\notin \\Omega$.\nD. $a \\in \\Omega, d \\in \\Omega$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q6",
+    "no": 6,
+    "stem": "设二次型  $f(x_1, x_2, x_3)$ 在正交变换  $x = Py$ 下的标准形为  $2y_1^2 + y_2^2 - y_3^2$，其中  $P = (e_1, e_2, e_3)$。若  $Q = (e_1, -e_3, e_2)$，则  $f(x_1, x_2, x_3)$ 在正交变换  $x = Qy$ 下的标准形为（ ）\nA. $2y_1^2 - y_2^2 + y_3^2$.\nB. $2y_1^2 + y_2^2 - y_3^2$.\nC. $2y_1^2 - y_2^2 - y_3^2$.\nD. $2y_1^2 + y_2^2 + y_3^2$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q7",
+    "no": 7,
+    "stem": "若 A,B 为任意两个随机事件,则 ( )\nA. $P(AB) \\leq P(A)P(B)$.\nB. $P(AB) \\geq P(A)P(B)$.\nC. $P(AB) \\leq \\frac{P(A) + P(B)}{2}$.\nD. $P(AB) \\geq \\frac{P(A) + P(B)}{2}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q8",
+    "no": 8,
+    "stem": "设随机变量 X, Y 不相关，且  $E(X) = 2, E(Y) = 1, D(X) = 3$，则  $E[X(X+Y-2)] = (\\quad)$\nA. -3.\nB. 3.\nC. -5\nD. 5.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q9",
+    "no": 9,
+    "stem": "$\\lim_{x\\to0}\\frac{\\ln(\\cos x)}{x^2}=$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q10",
+    "no": 10,
+    "stem": "$\\int_{-\\frac{\\pi}{2}}^{\\frac{\\pi}{2}}\\left(\\frac{\\sin x}{1+\\cos x}+|x|\\right)dx=$________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q11",
+    "no": 11,
+    "stem": "若函数  $z = z(x, y)$ 由方程  $e^z + xyz + x + \\cos x = 2$ 确定，则  $\\left. dz \\right|_{(0,1)} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q12",
+    "no": 12,
+    "stem": "设  $\\Omega$ 是由平面  $x + y + z = 1$ 与三个坐标平面所围成的空间区域,  $\\iint_{\\Omega}(x + 2y + 3z)dxdydz =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q13",
+    "no": 13,
+    "stem": "n 阶行列式  $\\begin{vmatrix} 2 & 0 & \\cdots & 0 & 2 \\\\ -1 & 2 & \\cdots & 0 & 2 \\\\ \\vdots & \\vdots & & \\vdots & \\vdots \\\\ 0 & 0 & \\cdots & 2 & 2 \\\\ 0 & 0 & \\cdots & -1 & 2 \\end{vmatrix} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q14",
+    "no": 14,
+    "stem": "设二维随机变量  $(X,Y)$ 服从正态分布  $N(1,0;1,1;0)$，则  $P\\{XY-Y<0\\}=$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q15",
+    "no": 15,
+    "stem": "设函数  $f(x)=x+a\\ln(1+x)+bx\\sin x$,  $g(x)=kx^{3}$. 若  $f(x)$ 与  $g(x)$ 在  $x\\to0$ 时是等价无穷小，求 a, b, k 值.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q16",
+    "no": 16,
+    "stem": "设函数 $f(x)$在定义域I上的导数大于零.若对任意的 $x_{0}\\in I$，曲线 $y=f(x)$在点 $(x_{0},f(x_{0}))$处的切线与直线 $x=x_{0}$及x轴所围成区域的面积恒为4，且 $f(0)=2$，求 $f(x)$的表达式.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q17",
+    "no": 17,
+    "stem": "已知函数  $f(x,y)=x+y+xy$，曲线  $C:x^{2}+y^{2}+xy=3$，求  $f(x,y)$ 在曲线 C 上的最大方向导数.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q18",
+    "no": 18,
+    "stem": "(I) 设函数  $u(x), v(x)$ 可导，利用导数定义证明  $[u(x)v(x)]' = u'(x)v(x) + u(x)v'(x)$;\n(II) 设函数  $u_{1}(x)$,  $u_{2}(x)$,  $\\cdots$,  $u_{n}(x)$ 可导,  $f(x) = u_{1}(x)u_{2}(x) \\cdots u_{n}(x)$, 写出  $f(x)$ 的求导公式.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q19",
+    "no": 19,
+    "stem": "已知曲线 $L$ 的方程为 $\\begin{cases} z = \\sqrt{2 - x^2 - y^2}, \\\\ z = x, \\end{cases}$，起点为 $A(0, \\sqrt{2}, 0)$，终点为 $B(0, -\\sqrt{2}, 0)$，计算曲线积分 $I = \\int_L (y + z) \\, \\mathrm{d}x + (z^2 - x^2 + y) \\, \\mathrm{d}y + x^2 y^2 \\, \\mathrm{d}z$。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q20",
+    "no": 20,
+    "stem": "设向量组  $\\alpha_{1},\\alpha_{2},\\alpha_{3}$ 为  $R^{3}$ 的一个基,  $\\beta_{1}=2\\alpha_{1}+2k\\alpha_{3},\\beta_{2}=2\\alpha_{2},\\beta_{3}=\\alpha_{1}+(k+1)\\alpha_{3}$.\n(I) 证明向量组  $\\beta_{1}, \\beta_{2}, \\beta_{3}$ 为  $R^{3}$ 的一个基；\n(II) 当 k 为何值时，存在非零向量  $\\xi$ 在基  $a_{1}, a_{2}, a_{3}$ 与基  $\\beta_{1}, \\beta_{2}, \\beta_{3}$ 下的坐标相同，并求所有的  $\\xi$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q21",
+    "no": 21,
+    "stem": "设矩阵  $A=\\left(\\begin{array}{ccc}0 & 2 & -3 \\\\ -1 & 3 & -3 \\\\ 1 & -2 & a\\end{array}\\right)$ 相似于矩阵  $B=\\left(\\begin{array}{ccc}1 & -2 & 0 \\\\ 0 & b & 0 \\\\ 0 & 3 & 1\\end{array}\\right)$.\n(I) 求 a, b 的值;\n(II) 求可逆矩阵 P，使  $P^{-1}AP$ 为对角矩阵.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q22",
+    "no": 22,
+    "stem": "设随机变量 X 的概率密度为  $f(x)=\\left\\{\\begin{aligned}&2^{-x}\\ln2,&&x>0,\\\\ &0,&&x\\leqslant0.\\end{aligned}\\right.$ 对 X 进行独立重复的观测，直到第2个大于3的观测值出现时停止，记 Y 为观测次数.\n(I) 求 Y 的概率分布;\n(II) 求  $E(Y)$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2015-q23",
+    "no": 23,
+    "stem": "设总体 X 的概率密度为  $f(x;\\theta)=\\left\\{\\begin{aligned}&\\frac{1}{1-\\theta},&\\theta\\leqslant x\\leqslant1,\\\\ &0,& 其他,\\end{aligned}\\right.$，其中  $\\theta$ 为未知参数.  $X_{1},X_{2},\\cdots,X_{n}$ 为来自该总体的简单随机样本.\n(I) 求  $\\theta$ 的矩估计量;\n(II) 求  $\\theta$ 的最大似然估计量.",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2016",
+  "title": "2016 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2016-q1",
+    "no": 1,
+    "stem": "若反常积分  $\\int_{0}^{+\\infty} \\frac{1}{x^{a}(1+x)^{b}} \\, \\mathrm{d}x$ 收敛，则 ( )\nA. a1.\nB. a>1 且 b>1.\nC. a1$.\nD. a>1 且  $a+b>1$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q2",
+    "no": 2,
+    "stem": "已知函数  $f(x)=\\begin{cases}2(x-1), & x<1, \\\\ \\ln x, & x\\geq1,\\end{cases}$ 则  $f(x)$ 的一个原函数是（）\nA. $F(x)=\\begin{cases}(x-1)^2,&x<1,\\\\x(\\ln x-1),&x\\geq1.\\end{cases}$\nB. $F(x)=\\begin{cases}(x-1)^2,&x<1,\\\\x(\\ln x+1)-1,&x\\geq1.\\end{cases}$\nC. $F(x)=\\begin{cases}(x-1)^2,&x<1,\\\\x(\\ln x+1)+1,&x\\geq1.\\end{cases}$\nD. $F(x)=\\begin{cases}(x-1)^2,&x<1,\\\\x(\\ln x-1)+1,&x\\geq1.\\end{cases}$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q3",
+    "no": 3,
+    "stem": "若  $y = (1 + x^2)^2 - \\sqrt{1 + x^2}$,  $y = (1 + x^2)^2 + \\sqrt{1 + x^2}$ 是微分方程  $y' + p(x)y = q(x)$ 的两个解，则  $q(x) = (\\quad)$\nA. $3x(1 + x^2)$.\nB. $-3x(1 + x^2)$.\nC. $\\frac{x}{1 + x^2}$.\nD. $-\\frac{x}{1 + x^2}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q4",
+    "no": 4,
+    "stem": "已知函数  $f(x)=\\begin{cases}x,&x\\leq0,\\\\\\frac{1}{n},&\\frac{1}{n+1}<x\\leq\\frac{1}{n},\\\\&n+1\\end{cases},n=1,2,\\ldots$，则（ ）\nA. $x=0$ 是  $f(x)$ 的第一类间断点.\nB. $x=0$ 是  $f(x)$ 的第二类间断点.\nC. $f(x)$ 在  $x=0$ 处连续但不可导.\nD. $f(x)$ 在  $x=0$ 处可导.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q5",
+    "no": 5,
+    "stem": "设 A, B 是可逆矩阵，且 A 与 B 相似，则下列结论错误的是（）\nA. $A^{T}$ 与  $B^{T}$ 相似.\nB. $A^{-1}$ 与  $B^{-1}$ 相似.\nC. $A + A^{T}$ 与  $B + B^{T}$ 相似.\nD. $A + A^{-1}$ 与  $B + B^{-1}$ 相似.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q6",
+    "no": 6,
+    "stem": "设二次型  $f(x_{1}, x_{2}, x_{3}) = x_{1}^{2} + x_{2}^{2} + x_{3}^{2} + 4x_{1}x_{2} + 4x_{1}x_{3} + 4x_{2}x_{3}$，则  $f(x_{1}, x_{2}, x_{3}) = 2$ 在空间直角坐标下表示的二次曲面为（）\nA. 单叶双曲面.\nB. 双叶双曲面.\nC. 椭球面.\nD. 柱面.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q7",
+    "no": 7,
+    "stem": "设随机变量  $X \\sim N(\\mu, \\sigma^2) (\\sigma > 0)$，记  $p = P\\{X \\leq \\mu + \\sigma^2\\}$，则 ( )\nA. $p$ 随着  $\\mu$ 的增加而增加.\nB. $p$ 随着  $\\sigma$ 的增加而增加.\nC. $p$ 随着  $\\mu$ 的增加而减少.\nD. $p$ 随着  $\\sigma$ 的增加而减少.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q8",
+    "no": 8,
+    "stem": "随机试验 E 有三种两两不相容的结果  $A_1, A_2, A_3$，且三种结果发生的概率均为  $\\frac{1}{3}$，将试验 E 独立重复做 2 次，X 表示 2 次试验中结果  $A_1$ 发生的次数，Y 表示 2 次试验中结果  $A_2$ 发生的次数，则 X 与 Y 的相关系数为 ( )\nA. $-\\frac{1}{2}$.\nB. $-\\frac{1}{3}$.\nC. $\\frac{1}{3}$.\nD. $\\frac{1}{2}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q9",
+    "no": 9,
+    "stem": "$\\lim_{x \\to 0} \\frac{\\int_0^x t \\ln(1+t \\sin t) dt}{1-\\cos x^2} =$________。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q10",
+    "no": 10,
+    "stem": "向量场  $A(x,y,z) = (x+y+z)i + xyj + zk$ 的旋度  $rot A =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q11",
+    "no": 11,
+    "stem": "设函数  $f(u,v)$ 可微,  $z = z(x,y)$ 由方程  $(x+1)z - y^2 = x^2f(x-z,y)$ 确定, 则  $\\mathrm{d}z \\mid_{(0,1)} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q12",
+    "no": 12,
+    "stem": "设函数  $f(x) = \\arctan x - \\frac{x}{1 + ax^2}$，且  $f'''(0) = 1$，则  $a =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q13",
+    "no": 13,
+    "stem": "行列式  $\\begin{vmatrix} \\lambda & -1 & 0 & 0 \\\\ 0 & \\lambda & -1 & 0 \\\\ 0 & 0 & \\lambda & -1 \\\\ 4 & 3 & 2 & \\lambda+1 \\end{vmatrix} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q14",
+    "no": 14,
+    "stem": "设  $X_1, X_2, \\cdots, X_n$ 为来自总体  $N(\\mu, \\sigma^2)$ 的简单随机样本, 样本均值  $\\overline{X} = 9.5$, 参数  $\\mu$ 的置信度为 0.95 的双侧置信区间的置信上限为 10.8, 则  $\\mu$ 的置信度为 0.95 的双侧置信区间为 ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q15",
+    "no": 15,
+    "stem": "已知平面区域  $D=\\left\\{(r,\\theta)\\mid2\\leqslant r\\leqslant2(1+\\cos\\theta),-\\frac{\\pi}{2}\\leqslant\\theta\\leqslant\\frac{\\pi}{2}\\right\\}$，计算二重积分  $\\iint_{D}x\\mathrm{d}x\\mathrm{d}y$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q16",
+    "no": 16,
+    "stem": "设函数  $y(x)$ 满足方程  $y'' + 2y' + ky = 0$，其中 0 < k < 1.\n(I) 证明: 反常积分  $\\int_{0}^{+\\infty} y(x) \\, dx$ 收敛;\n(II) 若  $y(0)=1, y'(0)=1$，求  $\\int_{0}^{+\\infty} y(x) \\, dx$ 的值.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q17",
+    "no": 17,
+    "stem": "设函数  $f(x, y)$ 满足  $\\frac{\\partial f(x, y)}{\\partial x} = (2x + 1)e^{2x - y}$，且  $f(0, y) = y + 1$， $L_t$ 是从点 (0, 0) 到点 (1, t) 的光滑曲线。\n计算曲线积分  $I(t) = \\int_{L_t} \\frac{\\partial f(x, y)}{\\partial x} \\, dx + \\frac{\\partial f(x, y)}{\\partial y} \\, dy$，并求  $I(t)$ 的最小值。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q18",
+    "no": 18,
+    "stem": "设有界区域  $\\Omega$ 由平面  $2x + y + 2z = 2$ 与三个坐标平面围成,  $\\Sigma$ 为  $\\Omega$ 整个表面的外侧, 计算曲面积分  $I = \\iint_{\\Sigma} (x^2 + 1) \\, \\mathrm{d}y \\, \\mathrm{d}z - 2y \\, \\mathrm{d}z \\, \\mathrm{d}x + 3z \\, \\mathrm{d}x \\, \\mathrm{d}y$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q19",
+    "no": 19,
+    "stem": "已知函数 $f(x)$可导，且 $f(0)=1,0<f'(x)<\\frac{1}{2}$。设数列 $\\{x_n\\}$满足 $x_{n+1}=f(x_n)(n=1,2,\\cdots)$。证明：\n(I) 级数  $\\sum_{n=1}^{\\infty}(x_{n+1}-x_{n})$ 绝对收敛;\n(II) $\\lim_{n\\to\\infty}x_n$ 存在，且  $0<\\lim_{n\\to\\infty}x_n<2$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q20",
+    "no": 20,
+    "stem": "设矩阵  $A=\\begin{pmatrix}1&-1&-1\\\\2&a&1\\\\-1&1&a\\end{pmatrix},B=\\begin{pmatrix}2&2&\\\\1&a&\\\\-a-1&-2\\end{pmatrix}$. 当 a 为何值时，方程 AX=B 无解、有唯一解、有无穷多解？在有解时，求解此方程.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q21",
+    "no": 21,
+    "stem": "已知矩阵  $A = \\begin{pmatrix} 0 & -1 & 1 \\\\ 2 & -3 & 0 \\\\ 0 & 0 & 0 \\end{pmatrix}$.\n(I) 求  $A^{99}$;\n(II) 设 3 阶矩阵  $B = (\\alpha_{1}, \\alpha_{2}, \\alpha_{3})$ 满足  $B^{2} = BA$. 记  $B^{100} = (\\beta_{1}, \\beta_{2}, \\beta_{3})$，将  $\\beta_{1}, \\beta_{2}, \\beta_{3}$ 分别表示为  $\\alpha_{1}, \\alpha_{2}, \\alpha_{3}$ 的线性组合.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q22",
+    "no": 22,
+    "stem": "设二维随机变量  $(X,Y)$ 在区域  $D=\\left\\{(x,y)\\mid0Y.\\end{aligned}\\right.\n$$\n(I) 写出  $(X,Y)$ 的概率密度;\n(II) 问 U 与 X 是否相互独立？并说明理由；\n(III) 求  $Z = U + X$ 的分布函数  $F(z)$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2016-q23",
+    "no": 23,
+    "stem": "设总体 X 的概率密度为  $f(x;\\theta)=\\left\\{\\begin{aligned}&\\frac{3x^{2}}{\\theta^{3}},&0<x<\\theta,\\\\ &0,& 其他,\\end{aligned}\\right.$ 其中  $\\theta\\in(0,+\\infty)$ 为未知参数， $X_{1},X_{2},X_{3}$ 为来自总体 X 的简单随机样本，令  $T=\\max\\left\\{X_{1},X_{2},X_{3}\\right\\}$.\n(I) 求 T 的概率密度;\n(II) 确定 a，使得 aT 为  $\\theta$ 的无偏估计.",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2017",
+  "title": "2017 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2017-q1",
+    "no": 1,
+    "stem": "若函数  $f(x)=\\begin{cases}\\frac{1-\\cos\\sqrt{x}}{ax},&x>0,\\\\b,&x\\leq0\\end{cases}$ 在 x=0 处连续，则（）\nA. $ab=\\frac{1}{2}$.\nB. $ab=-\\frac{1}{2}$.\nC. ab=0.\nD. ab=2.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q2",
+    "no": 2,
+    "stem": "设函数  $f(x)$ 可导，且  $f(x)f'(x) > 0$，则 ( )\nA. $f(1) > f(-1)$.\nB. $f(1)  |f(-1)|$.\nD. $|f(1)| < |f(-1)|$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q3",
+    "no": 3,
+    "stem": "函数  $f(x,y,z)=x^{2}y+z^{2}$ 在点  $(1,2,0)$ 处沿向量  $\\boldsymbol{n}=(1,2,2)$ 的方向导数为()\nA. 12.\nB. 6.\nC. 4.\nD. 2.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q4",
+    "no": 4,
+    "stem": "甲、乙两人赛跑, 计时开始时, 甲在乙前方 10(单位: m) 处, 图中, 实线表示甲的速度曲线  $v = v_{1}(t)$ (单位: m/s), 虚线表示乙的速度曲线  $v = v_{2}(t)$, 三块阴影部分面积的数值依次是 10, 20, 3. 计时开始后乙追上甲的时刻记为  $t_{0}$ (单位: s), 则 ( )\nA. $t_{0}=10.$\nB. $1525.$\n```function-plot\n{\"width\":760,\"height\":280,\"grid\":true,\"xAxis\":{\"label\":\"t(s)\",\"domain\":[0,30]},\"yAxis\":{\"label\":\"v(m/s)\",\"domain\":[-1,5]},\"data\":[{\"points\":[[0,2],[5,0.8],[10,2],[15,0.4],[20,2.8],[25,1.2],[30,3.2]],\"fnType\":\"points\",\"graphType\":\"polyline\",\"color\":\"#374151\"}]}\n```",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q5",
+    "no": 5,
+    "stem": "设 a 为 n 维单位列向量, E 为 n 阶单位矩阵, 则 ( )\nA. $E - \\alpha\\alpha^{T}$ 不可逆.\nB. $E + \\alpha\\alpha^{T}$ 不可逆.\nC. $E + 2\\alpha\\alpha^{T}$ 不可逆.\nD. $E - 2\\alpha\\alpha^{T}$ 不可逆.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q6",
+    "no": 6,
+    "stem": "已知矩阵  $A = \\begin{pmatrix} 2 & 0 & 0 \\\\ 0 & 2 & 1 \\\\ 0 & 0 & 1 \\end{pmatrix}$,  $B = \\begin{pmatrix} 2 & 1 & 0 \\\\ 0 & 2 & 0 \\\\ 0 & 0 & 1 \\end{pmatrix}$,  $C = \\begin{pmatrix} 1 & 0 & 0 \\\\ 0 & 2 & 0 \\\\ 0 & 0 & 2 \\end{pmatrix}$，则（）\nA. A 与 C 相似, B 与 C 相似.\nB. A 与 C 相似, B 与 C 不相似.\nC. A 与 C 不相似, B 与 C 相似.\nD. A 与 C 不相似, B 与 C 不相似.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q7",
+    "no": 7,
+    "stem": "设 A, B 为随机事件. 若  $0  P(A \\mid \\overline{B})$ 的充分必要条件是 ( )\nA. $P(B \\mid A) > P(B \\mid \\overline{A})$.\nB. $P(B \\mid A)  P(B \\mid \\overline{A})$.\nD. $P(\\overline{B} \\mid A) < P(B \\mid \\overline{A})$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q8",
+    "no": 8,
+    "stem": "设  $X_1, X_2, \\cdots, X_n (n \\geqslant 2)$ 为来自总体  $N(\\mu, 1)$ 的简单随机样本，记  $\\overline{X} = \\frac{1}{n} \\sum_{i=1}^{n} X_i$，则下列结论中不正确的是（ ）\nA. $\\sum_{i=1}^{n} (X_i - \\mu)^2$ 服从  $\\chi^2$ 分布.\nB. $2 (X_n - X_1)^2$ 服从  $\\chi^2$ 分布.\nC. $\\sum_{i=1}^{n} (X_i - \\overline{X})^2$ 服从  $\\chi^2$ 分布.\nD. $n (\\overline{X} - \\mu)^2$ 服从  $\\chi^2$ 分布.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q9",
+    "no": 9,
+    "stem": "已知函数  $f(x) = \\frac{1}{1 + x^2}$，则  $f^{(3)}(0) =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q10",
+    "no": 10,
+    "stem": "微分方程  $y'' + 2y' + 3y = 0$ 的通解为  $y =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q11",
+    "no": 11,
+    "stem": "若曲线积分  $\\int_L \\frac{x \\mathrm{d}x - ay \\mathrm{d}y}{x^2 + y^2 - 1}$ 在区域  $D = \\{(x, y) \\mid x^2 + y^2 < 1\\}$ 内与路径无关，则  $a =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q12",
+    "no": 12,
+    "stem": "幂级数  $\\sum_{n=1}^{\\infty}(-1)^{n-1}nx^{n-1}$ 在区间  $(-1,1)$ 内的和函数  $S(x)=$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q13",
+    "no": 13,
+    "stem": "设矩阵  $A = \\begin{pmatrix} 1 & 0 & 1 \\\\ 1 & 1 & 2 \\\\ 0 & 1 & 1 \\end{pmatrix}$,  $\\alpha_1, \\alpha_2, \\alpha_3$ 为线性无关的 3 维列向量组，则向量组  $A\\alpha_1, A\\alpha_2, A\\alpha_3$ 的秩为 ________。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q14",
+    "no": 14,
+    "stem": "设随机变量 X 的分布函数为  $F(x) = 0.5\\Phi(x) + 0.5\\Phi\\left(\\frac{x-4}{2}\\right)$，其中  $\\Phi(x)$ 为标准正态分布函数，则  $E(X) =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q15",
+    "no": 15,
+    "stem": "设函数  $f(u,v)$ 具有 2 阶连续偏导数,  $y = f(e^x, \\cos x)$, 求  $\\left.\\frac{dy}{dx}\\right|_{x=0}, \\left.\\frac{d^2y}{dx^2}\\right|_{x=0}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q16",
+    "no": 16,
+    "stem": "求 $\\lim_{n\\to\\infty}\\sum_{k=1}^{n}\\frac{k}{n^{2}}\\ln\\left(1+\\frac{k}{n}\\right)$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q17",
+    "no": 17,
+    "stem": "已知函数  $y(x)$ 由方程  $x^{3} + y^{3} - 3x + 3y - 2 = 0$ 确定，求  $y(x)$ 的极值.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q18",
+    "no": 18,
+    "stem": "设函数  $f(x)$ 在区间  $[0,1]$ 上具有 2 阶导数，且  $f(1) > 0, \\lim_{x \\to 0^{+}} \\frac{f(x)}{x} < 0$. 证明：\n(I) 方程  $f(x)=0$ 在区间  $(0,1)$ 内至少存在一个实根；\n(II) 方程  $f(x)f''(x) + [f'(x)]^{2} = 0$ 在区间  $(0,1)$ 内至少存在两个不同实根.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q19",
+    "no": 19,
+    "stem": "设薄片型物体 S 是圆锥面  $z=\\sqrt{x^{2}+y^{2}}$ 被柱面  $z^{2}=2x$ 割下的有限部分，其上任一点的密度为  $\\mu(x,y,z)=9\\sqrt{x^{2}+y^{2}+z^{2}}$. 记圆锥面与柱面的交线为\nC.\n(I) 求 C 在 xOy 平面上的投影曲线的方程;\n(II) 求 S 的质量 M.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q20",
+    "no": 20,
+    "stem": "设3阶矩阵 $A=(\\alpha_{1},\\alpha_{2},\\alpha_{3})$有3个不同的特征值，且 $\\alpha_{3}=\\alpha_{1}+2\\alpha_{2}$\n(I) 证明  $r(A)=2;$\n(II) 设  $\\beta = \\alpha_{1} + \\alpha_{2} + \\alpha_{3}$，求方程组  $Ax = \\beta$ 的通解.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q21",
+    "no": 21,
+    "stem": "设二次型  $f(x_{1},x_{2},x_{3})=2x_{1}^{2}-x_{2}^{2}+ax_{3}^{2}+2x_{1}x_{2}-8x_{1}x_{3}+2x_{2}x_{3}$ 在正交变换 x=Qy 下的标准形为  $\\lambda_{1}y_{1}^{2}+\\lambda_{2}y_{2}^{2}$，求 a 的值及一个正交矩阵 Q.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q22",
+    "no": 22,
+    "stem": "设随机变量 X, Y 相互独立，且 X 的概率分布为  $P\\{X=0\\}=P\\{X=2\\}=\\frac{1}{2}$，Y 的概率密度为\n$$\nf(y)=\\begin{cases}2y,&0<y<1,\\\\0,& 其他 .\\end{cases}\n$$\n(I) 求  $P\\{Y \\leq E(Y)\\}$;\n(II) 求  $Z = X + Y$ 的概率密度.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2017-q23",
+    "no": 23,
+    "stem": "某工程师为了解一台天平的精度，用该天平对一物体的质量做 n 次测量，该物体的质量  $\\mu$ 是已知的。设 n 次测量结果  $X_{1}, X_{2}, \\cdots, X_{n}$ 相互独立且均服从正态分布  $N(\\mu, \\sigma^{2})$，该工程师记录的是 n 次测量的绝对误差  $Z_{i} = |X_{i} - \\mu| (i = 1, 2, \\cdots, n)$。利用  $Z_{1}, Z_{2}, \\cdots, Z_{n}$ 估计  $\\sigma$。\n(I) 求  $Z_{1}$ 的概率密度;\n(II) 利用一阶矩求  $\\sigma$ 的矩估计量;\n(III) 求  $\\sigma$ 的最大似然估计量.",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2018",
+  "title": "2018 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2018-q1",
+    "no": 1,
+    "stem": "下列函数中，在 x=0 处不可导的是 ( )\nA. $f(x)=|x|\\sin|x|$.\nB. $f(x)=|x|\\sin\\sqrt{|x|}$.\nC. $f(x)=\\cos|x|$.\nD. $f(x)=\\cos\\sqrt{|x|}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q2",
+    "no": 2,
+    "stem": "过点  $(1,0,0)$,  $(0,1,0)$，且与曲面  $z=x^{2}+y^{2}$ 相切的平面为 ( )\nA. z=0 与  $x+y-z=1$.\nB. z=0 与  $2x+2y-z=2$.\nC. x=y 与  $x+y-z=1$.\nD. x=y 与  $2x+2y-z=2$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q3",
+    "no": 3,
+    "stem": "$\\sum_{n=0}^{\\infty}(-1)^{n}\\frac{2n+3}{(2n+1)!} = (\\quad)$\nA. $\\sin1 + \\cos1$\nB. $2\\sin1 + \\cos1$\nC. $2\\sin1 + 2\\cos1$\nD. $2\\sin1 + 3\\cos1$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q4",
+    "no": 4,
+    "stem": "设  $M = \\int_{-\\frac{\\pi}{2}}^{\\frac{\\pi}{2}} \\frac{(1+x)^2}{1+x^2} \\, \\mathrm{d}x$,  $N = \\int_{-\\frac{\\pi}{2}}^{\\frac{\\pi}{2}} \\frac{1+x}{e^x} \\, \\mathrm{d}x$,  $K = \\int_{-\\frac{\\pi}{2}}^{\\frac{\\pi}{2}} (1 + \\sqrt{\\cos x}) \\, \\mathrm{d}x$, 则 ( )\nA. $M > N > K$.\nB. $M > K > N$.\nC. $K > M > N$.\nD. $K > N > M$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q5",
+    "no": 5,
+    "stem": "下列矩阵中,与矩阵 $\\begin{pmatrix}1&1&0\\\\0&1&1\\\\0&0&1\\end{pmatrix}$相似的为( )\nA. $\\begin{pmatrix}1&1&-1\\\\0&1&1\\\\0&0&1\\end{pmatrix}$.\nB. $\\begin{pmatrix}1&0&-1\\\\0&1&1\\\\0&0&1\\end{pmatrix}$.\nC. $\\begin{pmatrix}1&1&-1\\\\0&1&0\\\\0&0&1\\end{pmatrix}$.\nD. $\\begin{pmatrix}1&0&-1\\\\0&1&0\\\\0&0&1\\end{pmatrix}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q6",
+    "no": 6,
+    "stem": "设 A, B 为 n 阶矩阵，记  $r(X)$ 为矩阵 X 的秩，(X, Y) 表示分块矩阵，则 ( )\nA. $r(A, AB) = r(A)$.\nB. $r(A, BA) = r(A)$.\nC. $r(A, B) = \\max\\{r(A), r(B)\\}$.\nD. $r(A, B) = r(A^T, B^T)$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q7",
+    "no": 7,
+    "stem": "设随机变量 X 的概率密度  $f(x)$ 满足  $f(1+x)=f(1-x)$，且  $\\int_{0}^{2}f(x)dx=0.6$，则  $P\\{X<0\\}=(\\quad)$\nA. 0.2.\nB. 0.3.\nC. 0.4.\nD. 0.5.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q8",
+    "no": 8,
+    "stem": "设总体 X 服从正态分布  $N(\\mu, \\sigma^2)$.  $X_1, X_2, \\cdots, X_n$ 是来自总体 X 的简单随机样本, 据此样本检验假设:  $H_0$:  $\\mu = \\mu_0$,  $H_1$:  $\\mu \\neq \\mu_0$, 则 ( )\nA. 如果在检验水平  $a = 0.05$ 下拒绝  $H_0$, 那么  $a = 0.01$ 下必拒绝  $H_0$.\nB. 如果在检验水平  $a = 0.05$ 下拒绝  $H_0$, 那么  $a = 0.01$ 下必接受  $H_0$.\nC. 如果在检验水平  $a = 0.05$ 下接受  $H_0$, 那么  $a = 0.01$ 下必拒绝  $H_0$.\nD. 如果在检验水平  $a = 0.05$ 下接受  $H_0$, 那么  $a = 0.01$ 下必接受  $H_0$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q9",
+    "no": 9,
+    "stem": "若  $\\lim_{x \\to 0} \\left( \\frac{1 - \\tan x}{1 + \\tan x} \\right)^{\\frac{1}{\\sin kx}} = e$，则  $k =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q10",
+    "no": 10,
+    "stem": "设函数  $f(x)$ 具有 2 阶连续导数. 若曲线  $y = f(x)$ 过点  $(0,0)$ 且与曲线  $y = 2^x$ 在点  $(1,2)$ 处相切, 则  $\\int_0^1 x f''(x) \\, dx =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q11",
+    "no": 11,
+    "stem": "设  $F(x,y,z) = xyi - yzj + zxk$，则  $rot F(1,1,0) =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q12",
+    "no": 12,
+    "stem": "设  $L$ 为球面  $x^2 + y^2 + z^2 = 1$ 与平面  $x + y + z = 0$ 的交线, 则  $\\oint_L xyds =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q13",
+    "no": 13,
+    "stem": "设 2 阶矩阵  $A$ 有两个不同特征值,  $a_1, a_2$ 是  $A$ 的线性无关的特征向量, 且满足  $A^2(a_1 + a_2) = a_1 + a_2$, 则  $|A| =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q14",
+    "no": 14,
+    "stem": "设随机事件  $A$ 与  $B$ 相互独立,  $A$ 与  $C$ 相互独立,  $BC = \\varnothing$. 若  $P(A) = P(B) = \\frac{1}{2}$,  $P(AC \\mid AB \\cup C) = \\frac{1}{4}$, 则  $P(C) =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q15",
+    "no": 15,
+    "stem": "求不定积分 $\\int e^{2x}\\arctan\\sqrt{e^{x}-1}\\,dx$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q16",
+    "no": 16,
+    "stem": "将长为2m的铁丝分成三段，依次围成圆、正方形与正三角形。三个图形的面积之和是否存在最小值？若存在，求出最小值。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q17",
+    "no": 17,
+    "stem": "设  $\\Sigma$ 是曲面  $x = \\sqrt{1 - 3y^2 - 3z^2}$ 的前侧，计算曲面积分  $I = \\iint_{\\Sigma} x \\, \\mathrm{d}y \\, \\mathrm{d}z + (y^3 + 2) \\, \\mathrm{d}z \\, \\mathrm{d}x + z^3 \\, \\mathrm{d}x \\, \\mathrm{d}y$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q18",
+    "no": 18,
+    "stem": "已知微分方程  $y' + y = f(x)$，其中  $f(x)$ 是 R 上的连续函数.\n(I) 若  $f(x)=x$，求方程的通解；\n(II) 若  $f(x)$ 是周期为 T 的函数, 证明: 方程存在唯一的以 T 为周期的解.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q19",
+    "no": 19,
+    "stem": "设数列  $\\{x_n\\}$ 满足:  $x_1 > 0, x_n e^{x_n + 1} = e^{x_n} - 1 (n = 1, 2, \\cdots)$. 证明数列  $\\{x_n\\}$ 收敛，并求  $\\lim_{n \\to \\infty} x_n$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q20",
+    "no": 20,
+    "stem": "设实二次型  $f(x_{1},x_{2},x_{3})=(x_{1}-x_{2}+x_{3})^{2}+(x_{2}+x_{3})^{2}+(x_{1}+ax_{3})^{2}$，其中 a 是参数.\n(I) 求  $f(x_{1}, x_{2}, x_{3}) = 0$ 的解；\n(II) 求  $f(x_{1}, x_{2}, x_{3})$ 的规范形.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q21",
+    "no": 21,
+    "stem": "已知a是常数，且矩阵 $A=\\begin{pmatrix}1&2&a\\\\1&3&0\\\\2&7&-a\\end{pmatrix}$可经初等列变换化为矩阵 $B=\\begin{pmatrix}1&a&2\\\\0&1&1\\\\-1&1&1\\end{pmatrix}$\n(I) 求 a;\n(II) 求满足 AP = B 的可逆矩阵 P.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q22",
+    "no": 22,
+    "stem": "设随机变量 X 与 Y 相互独立，X 的概率分布为  $P\\{X=1\\}=P\\{X=-1\\}=\\frac{1}{2}$，Y 服从参数为  $\\lambda$ 的泊松分布。令 Z=XY。\n(I) 求  $Cov(X,Z)$;\n(II) 求 Z 的概率分布.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2018-q23",
+    "no": 23,
+    "stem": "设总体 X 的概率密度为  $f(x;\\sigma)=\\frac{1}{2\\sigma}\\mathrm{e}^{-\\frac{|x|}{\\sigma}}, -\\infty<x<+\\infty$ , 其中  $\\sigma\\in(0,+\\infty)$ 为未知参数， $X_{1},X_{2},\\cdots,X_{n}$ 为来自总体 X 的简单随机样本. 记  $\\sigma$ 的最大似然估计量为  $\\hat{\\sigma}$.\n(I) 求  $\\hat{\\sigma}$;\n(II) 求  $E(\\hat{\\sigma}), D(\\hat{\\sigma})$.",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2019",
+  "title": "2019 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2019-q1",
+    "no": 1,
+    "stem": "当  $x \\to 0$ 时，若  $x - \\tan x$ 与  $x^k$ 是同阶无穷小，则  $k = (\\quad)$\nA. 1.\nB. 2.\nC. 3.\nD. 4.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q2",
+    "no": 2,
+    "stem": "设函数  $f(x)=\\begin{cases}x|x|,&x\\leq0,\\\\x\\ln x,&x>0,\\end{cases}$ 则 x=0 是  $f(x)$ 的 ()\nA. 可导点,极值点.\nB. 不可导点,极值点.\nC. 可导点,非极值点.\nD. 不可导点,非极值点.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q3",
+    "no": 3,
+    "stem": "设  $\\{u_{n}\\}$ 是单调增加的有界数列，则下列级数中收敛的是（）\nA. $\\sum_{n=1}^{\\infty}\\frac{u_{n}}{n}$.\nB. $\\sum_{n=1}^{\\infty}(-1)^{n}\\frac{1}{u_{n}}$.\nC. $\\sum_{n=1}^{\\infty}\\left(1-\\frac{u_{n}}{u_{n+1}}\\right)$.\nD. $\\sum_{n=1}^{\\infty}\\left(u_{n+1}^{2}-u_{n}^{2}\\right)$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q4",
+    "no": 4,
+    "stem": "设函数  $Q(x,y)=\\frac{x}{y^2}$. 如果对上半平面  $(y>0)$ 内的任意有向光滑封闭曲线 C 都有  $\\oint_C P(x,y)\\mathrm{d}x + Q(x,y)\\mathrm{d}y = 0$，那么函数  $P(x,y)$ 可取为 ( )\nA. $y - \\frac{x^2}{y^3}$.\nB. $\\frac{1}{y} - \\frac{x^2}{y^3}$.\nC. $\\frac{1}{x} - \\frac{1}{y}$.\nD. $x - \\frac{1}{y}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q5",
+    "no": 5,
+    "stem": "A 是 3 阶实对称矩阵，E 是 3 阶单位矩阵。若  $A^{2} + A = 2E$，且  $|A| = 4$，则二次型  $x^{T}Ax$ 的规范形为 ( )\nA. $y_{1}^{2}+y_{2}^{2}+y_{3}^{2}$\nB. $y_{1}^{2}+y_{2}^{2}-y_{3}^{2}$\nC. $y_{1}^{2}-y_{2}^{2}-y_{3}^{2}$\nD. $-y_{1}^{2}-y_{2}^{2}-y_{3}^{2}$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q6",
+    "no": 6,
+    "stem": "如图所示，有3张平面两两相交，交线相互平行，它们的方程  $a_{i1}x + a_{i2}y + a_{i3}z = d_{i}$ (i=1,2,3) 组成的线性方程组的系数矩阵和增广矩阵分别记为  $A, \\overline{A}$，则（）\nA. $r(A)=2, r(\\overline{A})=3.$\nB. $r(A)=2, r(\\overline{A})=2.$\nC. $r(A)=1, r(\\overline{A})=2.$\nD. $r(A)=1, r(\\overline{A})=1.$\n（本题含配图，请对照原卷）",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q7",
+    "no": 7,
+    "stem": "设 A, B 为随机事件, 则  $P(A) = P(B)$ 的充分必要条件是 ( )\nA. $P(A \\cup B) = P(A) + P(B).$\nB. $P(AB) = P(A)P(B).$\nC. $P(AB) = P(B\\overline{A})$.\nD. $P(AB) = P(\\overline{A}\\overline{B})$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q8",
+    "no": 8,
+    "stem": "设随机变量 X 与 Y 相互独立，且都服从正态分布  $N(\\mu, \\sigma^2)$，则  $P\\{|X - Y| < 1\\}$ ()\nA. 与  $\\mu$ 无关，而与  $\\sigma^{2}$ 有关.\nB. 与  $\\mu$ 有关，而与  $\\sigma^{2}$ 无关.\nC. 与  $\\mu, \\sigma^{2}$ 都有关.\nD. 与  $\\mu, \\sigma^{2}$ 都无关.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q9",
+    "no": 9,
+    "stem": "设函数  $f(u)$ 可导,  $z = f(\\sin y - \\sin x) + xy$, 则  $\\frac{1}{\\cos x} \\cdot \\frac{\\partial z}{\\partial x} + \\frac{1}{\\cos y} \\cdot \\frac{\\partial z}{\\partial y} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q10",
+    "no": 10,
+    "stem": "微分方程  $2yy' - y^2 - 2 = 0$ 满足条件  $y(0) = 1$ 的特解  $y =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q11",
+    "no": 11,
+    "stem": "幂级数  $\\sum_{n=0}^{\\infty}\\frac{(-1)^{n}}{(2n)!}x^{n}$ 在  $(0,+\\infty)$ 内的和函数  $S(x)=$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q12",
+    "no": 12,
+    "stem": "设  $\\Sigma$ 设为曲面  $x^2 + y^2 + 4z^2 = 4$ ( $z \\geq 0$) 的上侧，则  $\\iint_{\\Sigma} \\sqrt{4 - x^2 - 4z^2} \\, \\mathrm{d}x \\, \\mathrm{d}y =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q13",
+    "no": 13,
+    "stem": "设  $A = (a_1, a_2, a_3)$ 为 3 阶矩阵。若  $a_1, a_2$ 线性无关，且  $a_3 = -a_1 + 2a_2$，则线性方程组 Ax = 0 的通解为 ________。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q14",
+    "no": 14,
+    "stem": "设随机变量  $X$ 的概率密度为  $f(x) = \\begin{cases} \\frac{x}{2}, & 0  E(X) - 1\\} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q15",
+    "no": 15,
+    "stem": "设函数  $y(x)$ 是微分方程  $y' + xy = e^{-\\frac{x^2}{2}}$ 满足条件  $y(0) = 0$ 的特解.\n(I) 求  $y(x)$;\n(II) 求曲线  $y = y(x)$ 的凹凸区间及拐点.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q16",
+    "no": 16,
+    "stem": "设a,b为实数，函数 $z=2+ax^{2}+by^{2}$在点(3,4)处的方向导数中，沿方向 $l=-3i-4j$的方向导数最大，最大值为10.\n(I) 求 a, b;\n(II) 求曲面  $z = 2 + ax^{2} + by^{2} (z \\geqslant 0)$ 的面积.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q17",
+    "no": 17,
+    "stem": "求曲线  $y = e^{-x} \\sin x (x \\geqslant 0)$ 与 x 轴之间图形的面积.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q18",
+    "no": 18,
+    "stem": "设  $a_{n}=\\int_{0}^{1}x^{n}\\sqrt{1-x^{2}}dx(n=0,1,2,\\cdots)$.\n(I) 证明数列  $\\{a_n\\}$ 单调递减，且  $a_n = \\frac{n-1}{n+2} a_{n-2} (n=2,3,\\cdots)$;\n(II) 求  $\\lim_{n \\to \\infty} \\frac{a_n}{a_{n-1}}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q19",
+    "no": 19,
+    "stem": "设  $\\Omega$ 是由锥面  $x^{2}+(y-z)^{2}=(1-z)^{2}(0 \\leqslant z \\leqslant 1)$ 与平面 z=0 围成的锥体，求  $\\Omega$ 的形心坐标.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q20",
+    "no": 20,
+    "stem": "设向量组  $\\alpha_{1}=(1,2,1)^{T}$， $\\alpha_{2}=(1,3,2)^{T}$， $\\alpha_{3}=(1,a,3)^{T}$ 为  $R^{3}$ 的一个基， $\\beta=(1,1,1)^{T}$ 在这个基下的坐标为  $(b,c,1)^{T}$.\n(I) 求 a, b, c;\n(II) 证明  $\\alpha_{2},\\alpha_{3},\\beta$ 为  $R^{3}$ 的一个基，并求  $\\alpha_{2},\\alpha_{3},\\beta$ 到  $\\alpha_{1},\\alpha_{2},\\alpha_{3}$ 的过渡矩阵.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q21",
+    "no": 21,
+    "stem": "已知矩阵  $A=\\begin{pmatrix}-2&-2&1\\\\2&x&-2\\\\0&0&-2\\end{pmatrix}$ 与  $B=\\begin{pmatrix}2&1&0\\\\0&-1&0\\\\0&0&y\\end{pmatrix}$ 相似.\n(I) 求 x, y;\n(II) 求可逆矩阵 P 使得  $P^{-1}AP = B$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q22",
+    "no": 22,
+    "stem": "设随机变量  $X$ 与  $Y$ 相互独立,  $X$ 服从参数为 1 的指数分布,  $Y$ 的概率分布为  $P\\{Y=-1\\} = p$,  $P\\{Y=1\\} = 1 - p$ ( $0 < p < 1$). 令  $Z = XY$.\n(I) 求 Z 的概率密度;\n(II)p为何值时，X与Z不相关；\n(III) X 与 Z 是否相互独立？",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2019-q23",
+    "no": 23,
+    "stem": "设总体 X 的概率密度为  $f(x;\\sigma^2)=\\begin{cases}\\dfrac{A}{\\sigma}\\mathrm{e}^{-\\dfrac{(x-\\mu)^2}{2\\sigma^2}},&x\\geqslant\\mu,\\\\0,&x0$ 是未知参数， $A$ 是常数。 $X_1,X_2,\\cdots,X_n$ 是来自总体  $X$ 的简单随机样本。\n(I) 求 A;\n(II) 求  $\\sigma^{2}$ 的最大似然估计量.",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2020",
+  "title": "2020 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2020-q1",
+    "no": 1,
+    "stem": "当  $x \\to 0^{+}$ 时，下列无穷小量中最高阶的是 ( ).\nA. $\\int_{0}^{x}\\left(e^{t^{2}}-1\\right)dt$\nB. $\\int_{0}^{x}\\ln\\left(1+\\sqrt{t^{3}}\\right)dt$\nC. $\\int_{0}^{\\sin x}\\sin t^{2}dt$\nD. $\\int_{0}^{1-\\cos x}\\sqrt{\\sin^{3}t}dt$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q2",
+    "no": 2,
+    "stem": "设函数  $f(x)$ 在区间  $(-1,1)$ 内有定义，且  $\\lim_{x\\to0}f(x)=0$，则（）.\nA. 当  $\\lim_{x\\to0}\\frac{f(x)}{\\sqrt{|x|}}=0$ 时,  $f(x)$ 在 x=0 处可导\nB. 当  $\\lim_{x\\to0}\\frac{f(x)}{x^{2}}=0$ 时,  $f(x)$ 在 x=0 处可导\nC. 当  $f(x)$ 在 x=0 处可导时,  $\\lim_{x\\to0}\\frac{f(x)}{\\sqrt{|x|}}=0$\nD. 当  $f(x)$ 在 x=0 处可导时,  $\\lim_{x\\to0}\\frac{f(x)}{x^{2}}=0$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q3",
+    "no": 3,
+    "stem": "设函数  $f(x,y)$ 在点  $(0,0)$ 处可微,  $f(0,0)=0, n=\\left(\\frac{\\partial f}{\\partial x}, \\frac{\\partial f}{\\partial y}, -1\\right)|_{(0,0)}$, 非零向量  $\\alpha$ 与 n 垂直, 则 ( )\nA. $\\lim_{(x,y)\\to(0,0)}\\frac{|n\\cdot(x,y,f(x,y))|}{\\sqrt{x^{2}+y^{2}}}$ 存在\nB. $\\lim_{(x,y)\\to(0,0)}\\frac{|n\\times(x,y,f(x,y))|}{\\sqrt{x^{2}+y^{2}}}$ 存在\nC. $\\lim_{(x,y)\\to(0,0)}\\frac{|a\\cdot(x,y,f(x,y))|}{\\sqrt{x^{2}+y^{2}}}$ 存在\nD. $\\lim_{(x,y)\\to(0,0)}\\frac{|a\\times(x,y,f(x,y))|}{\\sqrt{x^{2}+y^{2}}}$ 存在",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q4",
+    "no": 4,
+    "stem": "设 R 为幂级数  $\\sum_{n=1}^{\\infty} a_{n} x^{n}$ 的收敛半径, r 是实数, 则 ( ).\nA. 当  $\\sum_{n=1}^{\\infty}a_{2n}r^{2n}$ 发散时,  $|r|\\geqslant R$\nB. 当  $\\sum_{n=1}^{\\infty}a_{2n}r^{2n}$ 收敛时,  $|r|\\leqslant R$\nC. 当  $|r| \\geqslant R$ 时,  $\\sum_{n=1}^{\\infty}a_{2n}r^{2n}$ 发散\nD. 当  $|r| \\leqslant R$ 时,  $\\sum_{n=1}^{\\infty}a_{2n}r^{2n}$ 收敛",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q5",
+    "no": 5,
+    "stem": "若矩阵 A 经过初等列变换化成 B，则 ( ).\nA. 存在矩阵 P，使得 PA = B\nB. 存在矩阵 P，使得 BP = A\nC. 存在矩阵 P，使得 PB = A\nD. 方程组 AX = 0 与 BX = 0 同解",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q6",
+    "no": 6,
+    "stem": "已知直线  $L_1: \\frac{x - a_2}{a_1} = \\frac{y - b_2}{b_1} = \\frac{z - c_2}{c_1}$ 与直线  $L_2: \\frac{x - a_3}{a_2} = \\frac{y - b_3}{b_2} = \\frac{z - c_3}{c_2}$ 相交于一点，记向量  $a_i = \\begin{pmatrix} a_i \\\\ b_i \\\\ c_i \\end{pmatrix}$,  $i = 1, 2, 3$，则（ ）。\nA. $a_1$ 可由  $a_2, a_3$ 线性表示\nB. $a_2$ 可由  $a_1, a_3$ 线性表示\nC. $a_3$ 可由  $a_1, a_2$ 线性表示\nD. $a_1, a_2, a_3$ 线性无关",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q7",
+    "no": 7,
+    "stem": "设 A, B, C 为三个随机事件，且  $P(A) = P(B) = P(C) = \\frac{1}{4}$,  $P(AB) = 0$,  $P(AC) = P(BC) = \\frac{1}{12}$，则 A，B，C 中恰有一个事件发生的概率为（）.\nA. $\\frac{3}{4}$\nB. $\\frac{2}{3}$\nC. $\\frac{1}{2}$\nD. $\\frac{5}{12}$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q8",
+    "no": 8,
+    "stem": "设  $X_1, X_2, \\cdots, X_{100}$ 为来自总体  $X$ 的简单随机样本，其中  $P\\{X=0\\} = P\\{X=1\\} = \\frac{1}{2}$， $\\Phi(x)$ 表示标准正态分布函数，利用中心极限定理可得  $P\\left\\{\\sum_{i=1}^{100} X_i \\leq 55\\right\\}$ 的近似值为（ ）。\nA. $1 - \\Phi(1)$ \\quad\nB. $\\Phi(1)$ \\quad\nC. $1 - \\Phi(0.2)$ \\quad\nD. $\\Phi(0.2)$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q9",
+    "no": 9,
+    "stem": "$\\lim_{x \\to 0} \\left[ \\frac{1}{e^x - 1} - \\frac{1}{\\ln(1 + x)} \\right] = \\underline{\\qquad}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q10",
+    "no": 10,
+    "stem": "设  $\\begin{cases} x = \\sqrt{t^2 + 1}, \\\\ y = \\ln(t + \\sqrt{t^2 + 1}) \\end{cases}$，则  $\\left. \\frac{d^2 y}{dx^2} \\right|_{t=1} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q11",
+    "no": 11,
+    "stem": "设函数  $f(x)$ 满足  $f''(x) + af'(x) + f(x) = 0 (a > 0)$，且  $f(0) = m, f'(0) = n$，则  $\\int_{0}^{+\\infty} f(x) \\, dx =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q12",
+    "no": 12,
+    "stem": "设函数  $f(x,y) = \\int_0^{xy} e^{xt^2} dt$，则  $\\left. \\frac{\\partial^2 f}{\\partial x \\partial y} \\right|_{(1,1)} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q13",
+    "no": 13,
+    "stem": "行列式  $\\begin{vmatrix} a & 0 & -1 & 1 \\\\ 0 & a & 1 & -1 \\\\ -1 & 1 & a & 0 \\\\ 1 & -1 & 0 & a \\end{vmatrix}$ = ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q14",
+    "no": 14,
+    "stem": "设  $X$ 服从区间  $\\left(-\\frac{\\pi}{2}, \\frac{\\pi}{2}\\right)$ 上的均匀分布， $Y = \\sin X$，则  $\\text{Cov}(X, Y) =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q15",
+    "no": 15,
+    "stem": "求函数  $f(x,y)=x^{3}+8y^{3}-xy$ 的极值.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q16",
+    "no": 16,
+    "stem": "计算曲线积分  $I=\\int_{L}\\frac{4x-y}{4x^{2}+y^{2}}dx+\\frac{x+y}{4x^{2}+y^{2}}dy$，其中 L 是  $x^{2}+y^{2}=2$，方向为逆时针方向.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q17",
+    "no": 17,
+    "stem": "设数列$\\{a_n\\}$满足：$a_1=1,(n+1)a_{n+1}=\\left(n+\\frac{1}{2}\\right)a_n$，证明：当$|x|<1$时，幂级数$\\sum_{n=1}^{\\infty}a_nx^n$收敛，并求其和函数。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q18",
+    "no": 18,
+    "stem": "设  $\\Sigma$ 为曲面  $z = \\sqrt{x^2 + y^2} (1 \\leq x^2 + y^2 \\leq 4)$ 的下侧,  $f(x)$ 是连续函数, 计算\n$$\nI=\\iint_{\\Sigma}[x f(x y)+2x-y]\\mathrm{d}y\\mathrm{d}z+[y f(x y)+2y+x]\\mathrm{d}z\\mathrm{d}x+[z f(x y)+z]\\mathrm{d}x\\mathrm{d}y.\n$$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q19",
+    "no": 19,
+    "stem": "设函数  $f(x)$ 在区间  $[0,2]$ 上具有连续导数,  $f(0)=f(2)=0$,  $M=\\max_{x\\in[0,2]}\\{|f(x)|\\}$, 证明：\n(I) 存在  $\\xi \\in (0,2)$，使得  $\\left|f'(\\xi)\\right| \\geqslant M$；\n(II) 若对任意的  $x \\in (0,2), |f'(x)| \\leq M$，则 M = 0.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q20",
+    "no": 20,
+    "stem": "设二次型  $f(x_1, x_2) = x_1^2 - 4x_1x_2 + 4x_2^2$ 经正交变换  $\\begin{pmatrix} x_1 \\\\ x_2 \\end{pmatrix} = Q \\begin{pmatrix} y_1 \\\\ y_2 \\end{pmatrix}$ 化为二次型  $g(y_1, y_2) = ay_1^2 + 4y_1y_2 + by_2^2$，其中  $a \\geq b$.\n(I) 求 a, b 的值;\n(II) 求正交矩阵 Q.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q21",
+    "no": 21,
+    "stem": "设 A 为 2 阶矩阵,  $P = (a, A a)$, 其中 a 是非零向量且不是 A 的特征向量.\n(I) 证明 P 为可逆矩阵；\n.尼阵.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q22",
+    "no": 22,
+    "stem": "设随机变量 $X_1, X_2, X_3$相互独立，其中 $X_1$与 $X_2$均服从标准正态分布， $X_3$的概率分布为 $P\\{X_3=0\\} = P\\{X_3=1\\} = \\frac{1}{2}$. $Y = X_3X_1 + (1 - X_3)X_2$.\n(I) 求二维随机变量  $(X_{1}, Y)$ 的分布函数，结果用标准正态分布函数  $\\Phi(x)$ 表示；\n(II) 证明随机变量 Y 服从标准正态分布.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2020-q23",
+    "no": 23,
+    "stem": "设某元件的使用寿命 T 的分布函数为  $F(t)=\\left\\{\\begin{aligned}&1-\\mathrm{e}^{-\\left(\\frac{t}{\\theta}\\right)^{m}},&t\\geqslant0,\\\\ &0,& 其他,\\end{aligned}\\right.$，其中  $\\theta,m$ 为参数且大于零.\n(I) 求概率  $P\\{T > t\\}$ 与  $P\\{T > s + t \\mid T > s\\}$，其中 s > 0, t > 0;\n(II) 任取 n 个这种元件做寿命试验, 测得它们的寿命分别为  $t_1, t_2, \\cdots, t_n$, 若 m 已知, 求  $\\theta$ 的最大似然估计值  $\\hat{\\theta}$.",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2021",
+  "title": "2021 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2021-q1",
+    "no": 1,
+    "stem": "函数  $f(x)=\\begin{cases}\\frac{e^{x}-1}{x},&x\\neq0,\\\\1,&x=0\\end{cases}$ 在 x=0 处().\nA. 连续且取得极大值\nB. 连续且取得极小值\nC. 可导且导数等于零\nD. 可导且导数不为零",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q2",
+    "no": 2,
+    "stem": "设函数  $f(x,y)$ 可微，且  $f(x+1,e^x) = x(x+1)^2$,  $f(x,x^2) = 2x^2 \\ln x$，则  $df(1,1) = (\\ )$.\nA. $dx + dy$\nB. dx - dy\nC. dy\nD. -dy",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q3",
+    "no": 3,
+    "stem": "设函数  $f(x)=\\frac{\\sin x}{1+x^{2}}$ 在 x=0 处的 3 次泰勒多项式为  $ax+bx^{2}+cx^{3}$，则 ( ).\nA. a=1, b=0, c=-\\frac{7}{6}\nB. a=1, b=0, c=\\frac{7}{6}\nC. a=-1, b=-1, c=-\\frac{7}{6}\nD. a=-1, b=-1, c=\\frac{7}{6}",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q4",
+    "no": 4,
+    "stem": "设函数  $f(x)$ 在区间  $[0,1]$ 上连续，则  $\\int_{0}^{1}f(x)dx = (\\quad)$.\nA. $\\lim_{n\\to\\infty}\\sum_{k=1}^{n}f\\left(\\frac{2k-1}{2n}\\right)\\frac{1}{2n}$\nB. $\\lim_{n\\to\\infty}\\sum_{k=1}^{n}f\\left(\\frac{2k-1}{2n}\\right)\\frac{1}{n}$\nC. $\\lim_{n\\to\\infty}\\sum_{k=1}^{2n}f\\left(\\frac{k-1}{2n}\\right)\\frac{1}{n}$\nD. $\\lim_{n\\to\\infty}\\sum_{k=1}^{2n}f\\left(\\frac{k}{2n}\\right)\\frac{2}{n}$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q5",
+    "no": 5,
+    "stem": "设二次型  $f(x_{1}, x_{2}, x_{3}) = (x_{1} + x_{2})^{2} + (x_{2} + x_{3})^{2} - (x_{3} - x_{1})^{2}$ 的正惯性指数与负惯性指数依次为().\nA. 2,0\nB. 1,1\nC. 2,1\nD. 1,2",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q6",
+    "no": 6,
+    "stem": "已知  $\\alpha_1 = \\begin{pmatrix} 1 \\\\ 0 \\\\ 1 \\end{pmatrix}$,  $\\alpha_2 = \\begin{pmatrix} 1 \\\\ 2 \\\\ 1 \\end{pmatrix}$,  $\\alpha_3 = \\begin{pmatrix} 3 \\\\ 1 \\\\ 2 \\end{pmatrix}$,  $\\beta_1 = \\alpha_1$,  $\\beta_2 = \\alpha_2 - k\\beta_1$,  $\\beta_3 = \\alpha_3 - l_1\\beta_1 - l_2\\beta_2$, 若  $\\beta_1, \\beta_2, \\beta_3$ 两两相交，则  $l_1, l_2$ 依次为 ( ).\nA. $\\frac{5}{2}, \\frac{1}{2}$ \\quad\nB. $-\\frac{5}{2}, \\frac{1}{2}$ \\quad\nC. $\\frac{5}{2}, -\\frac{1}{2}$ \\quad\nD. $-\\frac{5}{2}, -\\frac{1}{2}$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q7",
+    "no": 7,
+    "stem": "设 A, B 为 n 阶实矩阵，下列结论不成立的是 ( ).\nA. $r \\left( \\begin{array}{cc} A & O \\\\ O & A^{T} A \\end{array} \\right) = 2r(A)$\nB. $r \\left( \\begin{array}{cc} A & AB \\\\ O & A^{T} \\end{array} \\right) = 2r(A)$\nC. $r \\left( \\begin{array}{cc} A & BA \\\\ O & AA^{T} \\end{array} \\right) = 2r(A)$\nD. $r \\left( \\begin{array}{cc} A & O \\\\ BA & A^{T} \\end{array} \\right) = 2r(A)$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q8",
+    "no": 8,
+    "stem": "设  $A, B$ 为随机事件, 且  $0  P(A)$，则  $P(\\overline{A} \\mid \\overline{B}) > P(\\overline{A})$\nC. 若  $P(A \\mid B) > P(A \\mid \\overline{B})$，则  $P(A \\mid B) > P(A)$\nD. 若  $P(A \\mid A \\cup B) > P(\\overline{A} \\mid A \\cup B)$，则  $P(A) > P(B)$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q9",
+    "no": 9,
+    "stem": "设  $(X_1, Y_1), (X_2, Y_2)$,  $\\cdots$,  $(X_n, Y_n)$ 为来自总体  $N\\left(\\mu_1, \\mu_2; \\sigma_1^2, \\sigma_2^2; \\rho\\right)$ 的简单随机样本，令  $\\theta = \\mu_1 - \\mu_2$,  $\\overline{X} = \\frac{1}{n} \\sum_{i=1}^{n} X_i$,  $\\overline{Y} = \\frac{1}{n} \\sum_{i=1}^{n} Y_i$,  $\\hat{\\theta} = \\overline{X} - \\overline{Y}$, 则（）.\nA. $\\hat{\\theta}$ 是  $\\theta$ 的无偏估计,  $D\\left(\\hat{\\theta}\\right) = \\frac{\\sigma_1^2 + \\sigma_2^2}{n}$\nB. $\\hat{\\theta}$ 不是  $\\theta$ 的无偏估计,  $D\\left(\\hat{\\theta}\\right) = \\frac{\\sigma_1^2 + \\sigma_2^2}{n}$\nC. $\\hat{\\theta}$ 是  $\\theta$ 的无偏估计,  $D\\left(\\hat{\\theta}\\right) = \\frac{\\sigma_1^2 + \\sigma_2^2 - 2\\rho\\sigma_1\\sigma_2}{n}$\nD. $\\hat{\\theta}$ 不是  $\\theta$ 的无偏估计,  $D\\left(\\hat{\\theta}\\right) = \\frac{\\sigma_1^2 + \\sigma_2^2 - 2\\rho\\sigma_1\\sigma_2}{n}$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q10",
+    "no": 10,
+    "stem": "设  $X_1, X_2, \\cdots, X_{16}$ 是来自总体  $N(\\mu, 4)$ 的简单随机样本，考虑假设检验问题： $H_0: \\mu \\leq 10, H_1: \\mu > 10$， $\\Phi(x)$ 表示标准正态分布函数，若该检验问题的拒绝域为  $W = \\{\\overline{X} \\geq 11\\}$，其中  $\\overline{X} = \\frac{1}{16} \\sum_{i=1}^{16} X_i$，则  $\\mu =$ 11.5 时，该检验犯第二类错误的概率为（ ）。\nA. $1 - \\Phi(0.5)$\nB. $1 - \\Phi(1)$\nC. $1 - \\Phi(1.5)$\nD. $1 - \\Phi(2)$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q11",
+    "no": 11,
+    "stem": "$\\int_{0}^{+\\infty}\\frac{dx}{x^{2}+2x+2}=$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q12",
+    "no": 12,
+    "stem": "设函数  $y = y(x)$ 由参数方程  $\\begin{cases} x = 2e^t + t + 1, \\\\ y = 4(t - 1)e^t + t^2 \\end{cases}$ 所确定，则  $\\left. \\frac{d^2y}{dx^2} \\right|_{t=0} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q13",
+    "no": 13,
+    "stem": "欧拉方程  $x^2 y'' + xy' - 4y = 0$ 满足条件  $y(1) = 1, y'(1) = 2$ 的解为  $y =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q14",
+    "no": 14,
+    "stem": "设  $\\Sigma$ 为空间区域  $\\{(x,y,z) \\mid x^2 + 4y^2 \\leq 4, 0 \\leq z \\leq 2\\}$ 表面的外侧，则曲面积分  $\\iint_{\\Sigma} x^2 \\mathrm{d}y \\mathrm{d}z + y^2 \\mathrm{d}z \\mathrm{d}x + z \\mathrm{d}x \\mathrm{d}y =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q15",
+    "no": 15,
+    "stem": "设  $A = (a_{ij})$ 为 3 阶矩阵,  $A_{ij}$ 为代数余子式, 若 A 的每行元素之和均为 2, 且  $|A| = 3$, 则  $A_{11} + A_{21} + A_{31} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q16",
+    "no": 16,
+    "stem": "甲、乙两个盒子中各装有2个红球和2个白球，先从甲盒中任取一球，观察颜色后放入乙盒中，再从乙盒中任取一球，令 X, Y 分别表示从甲盒和乙盒中取到的红球个数，则 X 与 Y 的相关系数为 ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q17",
+    "no": 17,
+    "stem": "求极限  $\\lim_{x\\to0}\\left(\\frac{1+\\int_{0}^{x}e^{t^{2}}dt}{e^{x}-1}-\\frac{1}{\\sin x}\\right)$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q18",
+    "no": 18,
+    "stem": "设  $u_{n}(x)=\\mathrm{e}^{-nx}+\\frac{x^{n+1}}{n(n+1)}(n=1,2,\\cdots)$，求级数  $\\sum_{n=1}^{\\infty}u_{n}(x)$ 的收敛域及和函数.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q19",
+    "no": 19,
+    "stem": "已知曲线  $C:\\left\\{\\begin{aligned}&x^{2}+2y^{2}-z=6,\\\\&4x+2y+z=30,\\end{aligned}\\right.$ 求 C 上的点到 xOy 坐标面距离的最大值.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q20",
+    "no": 20,
+    "stem": "设  $D \\subset R^2$ 是有界单连通闭区域,  $I(D) = \\iint_D (4 - x^2 - y^2) \\, \\mathrm{d}x \\, \\mathrm{d}y$ 取得最大值的积分区域为  $D_1$.\n(I) 求  $I(D_{1})$ 的值;\n(II) 计算  $\\int_{\\partial D_1}\\frac{(xe^{x^2+4y^2}+y)\\mathrm{d}x+\\left(4ye^{x^2+4y^2}-x\\right)\\mathrm{d}y}{x^2+4y^2}$，其中  $\\partial D_1$ 是  $D_1$ 的正向边界.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q21",
+    "no": 21,
+    "stem": "已知  $A=\\begin{pmatrix} a & 1 & -1 \\\\ 1 & a & -1 \\\\ -1 & -1 & a \\end{pmatrix}$.\n(I) 求正交矩阵 P，使得  $P^{T}AP$ 为对角矩阵；\n(II) 求正定矩阵 C，使得  $C^{2} = (a + 3)E - A$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2021-q22",
+    "no": 22,
+    "stem": "在区间 $(0,2)$上随机取一点,将该区间分成两段,较短一段的长度为X,较长一段的长度为Y,令 $Z=\\frac{Y}{X}$.\n(I) 求 X 的概率密度;\n(II) 求 Z 的概率密度;\n(III) 求  $E\\left(\\frac{X}{Y}\\right)$.",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2022",
+  "title": "2022 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2022-q1",
+    "no": 1,
+    "stem": "设  $\\lim_{x \\to 1} \\frac{f(x)}{\\ln x} = 1$，则（）\nA. $f(1)=0.$\nB. $\\lim_{x\\to1}f(x)=0.$\nC. $f'(1)=1.$\nD. $\\lim_{x\\to1}f'(x)=1$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q2",
+    "no": 2,
+    "stem": "设  $f(u)$ 可导, z = x y f $\\left(\\frac{y}{x}\\right)$, 若  $x\\frac{\\partial z}{\\partial x} + y\\frac{\\partial z}{\\partial y} = y^2 (\\ln y - \\ln x)$, 则 ( )\nA. f(1) =  $\\frac{1}{2}$, f'(1) = 0.\nB. f(1) = 0, f'(1) =  $\\frac{1}{2}$.\nC. f(1) =  $\\frac{1}{2}$, f'(1) = 1.\nD. f(1) = 0, f'(1) = 1.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q3",
+    "no": 3,
+    "stem": "设数列 $\\{x_n\\}$ 满足 $-\\frac{\\pi}{2} \\leqslant x_n \\leqslant \\frac{\\pi}{2}$，则（ ）\nA. 若 $\\lim_{n \\to \\infty} \\cos(\\sin x_n)$ 存在，则 $\\lim_{n \\to \\infty} x_n$ 存在。\nB. 若 $\\lim_{n \\to \\infty} \\sin(\\cos x_n)$ 存在，则 $\\lim_{n \\to \\infty} x_n$ 存在。\nC. 若 $\\lim_{n \\to \\infty} \\cos(\\sin x_n)$ 存在，则 $\\lim_{n \\to \\infty} \\sin x_n$ 存在，但 $\\lim_{n \\to \\infty} x_n$ 不一定存在。\nD. 若 $\\lim_{n \\to \\infty} \\sin(\\cos x_n)$ 存在，则 $\\lim_{n \\to \\infty} \\cos x_n$ 存在，但 $\\lim_{n \\to \\infty} x_n$ 不一定存在。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q4",
+    "no": 4,
+    "stem": "若  $I_1 = \\int_0^1 \\frac{x}{2(1 + \\cos x)} \\, dx$,  $I_2 = \\int_0^1 \\frac{\\ln(1 + x)}{1 + \\cos x} \\, dx$,  $I_3 = \\int_0^1 \\frac{2x}{1 + \\sin x} \\, dx$, 则 ( )\nA. $I_1 < I_2 < I_3$.\nB. $I_2 < I_1 < I_3$.\nC. $I_1 < \\bar{I}_3 < I_2$.\nD. $I_3 < I_2 < I_1$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q5",
+    "no": 5,
+    "stem": "下列4个条件中,3阶矩阵A可相似对角化的一个充分非必要条件是()\nA. A 有 3 个不同的特征值.\nB. A 有 3 个线性无关的特征向量.\nC. A 有 3 个两两线性无关的特征向量.\nD. A 的属于不同特征值的特征向量相互正交.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q6",
+    "no": 6,
+    "stem": "设 A, B 为 n 阶矩阵, E 为 n 阶单位矩阵, 若方程组 Ax = 0 与 Bx = 0 同解, 则 ( )\nA. $\\begin{pmatrix} A & O \\\\ E & B \\end{pmatrix}$y = 0 只有零解.\nB. $\\begin{pmatrix} E & A \\\\ O & AB \\end{pmatrix}$y = 0 只有零解.\nC. $\\begin{pmatrix} A & B \\\\ O & B \\end{pmatrix}$y=0 与  $\\begin{pmatrix} B & A \\\\ O & A \\end{pmatrix}$y=0 同解.\nD. $\\begin{pmatrix} AB & B \\\\ O & A \\end{pmatrix}$y=0 与  $\\begin{pmatrix} BA & A \\\\ O & B \\end{pmatrix}$y=0 同解.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q7",
+    "no": 7,
+    "stem": "设  $\\alpha_1 = (\\lambda, 1, 1)^T$,  $\\alpha_2 = (1, \\lambda, 1)^T$,  $\\alpha_3 = (1, 1, \\lambda)^T$,  $\\alpha_4 = (1, \\lambda, \\lambda^2)^T$, 若  $\\alpha_1, \\alpha_2, \\alpha_3$ 与  $\\alpha_1, \\alpha_2, \\alpha_4$ 等价，则  $\\lambda$ 的取值范围是 ( )\nA. $\\{0, 1\\}$.\nB. $\\{\\lambda \\mid \\lambda \\in \\mathbb{R}, \\lambda \\neq -2\\}$.\nC. $\\{\\lambda \\mid \\lambda \\in \\mathbb{R}, \\lambda \\neq -1, \\lambda \\neq -2\\}$.\nD. $\\{\\lambda \\mid \\lambda \\in \\mathbb{R}, \\lambda \\neq -1\\}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q8",
+    "no": 8,
+    "stem": "设随机变量 X 服从区间  $(0,3)$ 上的均匀分布，随机变量 Y 服从参数为 2 的泊松分布，且 X 与 Y 的协方差为 -1，则  $D(2X-Y+1)=$ ( )\nA. 1.\nB. 5.\nC. 9.\nD. 12.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q9",
+    "no": 9,
+    "stem": "设随机变量  $X_1, X_2, \\cdots, X_n$ 独立同分布，且  $X_1$ 的 4 阶矩存在， $E(X_1^k) = \\mu_k$ ( $k=1,2,3,4$)，则根据切比雪夫不等式，对任意  $\\varepsilon > 0$，都有  $P\\left\\{\\left|\\frac{1}{n}\\sum_{i=1}^{n}X_i^2 - \\mu_2\\right| \\geq \\varepsilon\\right\\} \\leq (\\quad)$\nA. $\\frac{\\mu_4 - \\mu_2^2}{n\\varepsilon^2}$.\nB. $\\frac{\\mu_4 - \\mu_2^2}{\\sqrt{n}\\varepsilon^2}$.\nC. $\\frac{\\mu_2 - \\mu_1^2}{n\\varepsilon^2}$.\nD. $\\frac{\\mu_2 - \\mu_1^2}{\\sqrt{n}\\varepsilon^2}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q10",
+    "no": 10,
+    "stem": "设随机变量  $X \\sim N(0,1)$，若在 X = x 的条件下，随机变量  $Y \\sim N(x,1)$，则 X 与 Y 的相关系数为 ( )\nA. $\\frac{1}{4}$.\nB. $\\frac{1}{2}$.\nC. $\\frac{\\sqrt{3}}{3}$.\nD. $\\frac{\\sqrt{2}}{2}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q11",
+    "no": 11,
+    "stem": "函数  $f(x,y)=x^{2}+2y^{2}$ 在点  $(0,1)$ 处的最大方向导数为 ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q12",
+    "no": 12,
+    "stem": "$\\int_{1}^{e^{2}}\\frac{\\ln x}{\\sqrt{x}}\\,dx=$________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q13",
+    "no": 13,
+    "stem": "当  $x \\geqslant 0, y \\geqslant 0$ 时,  $x^{2} + y^{2} \\leqslant ke^{x+y}$ 恒成立, 则 k 的取值范围是 ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q14",
+    "no": 14,
+    "stem": "已知级数  $\\sum_{n=1}^{\\infty}\\frac{n!}{n^n}e^{-nx}$ 的收敛域为  $(a,+\\infty)$，则  $a=$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q15",
+    "no": 15,
+    "stem": "已知矩阵  $A$ 和  $E - A$ 可逆, 其中  $E$ 为单位矩阵, 若矩阵  $B$ 满足  $[E - (E - A)^{-1}]B = A$, 则  $B - A =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q16",
+    "no": 16,
+    "stem": "设  $A, B, C$ 为随机事件，且  $A$ 与  $B$ 互不相容， $A$ 与  $C$ 互不相容， $B$ 与  $C$ 相互独立， $P(A) = P(B) = P(C) = \\frac{1}{3}$，则  $P(B \\cup C \\mid A \\cup B \\cup C) =$ ________。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q17",
+    "no": 17,
+    "stem": "设函数  $y(x)$ 是微分方程  $y' + \\frac{1}{2\\sqrt{x}}y = 2 + \\sqrt{x}$ 的满足条件  $y(1) = 3$ 的解，求曲线  $y = y(x)$ 的渐近线.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q18",
+    "no": 18,
+    "stem": "已知平面区域  $D=\\left\\{(x,y)\\mid y-2\\leqslant x\\leqslant\\sqrt{4-y^{2}},0\\leqslant y\\leqslant2\\right\\}$，计算  $I=\\iint_{D}\\frac{(x-y)^{2}}{x^{2}+y^{2}}dxdy$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q19",
+    "no": 19,
+    "stem": "已知曲线  $L$ 是曲面  $\\Sigma: 4x^2 + y^2 + z^2 = 1$,  $x \\geq 0$,  $y \\geq 0$,  $z \\geq 0$ 的边界，曲面  $\\Sigma$ 方向朝上，曲线  $L$ 的方向和曲面  $\\Sigma$ 的方向符合右手法则，计算  $I = \\oint_L (yz^2 - \\cosz) \\, \\mathrm{d}x + 2xz^2 \\, \\mathrm{d}y + (2xyz + xsinz) \\, \\mathrm{d}z$。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q20",
+    "no": 20,
+    "stem": "设函数 $f(x)$在 $(-\\infty,+\\infty)$上有二阶连续导数，证明： $f''(x) \\geqslant 0$的充分必要条件是对任意不同的实数a,b，都有 $f\\left(\\frac{a+b}{2}\\right) \\leqslant \\frac{1}{b-a} \\int_{a}^{b} f(x) \\, dx$成立.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q21",
+    "no": 21,
+    "stem": "设二次型  $f(x_1, x_2, x_3) = \\sum_{i=1}^{3} \\sum_{j=1}^{3} ij x_i x_j$.\n(I) 写出  $f(x_{1}, x_{2}, x_{3})$ 对应的矩阵;\n(II) 求正交变换 x = Qy 将  $f(x_{1}, x_{2}, x_{3})$ 化为标准形;\n(III) 求  $f(x_{1}, x_{2}, x_{3}) = 0$ 的解.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2022-q22",
+    "no": 22,
+    "stem": "设 $X_1,X_2,\\cdots,X_n$为来自均值为 $\\theta$的指数分布总体的简单随机样本， $Y_1,Y_2,\\cdots,Y_m$为来自均值为 $2\\theta$的指数分布总体的简单随机样本，且两样本相互独立，其中 $\\theta(\\theta>0)$是未知参数。利用样本 $X_1,X_2,\\cdots,X_n$， $Y_1,Y_2,\\cdots,Y_m$，求 $\\theta$的最大似然估计量 $\\hat{\\theta}$，并求 $D(\\hat{\\theta})$。",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2023",
+  "title": "2023 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2023-q1",
+    "no": 1,
+    "stem": "曲线  $y = x \\ln \\left( e + \\frac{1}{x-1} \\right)$ 的斜渐近线方程为\nA. $y = x + e.$\nB. $y = x + \\frac{1}{e}.$\nC. y = x.\nD. $y = x - \\frac{1}{e}.$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q2",
+    "no": 2,
+    "stem": "若微分方程  $y'' + ay' + by = 0$ 的解在  $(-\\infty, +\\infty)$ 上有界，则\nA. a0.\nB. a>0, b>0.\nC. a=0, b>0.\nD. a=0, b<0.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q3",
+    "no": 3,
+    "stem": "已知  $y = f(x)$ 由  $\\begin{cases} x = 2t + |t|, \\\\ y = |t| \\sin t \\end{cases}$ 确定，则\nA. $f(x)$ 连续， $f'(0)$ 不存在.\nB. $f'(0)$ 存在， $f'(x)$ 在  $x = 0$ 处不连续.\nC. $f'(x)$ 连续， $f''(0)$ 不存在.\nD. $f''(0)$ 存在， $f''(x)$ 在  $x = 0$ 处不连续.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q4",
+    "no": 4,
+    "stem": "$a_{n}<b_{n}(n=1,2,\\cdots)$.若级数 $\\sum_{n=1}^{\\infty}a_{n}$与 $\\sum_{n=1}^{\\infty}b_{n}$均收敛，则“ $\\sum_{n=1}^{\\infty}a_{n}$绝对收敛”是“ $\\sum_{n=1}^{\\infty}b_{n}$绝对收敛”的\nA. 充分必要条件.\nB. 充分不必要条件.\nC. 必要不充分条件.\nD. 既不充分也不必要条件.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q5",
+    "no": 5,
+    "stem": "已知 $n$ 阶矩阵 $A, B, C$ 满足 $ABC = O$，$E$ 为 $n$ 阶单位矩阵。记矩阵 $\\begin{bmatrix} O & A \\\\ BC & E \\end{bmatrix}, \\begin{bmatrix} AB & C \\\\ O & E \\end{bmatrix}, \\begin{bmatrix} E & AB \\\\ AB & O \\end{bmatrix}$ 的秩分别为 $r_1, r_2, r_3$，则\nA. $r_1 \\leq r_2 \\leq r_3$.\nB. $r_1 \\leq r_3 \\leq r_2$.\nC. $r_3 \\leq r_1 \\leq r_2$.\nD. $r_2 \\leq r_1 \\leq r_3$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q6",
+    "no": 6,
+    "stem": "下列矩阵中不能相似于对角矩阵的是\nA. $\\begin{bmatrix} 1 & 1 & a \\\\ 0 & 2 & 2 \\\\ 0 & 0 & 3 \\end{bmatrix}$.\nB. $\\begin{bmatrix} 1 & 1 & a \\\\ 1 & 2 & 0 \\\\ a & 0 & 3 \\end{bmatrix}$.\nC. $\\begin{bmatrix} 1 & 1 & a \\\\ 0 & 2 & 0 \\\\ 0 & 0 & 2 \\end{bmatrix}$.\nD. $\\begin{bmatrix} 1 & 1 & a \\\\ 0 & 2 & 2 \\\\ 0 & 0 & 2 \\end{bmatrix}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q7",
+    "no": 7,
+    "stem": "已知向量  $\\alpha_1 = \\begin{pmatrix} 1 \\\\ 2 \\\\ 3 \\end{pmatrix}$,  $\\alpha_2 = \\begin{pmatrix} 2 \\\\ 1 \\\\ 1 \\end{pmatrix}$,  $\\beta_1 = \\begin{pmatrix} 2 \\\\ 5 \\\\ 9 \\end{pmatrix}$,  $\\beta_2 = \\begin{pmatrix} 1 \\\\ 0 \\\\ 1 \\end{pmatrix}$. 若  $\\gamma$ 既可由  $\\alpha_1, \\alpha_2$ 线性表示，也可由  $\\beta_1, \\beta_2$ 线性表示，则  $\\gamma =$\nA. $k\\begin{pmatrix} 3 \\\\ 3 \\\\ 4 \\end{pmatrix}$,  $k \\in \\mathbb{R}$.\nB. $k\\begin{pmatrix} 3 \\\\ 5 \\\\ 10 \\end{pmatrix}$,  $k \\in \\mathbb{R}$.\nC. $k\\begin{pmatrix} -1 \\\\ 1 \\\\ 2 \\end{pmatrix}$,  $k \\in \\mathbb{R}$.\nD. $k\\begin{pmatrix} 1 \\\\ 5 \\\\ 8 \\end{pmatrix}$,  $k \\in \\mathbb{R}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q8",
+    "no": 8,
+    "stem": "设随机变量 X 服从参数为 1 的泊松分布，则  $E(|X-EX|)=$\nA. $\\frac{1}{e}$.\nB. $\\frac{1}{2}$.\nC. $\\frac{2}{e}$.\nD. 1.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q9",
+    "no": 9,
+    "stem": "设  $X_1, X_2, \\cdots, X_n$ 为来自总体  $N(\\mu_1, \\sigma^2)$ 的简单随机样本,  $Y_1, Y_2, \\cdots, Y_m$ 为来自总体  $N(\\mu_2, 2\\sigma^2)$ 的简单随机样本, 且两样本相互独立。记  $\\overline{X} = \\frac{1}{n} \\sum_{i=1}^{n} X_i$,  $\\quad \\overline{Y} = \\frac{1}{m} \\sum_{i=1}^{m} Y_i$,  $S_1^2 = \\frac{1}{n-1} \\sum_{i=1}^{n} (X_i - \\overline{X})^2$,  $S_2^2 = \\frac{1}{m-1} \\sum_{i=1}^{m} (Y_i - \\overline{Y})^2$, 则\nA. $\\frac{S_1^2}{S_2^2} \\sim F(n, m)$.\nB. $\\frac{S_1^2}{S_2^2} \\sim F(n-1, m-1)$.\nC. $\\frac{2S_1^2}{S_2^2} \\sim F(n, m)$.\nD. $\\frac{2S_1^2}{S_2^2} \\sim F(n-1, m-1)$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q10",
+    "no": 10,
+    "stem": "设  $X_1, X_2$ 为来自总体  $N(\\mu, \\sigma^2)$ 的简单随机样本，其中  $\\sigma (\\sigma > 0)$ 是未知参数。若  $\\hat{\\sigma} = a \\mid X_1 - X_2 \\mid$ 为  $\\sigma$ 的无偏估计，则  $a =$\nA. $\\frac{\\sqrt{\\pi}}{2}$.\nB. $\\frac{\\sqrt{2\\pi}}{2}$.\nC. $\\sqrt{\\pi}$.\nD. $\\sqrt{2\\pi}$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q11",
+    "no": 11,
+    "stem": "当  $x \\to 0$ 时，函数  $f(x) = ax + bx^2 + \\ln(1+x)$ 与  $g(x) = e^{x^2} - \\cos x$ 是等价无穷小，则  $ab =$ ________。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q12",
+    "no": 12,
+    "stem": "曲面  $z = x + 2y + \\ln(1 + x^2 + y^2)$ 在点  $(0,0,0)$ 处的切平面方程为 ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q13",
+    "no": 13,
+    "stem": "设  $f(x)$ 是周期为 2 的周期函数, 且  $f(x) = 1 - x, x \\in [0,1]$. 若  $f(x) = \\frac{a_0}{2} + \\sum_{n=1}^{\\infty} a_n \\cos n\\pi x$, 则  $\\sum_{n=1}^{\\infty} a_{2n} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q14",
+    "no": 14,
+    "stem": "设连续函数  $f(x)$ 满足:  $f(x+2) - f(x) = x$,  $\\int_{0}^{2} f(x) \\, dx = 0$, 则  $\\int_{1}^{3} f(x) \\, dx =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q15",
+    "no": 15,
+    "stem": "已知向量  $\\alpha_1 = \\begin{pmatrix} 1 \\\\ 0 \\\\ 1 \\end{pmatrix}$,  $\\alpha_2 = \\begin{pmatrix} -1 \\\\ -1 \\\\ 0 \\end{pmatrix}$,  $\\alpha_3 = \\begin{pmatrix} 0 \\\\ 1 \\\\ -1 \\end{pmatrix}$,  $\\beta = \\begin{pmatrix} 1 \\\\ 1 \\\\ 1 \\end{pmatrix}$,  $\\gamma = k_1\\alpha_1 + k_2\\alpha_2 + k_3\\alpha_3$. 若  $\\gamma^T\\alpha_i = \\beta^T\\alpha_i (i=1,2,3)$，则  $k_1^2 + k_2^2 + k_3^2 =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q16",
+    "no": 16,
+    "stem": "设随机变量  $X$ 与  $Y$ 相互独立, 且  $X \\sim B\\left(1, \\frac{1}{3}\\right)$,  $Y \\sim B\\left(2, \\frac{1}{2}\\right)$, 则  $P\\{X = Y\\} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q17",
+    "no": 17,
+    "stem": "设曲线  $y=y(x)(x>0)$ 经过点 (1,2)，该曲线上任一点  $P(x,y)$ 到 y 轴的距离等于该点处的切线在 y 轴上的截距.\n(I) 求  $y(x)$;\n(II) 求函数  $f(x)=\\int_{1}^{x}y(t)dt$ 在  $(0,+\\infty)$ 上的最大值.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q18",
+    "no": 18,
+    "stem": "求函数  $f(x,y)=(y-x^{2})(y-x^{3})$ 的极值.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q19",
+    "no": 19,
+    "stem": "设空间有界区域  $\\Omega$ 由柱面  $x^2 + y^2 = 1$ 与平面  $z = 0$ 和  $x + z = 1$ 围成,  $\\Sigma$ 为  $\\Omega$ 边界面的外侧, 计算曲面积分  $I = \\oint_\\Sigma 2xz \\, \\mathrm{d}y \\, \\mathrm{d}z + xz \\cos y \\, \\mathrm{d}z \\, \\mathrm{d}x + 3yz \\sin x \\, \\mathrm{d}x \\, \\mathrm{d}y$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q20",
+    "no": 20,
+    "stem": "设函数  $f(x)$ 在  $[-a,a]$ 上具有 2 阶连续导数. 证明：\n(I) 若  $f(0)=0$，则存在  $\\xi \\in (-a,a)$，使得  $f''(\\xi)=\\frac{1}{a^2}[f(a)+f(-a)]$；\n(II) 若  $f(x)$ 在  $(-a,a)$ 内取得极值，则存在  $\\eta \\in (-a,a)$，使得  $\\left|f''(\\eta)\\right| \\geqslant \\frac{1}{2a^2} |f(a) - f(-a)|$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q21",
+    "no": 21,
+    "stem": "已知二次型  $f(x_{1},x_{2},x_{3})=x_{1}^{2}+2x_{2}^{2}+2x_{3}^{2}+2x_{1}x_{2}-2x_{1}x_{3},g(y_{1},y_{2},y_{3})=y_{1}^{2}+y_{2}^{2}+y_{3}^{2}+2y_{2}y_{3}$\n(I) 求可逆变换 x = Py 将  $f(x_1, x_2, x_3)$ 化为  $g(y_1, y_2, y_3)$;\n(II) 是否存在正交变换 x = Qy 将  $f(x_1, x_2, x_3)$ 化为  $g(y_1, y_2, y_3)$?",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2023-q22",
+    "no": 22,
+    "stem": "设二维随机变量  $(X,Y)$ 的概率密度为  $f(x,y)=\\left\\{\\begin{aligned}&\\frac{2}{\\pi}(x^{2}+y^{2}),&x^{2}+y^{2}\\leq1,\\\\ &0,& 其他.\\end{aligned}\\right.$\n(I) 求 X 与 Y 的协方差;\n(II) X 与 Y 是否相互独立？\n(III) 求  $Z = X^{2} + Y^{2}$ 的概率密度.",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2024",
+  "title": "2024 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2024-q1",
+    "no": 1,
+    "stem": "已知函数  $f(x)=\\int_{0}^{x}e^{\\cos t}dt$,  $g(x)=\\int_{0}^{\\sin x}e^{t^{2}}dt$, 则\nA. $f(x)$ 为奇函数,  $g(x)$ 为偶函数.\nB. $f(x)$ 为偶函数,  $g(x)$ 为奇函数\nC. $f(x)$ 与  $g(x)$ 均为奇函数.\nD. $f(x)$ 与  $g(x)$ 均为偶函数.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q2",
+    "no": 2,
+    "stem": "设  $P = P(x, y, z)$,  $Q = Q(x, y, z)$ 均为连续函数,  $\\Sigma$ 为曲面  $z = \\sqrt{1 - x^2 - y^2} (x \\geq 0, y \\geq 0)$ 的上侧, 则  $\\iint_{\\Sigma} P \\, \\mathrm{d}y \\, \\mathrm{d}z + Q \\, \\mathrm{d}z \\, \\mathrm{d}x =$\nA. $\\iint_{\\Sigma} \\left( \\frac{x}{z} P + \\frac{y}{z} Q \\right) \\, \\mathrm{d}x \\, \\mathrm{d}y$\nB. $\\iint_{\\Sigma} \\left( -\\frac{x}{z} P + \\frac{y}{z} Q \\right) \\, \\mathrm{d}x \\, \\mathrm{d}y$\nC. $\\iint_{\\Sigma} \\left( \\frac{x}{z} P - \\frac{y}{z} Q \\right) \\, \\mathrm{d}x \\, \\mathrm{d}y$\nD. $\\iint_{\\Sigma} \\left( -\\frac{x}{z} P - \\frac{y}{z} Q \\right) \\, \\mathrm{d}x \\, \\mathrm{d}y$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q3",
+    "no": 3,
+    "stem": "已知幂函数  $\\sum_{n=0}^{\\infty} a_{n} x^{n}$ 的和函数为  $\\ln(2+x)$，则  $\\sum_{n=0}^{\\infty} na_{2n} =$\nA. $-\\frac{1}{6}.$\nB. $-\\frac{1}{3}.$\nC. $\\frac{1}{6}.$\nD. $\\frac{1}{3}.$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q4",
+    "no": 4,
+    "stem": "设函数  $f(x)$ 在区间  $(-1,1)$ 内有定义,  $\\lim_{x\\to0}f(x)=0$, 则\nA. 当  $\\lim_{x\\to0}\\frac{f(x)}{x}=m$ 时,  $f^{\\prime}(0)=m$.\nB. 当  $f^{\\prime}(0)=m$ 时,  $\\lim_{x\\to0}\\frac{f(x)}{x}=m$.\nC. 当  $\\lim_{x\\to0}f^{\\prime}(x)=m$ 时,  $f^{\\prime}(0)=m$.\nD. 当  $f^{\\prime}(0)=m$ 时,  $\\lim_{x\\to0}f^{\\prime}(x)=m$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q5",
+    "no": 5,
+    "stem": "在空间直角坐标系  $O-xyz$ 中, 三张平面  $\\pi_i: a_i x + b_i y + c_i z = d_i (i=1,2,3)$ 位置关系如图所示, 记  $a_i = (a_i, b_i, c_i), \\beta_i = (a_i, b_i, c_i, d_i)$, 若  $r\\begin{pmatrix} \\alpha_1 \\\\ \\alpha_2 \\\\ \\alpha_3 \\end{pmatrix} = m, r\\begin{pmatrix} \\beta_1 \\\\ \\beta_2 \\\\ \\beta_3 \\end{pmatrix} = n$, 则\nA. $m = 1, n = 2$.\nB. $m = n = 2$.\nC. $m = 2, n = 3$.\nD. $m = n = 3$.\n（本题含配图，请对照原卷）",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q6",
+    "no": 6,
+    "stem": "设向量  $\\alpha_{1}=\\left(\\begin{array}{c}a \\\\ 1 \\\\ -1 \\\\ 1\\end{array}\\right)$,  $\\alpha_{2}=\\left(\\begin{array}{c}1 \\\\ 1 \\\\ b \\\\ a\\end{array}\\right)$,  $\\alpha_{3}=\\left(\\begin{array}{c}1 \\\\ a \\\\ -1 \\\\ 1\\end{array}\\right)$, 若  $\\alpha_{1},\\alpha_{2},\\alpha_{3}$ 线性相关，且其中任意两个向量均线性无关，则\nA. a=1,b\\neq-1\nB. a=1,b=-1\nC. a\\neq-2,b=2\nD. a=-2,b=2",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q7",
+    "no": 7,
+    "stem": "设 A 是秩为 2 的 3 阶矩阵,  $\\alpha$ 是满足  $A\\alpha=0$ 的非零向量, 若对满足  $\\beta^{T}\\alpha=0$ 的任意向量  $\\beta$, 均有  $A\\beta=\\beta$, 则\nA. $A^{3}$ 的迹为 2.\nB. $A^{3}$ 的迹为 5.\nC. $A^{5}$ 的迹为 7.\nD. $A^{5}$ 的迹为 9.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q8",
+    "no": 8,
+    "stem": "设随机变量  $X$ 与  $Y$ 相互独立,  $X$ 是服从  $N(0,2)$ 的正态分布,  $Y$ 是服从  $N(-2,2)$ 的正态分布, 若  $P\\{2X + Y  Y\\}$, 则  $a =$\nA. $-2 - \\sqrt{10}$ \\quad\nB. $-2 + \\sqrt{10}$ \\quad\nC. $-2 - \\sqrt{6}$ \\quad\nD. $-2 + \\sqrt{6}$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q9",
+    "no": 9,
+    "stem": "设随机变量 X 的概率密度为  $f(x)=\\left\\{\\begin{aligned}&2(1-x),&0<x<1\\\\&0,& 其他 \\end{aligned}\\right.$，在 X=x 的条件下，Y 在区间  $(x,1)$ 上服从均匀分布，则  $\\mathrm{cov}(X,Y)=$\nA. $-\\frac{1}{36}$\nB. $-\\frac{1}{72}$\nC. $\\frac{1}{72}$\nD. $\\frac{1}{36}$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q10",
+    "no": 10,
+    "stem": "设随机变量 X 和 Y 相互独立, 且都服从参数为  $\\lambda$ 的指数分布, 令 Z = |X - Y|, 则下列与 Z 服从同一分布的是\nA. $X + Y$\nB. $\\frac{X + Y}{2}$\nC. 2X\nD. X",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q11",
+    "no": 11,
+    "stem": "若  $\\lim_{x \\to 0} \\frac{(1 + ax^2)^{\\sin x} - 1}{x^3} = 6$，则  $a =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q12",
+    "no": 12,
+    "stem": "$z = f(u, v)$ 有二阶连续导数,  $df\\Big|_{(1,1)} = 3du + 4dv$,  $y = f(\\cos x, 1 + x^2)$, 则  $\\frac{d^2y}{dx^2}\\Big|_{x=0} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q13",
+    "no": 13,
+    "stem": "若函数  $f(x) = x + 1$，若  $f(x) = \\frac{a_0}{2} + \\sum_{n=1}^{\\infty} a_n \\cos nx$， $x \\in [0, \\pi]$，则极限  $\\lim_{n \\to \\infty} n^2 \\sin a_{2n-1} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q14",
+    "no": 14,
+    "stem": "微分方程  $y' = \\frac{1}{(x+y)^2}$，满足条件  $y(1) = 0$ 的解为 ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q15",
+    "no": 15,
+    "stem": "设实矩阵  $A = \\begin{pmatrix} a+1 & a \\\\ a & a \\end{pmatrix}$，若对任意实向量  $\\alpha = \\begin{pmatrix} x_1 \\\\ x_2 \\end{pmatrix}$,  $\\beta = \\begin{pmatrix} y_1 \\\\ y_2 \\end{pmatrix}$,  $(\\alpha^T A \\beta)^2 \\leqslant \\alpha^T A \\alpha \\beta^T A \\beta$ 都成立，则 a 的取值范围为 ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q16",
+    "no": 16,
+    "stem": "随机试验每次成功的概率为 p, 现进行三次独立重复实验, 已知至少成功一次的条件下全部成功的概率为  $\\frac{4}{13}$, 则 p = ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q17",
+    "no": 17,
+    "stem": "已知平面区域 $D=\\left\\{(x,y)\\mid\\sqrt{1-y^{2}}\\leqslant x\\leqslant1,-1\\leqslant y\\leqslant1\\right\\}$，计算 $\\iint_{D}\\frac{x}{\\sqrt{x^{2}+y^{2}}}d\\sigma$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q18",
+    "no": 18,
+    "stem": "设  $f(x,y)=x^{3}+y^{3}-(x+y)^{2}+3$，曲面  $z=f(x,y)$ 在  $(1,1,1)$ 处的切平面为 T，T 与三个坐标面所围有界区域在 xoy 面的投影为\nD.\n（1） 求 T 的方程\n（2） 求  $f(x, y)$ 在 D 上的最大值和最小值",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q19",
+    "no": 19,
+    "stem": "设  $f(x)$ 二阶可导,  $f'(0) = f'(0)$,  $\\left|f''(x)\\right| \\leqslant 1$, 证:\n（1） $|f(x)-f(0)(1-x)-f(1)x|\\leqslant\\frac{x(1-x)}{2}$\n（2） $\\left|\\int_{0}^{1}f(x)dx-\\frac{f(0)+f(1)}{2}\\right|\\leqslant\\frac{1}{12}.$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q20",
+    "no": 20,
+    "stem": "已知有向曲线 L 为球面  $x^2 + y^2 + z^2 = 2x$ 与平面  $2x - z - 1 = 0$ 的交线从 z 轴正向往 z 轴负向看去为逆时针方向, 计算曲线积分  $\\int_r (6xyz - yz^2) \\, \\mathrm{d}x + 2x^2z \\, \\mathrm{d}y + xyz \\, \\mathrm{d}z$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q21",
+    "no": 21,
+    "stem": "已知数列 $\\{x_{n}\\}$， $\\{y_{n}\\}$， $\\{z_{n}\\}$满足 $x_{0}=-1,y_{0}=0,z_{0}=2$且\n$$\n\\left\\{\\begin{aligned}x_{n}=&-2x_{n-1}+2z_{n-1}\\\\ y_{n}=&-2y_{n-1}-2z_{n-1}\\\\ z_{n}=&-6x_{n-1}-3y_{n-1}+3z_{n-1}\\end{aligned}\\right.,\n$$\n记 $a_{n}=\\left\\{\\begin{aligned}x_{n}\\\\ y_{n}\\\\ z_{n}\\end{aligned}\\right\\}$，写出满足 $a_{n}=Aa_{n-1}$的矩阵A，并求 $A^{n}$及 $x_{n},y_{n},z_{n}(n=1,2,\\cdots)$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2024-q22",
+    "no": 22,
+    "stem": "设总体  $X \\sim U(0, \\theta)$， $\\theta$ 未知， $X_{1}, X_{2} \\cdots X_{n}$ 为简单随机样本，\n$$\nX_{(n)}=\\max\\big(X_{1},X_{2}\\cdots X_{n}\\big),T_{c}=c X_{(n)}.\n$$\n（1） 求 c 时，使得  $T_{c}$ 为  $\\theta$ 的无偏估计.\n小值",
+    "answer": ""
+   }
+  ]
+ },
+ {
+  "id": "seed-math1-2025",
+  "title": "2025 年考研数学一真题",
+  "date": "",
+  "note": "来源：知间《2010–2026 年数学一真题套卷》，据《【横版】10-26年数一真题套卷做题本》OCR 整理，未逐题校对，个别文字或公式可能存在识别错误，请对照原卷核对。",
+  "createdAt": 1600000000000,
+  "updatedAt": 1600000000000,
+  "questions": [
+   {
+    "id": "seed-math1-2025-q1",
+    "no": 1,
+    "stem": "已知函数  $f(x) = \\int_0^x e^{t^2} \\sin t \\, dt$,  $g(x) = \\int_0^x e^{t^2} dt \\cdot \\sin^2 x$, 则\nA. $x=0$ 是  $f(x)$ 的极值点, 也是  $g(x)$ 的极值点\nB. $x=0$ 是  $f(x)$ 的极值点,  $(0,0)$ 是曲线  $y = g(x)$ 的拐点\nC. $x=0$ 是  $f(x)$ 的极值点,  $(0,0)$ 是曲线  $y = f(x)$ 的拐点\nD. $(0,0)$ 是曲线  $y = f(x)$ 的拐点, 也是曲线  $y = g(x)$ 的拐点",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q2",
+    "no": 2,
+    "stem": "已知级数: ①  $\\sum_{n=1}^{\\infty} \\sin \\frac{n^{3}\\pi}{n^{2}+1}$; ②  $\\sum_{n=1}^{\\infty} (-1)^{n} \\left( \\frac{1}{\\sqrt[3]{n^{2}}} - \\tan \\frac{1}{\\sqrt[3]{n^{2}}} \\right)$ 则\nA. ①与②均条件收敛\nB. ①条件收敛,②绝对收敛\nC. ①绝对收敛,②条件收敛\nD. ①与②均绝对收敛",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q3",
+    "no": 3,
+    "stem": "设数  $f(x)$ 在区间  $[0, +\\infty)$ 上可导，则\nA. 当  $\\lim_{x\\to+\\infty}f(x)$ 存在时,  $\\lim_{x\\to+\\infty}f'(x)$ 存在\nB. 当  $\\lim_{x\\to+\\infty}f'(x)$ 存在时,  $\\lim_{x\\to+\\infty}f(x)$ 存在\nC. 当  $\\lim_{x\\to+\\infty}\\frac{\\int_{0}^{x}f(t)dt}{x}$ 存在时,  $\\lim_{x\\to+\\infty}f(x)$ 存在\nD. 当  $\\lim_{x\\to+\\infty}f(x)$ 存在时,  $\\lim_{x\\to+\\infty}\\frac{\\int_{0}^{x}f(t)dt}{x}$ 存在",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q4",
+    "no": 4,
+    "stem": "设函数  $f(x,y)$ 连续，则  $\\int_{-2}^{2}dx\\int_{4-x^{2}}^{4}f(x,y)dy=$\nA. $\\int_{0}^{4}\\left[\\int_{-2}^{-\\sqrt{4-y}}f(x,y)dx+\\int_{\\sqrt{4-y}}^{2}f(x,y)dx\\right]dy$\nB. $\\int_{0}^{4}\\left[\\int_{-2}^{\\sqrt{4-y}}f(x,y)dx+\\int_{\\sqrt{4-y}}^{2}f(x,y)dx\\right]dy$\nC. $\\int_{0}^{4}\\left[\\int_{-2}^{-\\sqrt{4-y}}f(x,y)dx+\\int_{2}^{\\sqrt{4-y}}f(x,y)dx\\right]dy$\nD. $2\\int_{0}^{4}dy\\left[\\int_{\\sqrt{4-y}}^{2}f(x,y)dx\\right]$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q5",
+    "no": 5,
+    "stem": "二次型  $f(x_{1},x_{2},x_{3})=x_{1}^{2}+2x_{1}x_{2}+2x_{1}x_{3}$ 的正惯性指数为\nA. 0\nB. 1\nC. 2\nD. 3",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q6",
+    "no": 6,
+    "stem": "设  $\\alpha_{1}, \\alpha_{2}, \\alpha_{3}, \\alpha_{4}$ 是 n 维向量,  $\\alpha_{1}, \\alpha_{2}$ 线性无关,  $\\alpha_{1}, \\alpha_{2}, \\alpha_{3}$ 线性相关, 且  $\\alpha_{1} + \\alpha_{2} + \\alpha_{4} = 0$, 在空间直角坐标系 O-xyz 中, 关于 x, y, z 的方程组  $x\\alpha_{1} + y\\alpha_{2} + z\\alpha_{3} = \\alpha_{4}$ 的几何图形是\nA. 过原点的一个平面\nB. 过原点的一条直线\nC. 不过原点的一个平面\nD. 不过原点的一条直线",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q7",
+    "no": 7,
+    "stem": "设 n 阶矩阵 A, B, C 满足  $r(A) + r(B) + r(B) = r(ABC) + 2n$，给出下列四个结论\n①  $r(ABC) + n = r(AB) + r(C)$\n②  $r(AB) + n = r(A) + r(B)$\n③  $r(A) = r(B) = r(C) = n$;\n④  $r(AB) = r(BC) = n$\n其中正确的选项是\nA. ①②\nB. ①③\nC. ②④\nD. ③④",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q8",
+    "no": 8,
+    "stem": "设二维随机变量  $(X,Y)$ 服从正态分布  $N(0,0;1,1;P)$，其中  $P\\in(-1,1)$，若 a,b 为满足  $a^{2}+b^{2}=1$ 的任意实数，则  $D(aX+bY)$ 的最大值为\nA. 1\nB. 2\nC. $1+|P|$\nD. $1+P^{2}$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q9",
+    "no": 9,
+    "stem": "设  $X_1, X_2, \\cdots, X_{20}$ 是来自总体  $B(1,0.1)$ 的简单随机样本，令  $T = \\sum_{i=1}^{20} X_i$，利用泊松分布近似表示二项分布的方法可得  $P\\{T \\leq 1\\} \\approx$\nA. $\\frac{1}{e^2}$\nB. $\\frac{2}{e^2}$\nC. $\\frac{3}{e^2}$\nD. $\\frac{4}{e^2}$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q10",
+    "no": 10,
+    "stem": "设  $x_1, x_2, \\cdots, x_n$ 为来自正态总体  $N(\\mu, 2)$ 的简单随机样本，记  $\\overline{X} = \\frac{1}{n} \\sum_{i=1}^{n} x_i$， $Z_\\alpha$ 表示标准正态分布的上侧  $\\alpha$ 分位数，假设检验问题： $H_0: \\mu \\leq 1, H_1: \\mu > 1$ 的显著性水平为  $\\alpha$ 的检验的拒绝域为\nA. $\\left\\{(x_1, x_2, \\cdots, x_n) \\mid \\overline{X} > 1 + \\frac{2}{n} Z_\\alpha\\right\\}$\nB. $\\left\\{(x_1, x_2, \\cdots, x_n) \\mid \\overline{X} > 1 + \\frac{\\sqrt{2}}{n} Z_\\alpha\\right\\}$\nC. $\\left\\{(x_1, x_2, \\cdots, x_n) \\mid \\overline{X} > 1 + \\frac{2}{\\sqrt{n}} Z_\\alpha\\right\\}$\nD. $\\left\\{(x_1, x_2, \\cdots, x_n) \\mid \\overline{X} > 1 + \\sqrt{\\frac{2}{n}} Z_\\alpha\\right\\}$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q11",
+    "no": 11,
+    "stem": "$\\lim_{x \\to 0^{+}} \\frac{x^x - 1}{\\ln x \\cdot \\ln (1 - x)} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q12",
+    "no": 12,
+    "stem": "已知函数  $f(x) = \\begin{cases} 0, & 0 \\leq x < \\frac{1}{2} \\\\ x^2, & \\frac{1}{2} \\leq x \\leq 1 \\end{cases}$ 的傅里叶级数为  $\\sum_{n=1}^{\\infty} b_n \\sin n\\pi x$,  $S(x)$ 为  $\\sum_{n=1}^{\\infty} b_n \\sin n\\pi x$ 的和函数，则  $S\\left(-\\frac{7}{2}\\right) =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q13",
+    "no": 13,
+    "stem": "已知函数  $U(x,y,z) = xy^2z^3$, 向量  $n = (2,2,-1)$, 则  $\\left.\\frac{\\partial v}{\\partial n}\\right|_{(1,1,1)} =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q14",
+    "no": 14,
+    "stem": "已知有向曲线  $L$ 是沿抛物线  $y = 1 - x^2$ 从点  $(1,0)$ 到  $(-1,0)$ 的段，则曲线积分  $\\int_L (y + \\cos x) \\, \\mathrm{d}x + (2x + \\cos y) \\, \\mathrm{d}y =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q15",
+    "no": 15,
+    "stem": "设矩阵  $A = \\begin{pmatrix} 4 & 2 & -3 \\\\ a & 3 & -4 \\\\ b & 5 & -7 \\end{pmatrix}$，若方程组  $A^2 X = 0$ 与 AX = 0 不同解，则  $a - b =$ ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q16",
+    "no": 16,
+    "stem": "设  $A, B$ 为两个不同随机事件, 且相互独立, 已知  $P(A) = 2P(B)$,  $P(A \\cup B) = \\frac{5}{8}$, 则  $A, B$ 中至少有一个发生的条件下,  $A, B$ 中恰好有一个发生的概率为 ________.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q17",
+    "no": 17,
+    "stem": "计算 $\\int_{0}^{1}\\frac{1}{(x+1)(x^{2}-2x+2)}$dx.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q18",
+    "no": 18,
+    "stem": "已知函数 $f(u)$在区间 $(0,+\\infty)$内具有二阶导数，记 $g(x,y)=f\\left(\\frac{x}{y}\\right)$，若 $g(x,y)$满足 $x^{2}\\frac{\\partial^{2}g}{\\partial x^{2}}+xy\\frac{\\partial^{2}g}{\\partial x\\partial y}+y^{2}\\frac{\\partial^{2}g}{\\partial y^{2}}=1$，且 $g(x,x)=1$， $\\left.\\frac{\\partial g}{\\partial x}\\right|_{(x,x)}=\\frac{2}{x}$，求 $f(u)$。",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q19",
+    "no": 19,
+    "stem": "设函数 $f(x)$在区间 $(a,b)$内可导，证明：导函数 $f'(x)$在 $(a,b)$内严格单调增加的充分必要条件是：\n对 $(a,b)$内任意的 $x_{1},x_{2},x_{3}$，当 $x_{1}<x_{2}<x_{3}$时， $\\frac{f(x_{2})-f(x_{1})}{x_{2}-x_{1}}<\\frac{f(x_{3})-f(x_{2})}{x_{3}-x_{2}}$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q20",
+    "no": 20,
+    "stem": "设  $\\Sigma$ 是由直线  $\\begin{cases} x=0 \\\\ y=0 \\end{cases}$ 绕直线  $\\begin{cases} x=t \\\\ y=t \\end{cases}$ (t 为参数) 旋转一周得到的曲面,  $\\sum_{1}$ 是  $\\Sigma$ 介于平面  $x+y+z=0$ 与  $x+y+z=1$ 之间部分的外侧, 计算曲面积分  $\\iint_{\\Sigma}x\\mathrm{d}y\\mathrm{d}z+(y+1)\\mathrm{d}z\\mathrm{d}x+(z+2)\\mathrm{d}x\\mathrm{d}y$",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q21",
+    "no": 21,
+    "stem": "设矩阵 $A=\\begin{pmatrix}0&-1&2\\\\-1&0&2\\\\-1&-1&a\\end{pmatrix}$，已知1是A的特征多项式的重根.\n（1） 求 a 的值\n（2） 求所有满足  $A\\alpha = \\alpha + \\beta$,  $A^{2}\\alpha = \\alpha + 2\\beta$ 的非零列向量  $\\alpha, \\beta$.",
+    "answer": ""
+   },
+   {
+    "id": "seed-math1-2025-q22",
+    "no": 22,
+    "stem": "投保人的损失事件发生时, 保险公司的赔付额 Y 与投保人的损失额 X 的关系为 (I), 设损失事件发生时, 投保人的损失额 X 的概率密度为 (II).\n$$\n\\left(I\\right)Y=\\left\\{\\begin{aligned}0,&X\\leqslant100\\\\ X-100,&X>100\\end{aligned}\\right.,\\quad\\left(II\\right)f(x)=\\left\\{\\begin{aligned}\\frac{2\\times100^{2}}{\\left(100+x\\right)^{3}},&x>0\\\\ 0,&x\\leqslant0\\end{aligned}\\right.\n$$\n（1） 求  $P\\{Y > 0\\}$ 及  $E(Y)$\n（2） 这种损失事件在一年内发生的次数记为 N, 保险公司在一年内就这种损失事件产生的理赔次数记为 M, 假设 N 服从参数为 8 的泊松分布, 在  $N = n (n \\geqslant 1)$ 的条件下, M 服从二项分布  $B(n, P)$, 其中  $P = P\\{Y > 0\\}$, 求 M 的概率分布.",
+    "answer": ""
+   }
+  ]
+ }
+]

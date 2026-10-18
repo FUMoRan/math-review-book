@@ -7,6 +7,7 @@
 const K_Q = 'mq_items';
 const K_K = 'mq_kps';
 const K_P = 'mq_papers';
+const K_SEED = 'mq_seed_papers_v1';   // 内置真题只灌一次，之后不管你删不删都不再自动补
 
 /* 纯逻辑统一放在 lib.js（浏览器与单测共用），此处引用即可 */
 const {
@@ -14,7 +15,7 @@ const {
   makeGramProfile, simFromProfile,
   parseText, parseSearch,
   normalizeQuestion, normalizeKp, scheduleSrs, isDue, dueLabel, DAY,
-  normalizePaper, parsePaper, paperWrongToQuestion,
+  normalizePaper, parsePaper, paperWrongToQuestion, mergeSeedPapers,
   bareMathSegments,
 } = MQ;
 
@@ -457,6 +458,23 @@ async function loadInitial() {
   let t = await kvGet(K_TRASH);
   if (!Array.isArray(t)) t = lsRead(K_TRASH);
   trash = Array.isArray(t) ? t : [];
+  await seedBuiltinPapers();
+}
+
+// 首次启动灌入内置数一真题（只灌一次；你删掉后不再自动补回，也不会覆盖你新建的试卷）
+async function seedBuiltinPapers() {
+  try { if (localStorage.getItem(K_SEED)) return; } catch (e) { return; }
+  try {
+    const res = await fetch('papers-data.json', { cache: 'no-store' });
+    if (!res || !res.ok) return;          // 拿不到（离线/不存在）就下次再说，不写标记
+    const seeds = await res.json();
+    const add = mergeSeedPapers(stores.p.items, seeds);
+    if (add.length) {
+      stores.p.items = stores.p.items.concat(add);
+      await persist(K_P, stores.p.items);
+    }
+    try { localStorage.setItem(K_SEED, '1'); } catch (e) {}
+  } catch (e) {}
 }
 
 /* ===================== 视图定义 ===================== */

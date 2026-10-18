@@ -154,6 +154,22 @@
     };
   }
 
+  /* 内置真题种子：只追加本地没有的（按 id 判重），不覆盖用户已有或已删除的 */
+  function mergeSeedPapers(existing, seeds) {
+    const have = new Set();
+    for (const p of (Array.isArray(existing) ? existing : [])) {
+      if (p && typeof p.id === 'string' && p.id) have.add(p.id);
+    }
+    const added = [];
+    for (const s of (Array.isArray(seeds) ? seeds : [])) {
+      if (!s || typeof s !== 'object' || typeof s.id !== 'string' || !s.id) continue;
+      if (have.has(s.id)) continue;
+      have.add(s.id);
+      added.push(normalizePaper(s));
+    }
+    return added;
+  }
+
   /* ---------- 粘贴文本解析（【题目】/【解析】… / === 分隔） ---------- */
   function parseBlockGeneric(block, map, requiredLabel) {
     const labels = Object.keys(map);
@@ -389,7 +405,7 @@
     STATUS, STATUS_NEXT, uid,
     normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
     SRS_DEF, normalizeSrs, scheduleSrs, isDue, dueLabel,
-    normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper,
+    normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers,
     parseBlockGeneric, parseText, parsePaper,
     paperWrongToQuestion,
     parseSearch,

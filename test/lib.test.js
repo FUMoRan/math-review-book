@@ -10,7 +10,7 @@ const {
   DAY, STATUS, STATUS_NEXT, uid,
   normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
   normalizeSrs, scheduleSrs, isDue, dueLabel,
-  normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, paperWrongToQuestion,
+  normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers, paperWrongToQuestion,
   parseText, parsePaper, parseSearch,
   bareMathSegments,
 } = MQ;
@@ -267,6 +267,36 @@ test('paperWrongToQuestion 只挑标错且未加入的题', () => {
 test('paperWrongToQuestion 无错题时返回空数组', () => {
   const paper = normalizePaper({ questions: [{ stem: 'a', wrong: 'right' }] });
   assert.deepEqual(paperWrongToQuestion(paper, 0), []);
+});
+
+test('mergeSeedPapers 只追加本地没有的试卷', () => {
+  const seeds = [
+    { id: 'seed-math1-2024', title: '2024 年考研数学一真题', questions: [{ no: 1, stem: '$x$' }] },
+    { id: 'seed-math1-2023', title: '2023 年考研数学一真题', questions: [{ no: 1, stem: '$y$' }] },
+  ];
+  const out = mergeSeedPapers([{ id: 'seed-math1-2024', title: '我自己改过的 2024' }], seeds);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, 'seed-math1-2023');
+  assert.equal(out[0].title, '2023 年考研数学一真题');
+  assert.equal(out[0].questions.length, 1);
+  assert.ok(out[0].questions[0].id);            // 题目 id 由归一化补全
+});
+
+test('mergeSeedPapers 入参非法、脏数据与重复 id 均安全', () => {
+  assert.deepEqual(mergeSeedPapers(null, null), []);
+  assert.deepEqual(mergeSeedPapers([], [{ no: 1 }]), []);            // 种子缺 id 直接跳过
+  assert.equal(mergeSeedPapers([], [{ id: 'a' }, { id: 'a' }]).length, 1);
+  const out = mergeSeedPapers([null, 42, { id: 'a' }], [{ id: 'a' }, { id: 'b' }]);
+  assert.deepEqual(out.map(p => p.id), ['b']);
+});
+
+test('mergeSeedPapers 追加项经归一化（三态默认 unset、答案与日期为空）', () => {
+  const [p] = mergeSeedPapers([], [{ id: 's', questions: [{ no: 3, stem: 'z', wrong: 'bogus' }] }]);
+  assert.equal(p.questions[0].no, 3);
+  assert.equal(p.questions[0].wrong, 'unset');
+  assert.equal(p.questions[0].answer, '');
+  assert.equal(p.date, '');
+  assert.equal(p.note, '');
 });
 
 /* ===================== 粘贴文本解析 ===================== */
