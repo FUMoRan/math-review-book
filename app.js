@@ -662,6 +662,8 @@ function makeCard(it) {
   const rel = rc
     ? `<span class="relchip" data-rel="1">相关${active === 'k' ? '错题' : '知识点'} ${rc} ${active === 'k' ? '道' : '个'}</span>` : '';
   const due = `<span class="duechip${isDue(it) ? ' due' : ''}" data-due="1" title="点击标记为「复习中」">🕒 ${dueLabel(it)}</span>`;
+  const src = it.fromPaper
+    ? `<span class="relchip" data-frompaper="1" title="来自试卷，点击查看原卷">来自试卷</span>` : '';
   // 「我的错误答案」为空时不显示该折叠区，避免噪音
   const dets = d.details(it).filter(x => x.label !== '查看我的错误答案' || x.text);
   card.innerHTML = `
@@ -670,7 +672,7 @@ function makeCard(it) {
     ${imgStrip(it)}
     <div class="meta">
       <button class="star ${it.star ? 'on' : ''}" data-act="star" title="${it.star ? '取消收藏' : '收藏'}">${it.star ? '★' : '☆'}</button>
-      ${tags}${rel}
+      ${tags}${rel}${src}
       <div class="cardacts">
         ${due}
         <span class="status ${it.status}" data-act="status">● ${STATUS[it.status]}</span>
@@ -736,6 +738,11 @@ function makeCard(it) {
     ov.selected.clear();
     switchView(other);
   };
+  const srcEl = card.querySelector('[data-frompaper]');
+  if (srcEl) srcEl.onclick = () => {
+    if (it.fromPaper && paperOf(it.fromPaper.paperId)) openPaper(it.fromPaper.paperId);
+    else alert('原试卷已删除。');
+  };
   // 移动端：长按 0.5 秒进入多选并选中该项
   let pressT = null, moved = false;
   card.addEventListener('touchstart', () => {
@@ -760,7 +767,31 @@ let curPaperId = null;
 let paperWrongOnly = false;
 let pqEditing = null;   // { paperId, questionId }
 
-function addPaperWrongToBook() {}
+function addPaperWrongToBook() {
+  const p = paperOf(curPaperId);
+  if (!p) return;
+  // 已在本子里（按 fromPaper 判重）的题目 id
+  const inBook = new Set(
+    stores.q.items
+      .filter(it => it.fromPaper && it.fromPaper.paperId === p.id)
+      .map(it => it.fromPaper.questionId)
+  );
+  const raws = paperWrongToQuestion(p, Date.now()).filter(raw => !inBook.has(raw.fromPaper.questionId));
+  if (!raws.length) { alert('没有可加入的题（未标错题，或都已在错题本）。'); return; }
+  const added = raws.map(raw => normalizeQuestion(raw));
+  added.forEach(it => stores.q.items.push(it));
+  // 回写 linkedQid，标记这些题已在错题本
+  added.forEach(it => {
+    const q = p.questions.find(x => x.id === it.fromPaper.questionId);
+    if (q) q.linkedQid = it.id;
+  });
+  p.updatedAt = Date.now();
+  saveStore(K_Q, stores.q.items);
+  savePapers();
+  refreshTagPicker();
+  renderPaperDetail();
+  alert(`已加入错题本 ${added.length} 道（解析留空，可在错题本里用「复制提示词」让 AI 补解析）。`);
+}
 
 function paperOf(id) { return stores.p.items.find(p => p.id === id); }
 
