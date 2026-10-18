@@ -100,6 +100,7 @@
       images: Array.isArray(o.images) ? o.images.filter(s => typeof s === 'string' && s) : [],
       collectionId: typeof o.collectionId === 'string' && o.collectionId ? o.collectionId : null,
       srs: normalizeSrs(o.srs),
+      order: Number.isFinite(o.order) ? o.order : null,
       createdAt: o.createdAt || Date.now(),
       fromPaper: (o.fromPaper && typeof o.fromPaper === 'object' && o.fromPaper.paperId)
         ? { paperId: o.fromPaper.paperId, questionId: o.fromPaper.questionId || null } : null,
@@ -119,6 +120,7 @@
       images: Array.isArray(o.images) ? o.images.filter(s => typeof s === 'string' && s) : [],
       collectionId: typeof o.collectionId === 'string' && o.collectionId ? o.collectionId : null,
       srs: normalizeSrs(o.srs),
+      order: Number.isFinite(o.order) ? o.order : null,
       createdAt: o.createdAt || Date.now(),
       updatedAt: o.updatedAt || Date.now(),
     };
@@ -257,10 +259,78 @@
         images: [],
         collectionId: null,
         srs: normalizeSrs(undefined),
+        order: null,
         createdAt: t,
         updatedAt: t,
         fromPaper: { paperId: paper.id, questionId: q.id },
       }));
+  }
+
+  /* 从 fromId 之后向后找第一个 wrong==='unset' 的题；到末尾回绕到开头；
+     fromId 不存在时从开头找；全部已标则返回 null。 */
+  function nextUnmarked(questions, fromId) {
+    const qs = Array.isArray(questions) ? questions : [];
+    const n = qs.length;
+    if (!n) return null;
+    const start = qs.findIndex(q => q.id === fromId);
+    const base = start < 0 ? -1 : start;              // 不存在时 base=-1，从索引 0 开始
+    for (let k = 1; k <= n; k++) {
+      const i = (base + k + n) % n;
+      if (qs[i] && qs[i].wrong === 'unset') return qs[i];
+    }
+    return null;
+  }
+
+  /* 统计整卷三态：total 题数、right/wrong/unset 各计数、marked = right + wrong */
+  function paperProgress(questions) {
+    const qs = Array.isArray(questions) ? questions : [];
+    let right = 0, wrong = 0, unset = 0;
+    for (const q of qs) {
+      if (q && q.wrong === 'right') right++;
+      else if (q && q.wrong === 'wrong') wrong++;
+      else unset++;
+    }
+    return { total: qs.length, right, wrong, unset, marked: right + wrong };
+  }
+
+  /* ---------- 排序 ----------
+     自动（auto）：创建时间倒序，新增的排最前，与现有行为一致。
+     手动（manual）：order 升序；order===null 的（新加入、未参与拖拽）排最前，
+     其内部按 createdAt 倒序；order 相同用 createdAt 倒序兜底。 */
+  function sortItems(items, mode) {
+    const arr = Array.isArray(items) ? items.slice() : [];
+    if (mode === 'manual') {
+      return arr.sort((a, b) => {
+        const ao = (a && typeof a.order === 'number') ? a.order : null;
+        const bo = (b && typeof b.order === 'number') ? b.order : null;
+        if (ao === null && bo === null) return (b.createdAt || 0) - (a.createdAt || 0);
+        if (ao === null) return -1;                      // 新条目排最前
+        if (bo === null) return 1;
+        if (ao !== bo) return ao - bo;                   // order 升序
+        return (b.createdAt || 0) - (a.createdAt || 0);  // order 相同兜底
+      });
+    }
+    return arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }
+
+  /* 把当前顺序固化为显式 order（0..n-1）。
+     入参应按「当前显示顺序」传入（进入手动模式时传 sortItems(items,'auto') 的结果）。 */
+  function materializeOrder(items) {
+    return (Array.isArray(items) ? items : []).map((it, i) => Object.assign({}, it, { order: i }));
+  }
+
+  /* 在整库顺序上把 movedId 移到 targetIndex，返回重编号（0..n-1）后的新数组。
+     入参 items 应按「当前显示顺序」传入；targetIndex 越界钳制到 [0, n-1]。
+     移动后顺序无变化时，输出与（已归一化的）输入值相等。 */
+  function reorderItems(items, movedId, targetIndex) {
+    const arr = Array.isArray(items) ? items.slice() : [];
+    const from = arr.findIndex(it => it && it.id === movedId);
+    if (from >= 0) {
+      const to = Math.max(0, Math.min(arr.length - 1, Math.floor(targetIndex)));
+      const [moved] = arr.splice(from, 1);
+      arr.splice(to, 0, moved);
+    }
+    return arr.map((it, i) => Object.assign({}, it, { order: i }));
   }
 
   /* ---------- 搜索语法 ----------
@@ -586,6 +656,11 @@
     normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers,
     parseBlockGeneric, parseText, parsePaper,
     paperWrongToQuestion,
+    nextUnmarked,
+    paperProgress,
+    sortItems,
+    materializeOrder,
+    reorderItems,
     normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
     collectionPath, flattenCollections, addCollection, renameCollection,
     canMoveCollection, moveCollection, deleteCollection,

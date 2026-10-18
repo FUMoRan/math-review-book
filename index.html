@@ -175,15 +175,36 @@
   </div>
 </div>
 
-<!-- 试卷详情 -->
-<div class="modal" id="paperModal">
-  <div class="panel wide">
-    <h2 id="paperModalTitle">试卷</h2>
-    <div id="paperBody"></div>
-    <div class="row">
-      <button class="ghost" id="paperDetailClose">关闭</button>
+<!-- 全屏试卷页（打开后：判分 / 重做，可叠加专注模式） -->
+<div class="paperview" id="paperView">
+  <div class="paperview-bar">
+    <button class="ghost" id="paperBack">‹ 返回</button>
+    <span class="paperview-title" id="paperViewTitle"></span>
+    <span class="spacer"></span>
+    <div class="seg" id="paperModeSec">
+      <button data-mode="grade">判分</button>
+      <button data-mode="redo">重做</button>
     </div>
+    <button id="paperFocusBtn" title="一题一屏">专注</button>
+    <button id="paperWrongOnlyBtn">仅看错题</button>
+    <button id="paperAnsBtn">显示答案</button>
+    <button class="primary" id="paperToWrongBtn">加入错题本</button>
   </div>
+  <div class="paperview-nav" id="paperNav"></div>
+  <div class="paperview-body">
+    <div class="paperview-qs" id="paperQs"></div>
+    <div class="paperview-focus" id="paperFocus"></div>
+  </div>
+  <div class="paperview-foot" id="paperFoot"></div>
+</div>
+
+<!-- 试卷编辑页（从卡片「编辑」进入；做题/判分界面不提供改题能力） -->
+<div class="paperedit" id="paperEdit">
+  <div class="paperedit-bar">
+    <button class="ghost" id="paperEditBack">‹ 返回</button>
+    <span class="section-label">编辑试卷</span>
+  </div>
+  <div class="paperedit-body" id="paperEditBody"></div>
 </div>
 
 <!-- 试卷题目编辑 -->
@@ -341,6 +362,24 @@
         <button data-anim="off">关闭</button>
       </div>
       <p class="setnote">开启后：展开/折叠平滑淡入、切页淡入、按钮按下反馈。</p>
+    </div>
+
+    <div class="setrow">
+      <span class="lbl">合集侧栏</span>
+      <div class="seg" id="setRail">
+        <button data-rail="off">展开</button>
+        <button data-rail="on">收起为竖条</button>
+      </div>
+      <p class="setnote">收起后：宽屏在左侧显示窄竖条；窄屏（手机）仍是抽屉，不受影响。</p>
+    </div>
+
+    <div class="setrow">
+      <span class="lbl">排序 · 当前库：<span id="sortLibName">错题</span></span>
+      <div class="seg" id="setSort">
+        <button data-sort="auto">自动（创建时间）</button>
+        <button data-sort="manual">手动（拖拽调整）</button>
+      </div>
+      <p class="setnote" id="sortNote">手动模式：按住卡片右上角的 ⠿ 手柄拖动调整顺序。切换只影响当前库；切回自动不会清除已存的顺序。</p>
     </div>
 
     <div class="setrow">

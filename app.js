@@ -18,6 +18,8 @@ const {
   parseText, parseSearch,
   normalizeQuestion, normalizeKp, scheduleSrs, isDue, dueLabel, DAY,
   normalizePaper, parsePaper, paperWrongToQuestion, mergeSeedPapers,
+  nextUnmarked, paperProgress,
+  sortItems, materializeOrder, reorderItems,
   settleCollections, collectionSubtreeIds, flattenCollections, collectionChildren,
   collectionPath, addCollection, renameCollection, canMoveCollection, moveCollection,
   deleteCollection, collectionCounts, sanitizeItemCollections,
@@ -26,7 +28,7 @@ const {
 
 /* ===================== 设置（偏好，与数据分开存） ===================== */
 const K_SET = 'mq_settings';
-const SET_DEF = { cols: 'auto', theme: 'system', density: 'comfortable', anim: 'on' };
+const SET_DEF = { cols: 'auto', theme: 'system', density: 'comfortable', anim: 'on', rail: 'off', sortMode: { q: 'auto', k: 'auto' } };
 
 function readSettings() {
   try {
@@ -35,6 +37,8 @@ function readSettings() {
   } catch (e) { return {}; }
 }
 const settings = Object.assign({}, SET_DEF, readSettings());
+// sortMode 是嵌套对象，浅合并会整体覆盖，这里单独补全两库默认值
+settings.sortMode = Object.assign({ q: 'auto', k: 'auto' }, settings.sortMode);
 
 function saveSettings() {
   try { localStorage.setItem(K_SET, JSON.stringify(settings)); } catch (e) {}
@@ -71,6 +75,18 @@ function applySettings() {
   document.querySelectorAll('#setTheme button').forEach(b => b.classList.toggle('on', b.dataset.theme === settings.theme));
   document.querySelectorAll('#setDensity button').forEach(b => b.classList.toggle('on', b.dataset.density === settings.density));
   document.querySelectorAll('#setAnim button').forEach(b => b.classList.toggle('on', b.dataset.anim === settings.anim));
+
+  const sm = (settings.sortMode && settings.sortMode[active]) || 'auto';
+  document.querySelectorAll('#setSort button').forEach(b => b.classList.toggle('on', b.dataset.sort === sm));
+  const sortLib = document.getElementById('sortLibName');
+  if (sortLib) sortLib.textContent = active === 'p' ? '试卷（不适用）' : (active === 'k' ? '知识点' : '错题');
+  document.querySelectorAll('#setRail button').forEach(b => b.classList.toggle('on', b.dataset.rail === settings.rail));
+
+  // 宽屏且已「收起」→ 侧栏切成窄竖条；窄屏（<1024）始终是抽屉，不加该类
+  if (colTreeEl) {
+    colTreeEl.classList.toggle('rail', settings.rail === 'on' && window.innerWidth >= 1024);
+    renderColTree();
+  }
 
   const note = document.getElementById('colsNote');
   if (note) {
@@ -665,9 +681,8 @@ function currentFiltered() {
     if (s.text && !hayOf(it).includes(s.text)) return false;
     return true;
   });
-  // 按创建时间倒序：新增的排最前，编辑/改状态不会打乱既有顺序
-  out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  return out;
+  // 按当前库的排序模式：自动=创建时间倒序（新增的排最前）；手动=order（新条目 order=null 排最前）
+  return sortItems(out, (settings.sortMode && settings.sortMode[active]) || 'auto');
 }
 
 function bindLazy(detailsEl, key, text, emptyLabel) {
@@ -702,8 +717,9 @@ function applyStatus(item, next) {
 function makeCard(it) {
   const d = DEF[active];
   const v = cur();
+  const canDrag = dragAllowed();
   const card = document.createElement('div');
-  card.className = 'card';
+  card.className = 'card' + (canDrag ? ' has-drag' : '');
   card.dataset.id = it.id;
   const tags = it.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('');
   const rc = relatedCount(it); // 只计算一次
@@ -719,6 +735,7 @@ function makeCard(it) {
   const dets = d.details(it).filter(x => x.label !== '查看我的错误答案' || x.text);
   card.innerHTML = `
     ${v.selectMode ? `<input type="checkbox" class="chk" data-act="pick" ${v.selected.has(it.id) ? 'checked' : ''}>` : ''}
+    ${canDrag ? `<button type="button" class="drag-handle" data-act="drag" title="按住拖拽调整顺序" aria-label="拖拽排序">⠿</button>` : ''}
     ${d.main(it)}
     ${imgStrip(it)}
     <div class="meta">
@@ -817,15 +834,34 @@ function makeCard(it) {
   card.addEventListener('touchend', () => clearTimeout(pressT));
   card.addEventListener('touchcancel', () => { moved = true; clearTimeout(pressT); });
 
+  if (canDrag) {
+    const handle = card.querySelector('[data-act="drag"]');
+    if (handle) bindDragHandle(handle);
+  }
+
   return card;
 }
 
-let curPaperId = null;
-let paperWrongOnly = false;
-let pqEditing = null;   // { paperId, questionId }
+/* ===================== 试卷：全屏试卷页（打开后）===================== */
+
+let pqEditing = null;   // { paperId, questionId } —— 单题编辑弹层（编辑页）用
+
+// 试卷页状态（打开后）：判分/重做、专注、仅看错题、答案显隐、当前题
+const paperState = {
+  paperId: null,
+  mode: 'grade',        // 'grade' 判分 | 'redo' 重做
+  focus: false,         // 专注模式（一题一屏）
+  wrongOnly: false,     // 仅看错题
+  showAnswers: false,   // 重做模式下整卷显示答案
+  revealed: new Set(),  // 重做模式下逐题手动揭示过的题 id
+  curId: null,          // 当前题 id（导航高亮 / 专注当前题）
+};
+
+function paperOf(id) { return stores.p.items.find(p => p.id === id); }
+function curPaper() { return paperOf(paperState.paperId); }
 
 function addPaperWrongToBook() {
-  const p = paperOf(curPaperId);
+  const p = curPaper();
   if (!p) return;
   // 已在本子里（按 fromPaper 判重）的题目 id
   const inBook = new Set(
@@ -846,114 +882,333 @@ function addPaperWrongToBook() {
   saveStore(K_Q, stores.q.items);
   savePapers();
   refreshTagPicker();
-  renderPaperDetail();
+  renderPaperView();
   alert(`已加入错题本 ${added.length} 道（解析留空，可在错题本里用「复制提示词」让 AI 补解析）。`);
 }
 
-function paperOf(id) { return stores.p.items.find(p => p.id === id); }
-
 function openPaper(id) {
-  curPaperId = id;
-  paperWrongOnly = false;
-  renderPaperDetail();
-  document.getElementById('paperModal').classList.add('open');
+  paperState.paperId = id;
+  paperState.mode = 'grade';       // 默认判分模式
+  paperState.focus = false;
+  paperState.wrongOnly = false;
+  paperState.showAnswers = false;
+  paperState.revealed = new Set();
+  paperState.curId = null;
+  renderPaperView();
+  document.getElementById('paperView').classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
 
-function renderPaperDetail() {
-  const p = paperOf(curPaperId);
-  const modal = document.getElementById('paperModal');
-  if (!p) { modal.classList.remove('open'); return; }
-  document.getElementById('paperModalTitle').textContent = p.title;
-  const qs = p.questions.filter(q => !paperWrongOnly || q.wrong === 'wrong');
-  const body = document.getElementById('paperBody');
-  const wrongN = p.questions.filter(q => q.wrong === 'wrong').length;
-  body.innerHTML = `
-    <div class="paper-head">
-      <input id="paperTitleInput" value="${esc(p.title)}" placeholder="试卷名">
-      <input id="paperDateInput" type="date" value="${esc(p.date)}">
+function closePaperView() {
+  document.getElementById('paperView').classList.remove('open');
+  document.body.style.overflow = '';
+  paperState.paperId = null;
+  renderPapers();      // 刷新卡片「错 n」统计
+}
+
+let paperToastTimer = null;
+function paperToast(msg) {
+  const view = document.getElementById('paperView');
+  let el = document.getElementById('paperToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'paperToast';
+    el.className = 'paper-toast';
+    view.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(paperToastTimer);
+  paperToastTimer = setTimeout(() => el.classList.remove('show'), 1600);
+}
+
+// 当前可见题目（应用「仅看错题」）
+function paperVisibleQuestions(p) {
+  return p.questions.filter(q => !paperState.wrongOnly || q.wrong === 'wrong');
+}
+// 答案是否对某题可见：判分模式始终可见；重做模式需整卷开或该题已揭示
+function paperAnswerVisible(q) {
+  return paperState.mode === 'grade' || paperState.showAnswers || paperState.revealed.has(q.id);
+}
+// 更新某题三态（沿用 papers 数据结构，只改 wrong 字段）
+function setPaperQ(qid, patch) {
+  const p = curPaper();
+  const q = p && p.questions.find(x => x.id === qid);
+  if (!q) return;
+  Object.assign(q, patch);
+  p.updatedAt = Date.now();
+  savePapers();
+}
+
+// 整块渲染：工具栏状态 → 题号导航条 → 题目区 → 底栏
+function renderPaperView() {
+  const p = curPaper();
+  if (!p) { closePaperView(); return; }
+  const bodyEl = document.querySelector('.paperview-body');
+  const keepTop = bodyEl ? bodyEl.scrollTop : 0;
+
+  document.getElementById('paperViewTitle').textContent = p.title;
+  document.getElementById('paperModeSec').querySelectorAll('button')
+    .forEach(b => b.classList.toggle('on', b.dataset.mode === paperState.mode));
+  document.getElementById('paperWrongOnlyBtn').classList.toggle('on', paperState.wrongOnly);
+  const ansBtn = document.getElementById('paperAnsBtn');
+  ansBtn.disabled = paperState.mode === 'grade';
+  ansBtn.classList.toggle('on', paperState.showAnswers);
+  ansBtn.textContent = paperState.showAnswers ? '隐藏答案' : '显示答案';
+
+  const qs = paperVisibleQuestions(p);
+  if (!qs.some(q => q.id === paperState.curId)) paperState.curId = qs.length ? qs[0].id : null;
+
+  renderPaperNav(p, qs);
+
+  const qsEl = document.getElementById('paperQs');
+  const focusEl = document.getElementById('paperFocus');
+  const footEl = document.getElementById('paperFoot');
+  if (paperState.focus) {
+    qsEl.style.display = 'none'; focusEl.style.display = '';
+    renderPaperFocus(p, qs, focusEl);
+    footEl.innerHTML = '<button id="paperPrev">‹ 上一题</button><button id="paperNext">下一题 ›</button>';
+    footEl.querySelector('#paperPrev').onclick = () => paperStep(-1);
+    footEl.querySelector('#paperNext').onclick = () => paperStep(1);
+  } else {
+    qsEl.style.display = ''; focusEl.style.display = 'none';
+    renderPaperList(p, qs, qsEl);
+    footEl.innerHTML = '<span class="spacer"></span><button class="primary" id="paperNextUnmarked">跳到下一道未标</button>';
+    footEl.querySelector('#paperNextUnmarked').onclick = jumpToNextUnmarked;
+  }
+
+  const body2 = document.querySelector('.paperview-body');
+  if (body2) body2.scrollTop = keepTop;
+}
+
+// 右侧/顶部题号导航条：进度 + 每题的 对/错/未标 颜色方块 + 当前高亮
+function renderPaperNav(p, qs) {
+  const pr = paperProgress(p.questions);
+  const nav = document.getElementById('paperNav');
+  nav.innerHTML = `
+    <div class="paper-nav-head">
+      <span class="section-label">已标 ${pr.marked} / 共 ${pr.total}</span>
+      <span class="badge-note">错 ${pr.wrong}</span>
     </div>
-    <div class="badge-note">共 ${p.questions.length} 题 · 已标错 ${wrongN}${paperWrongOnly ? ' · 仅看错题' : ''}</div>
-    <div class="paper-qs">
-      ${qs.map(q => `
-        <div class="paper-q" data-qid="${q.id}">
-          <div class="paper-q-head"><span class="section-label">第 ${q.no} 题</span>
-            ${q.linkedQid ? '<span class="badge-note">已在错题本</span>' : ''}</div>
-          <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
-          ${q.answer ? `<details><summary>查看答案</summary><div class="body">${renderMath(q.answer)}</div></details>` : ''}
-          <div class="paper-q-acts">
-            <select data-act="wrong" data-qid="${q.id}">
-              <option value="unset"${q.wrong === 'unset' ? ' selected' : ''}>未标</option>
-              <option value="right"${q.wrong === 'right' ? ' selected' : ''}>做对</option>
-              <option value="wrong"${q.wrong === 'wrong' ? ' selected' : ''}>错题</option>
-            </select>
+    <div class="paper-nav-grid">
+      ${qs.map(q => `<button class="paper-nav-sq ${q.wrong}${q.id === paperState.curId ? ' cur' : ''}" data-qid="${q.id}" title="第 ${q.no} 题">${q.no}</button>`).join('')}
+    </div>`;
+  nav.querySelectorAll('.paper-nav-sq').forEach(btn => {
+    btn.onclick = () => goToPaperQuestion(btn.dataset.qid);
+  });
+}
+
+// 一览整卷：每题显眼的三态切换 + 答案（按模式显隐）
+function renderPaperList(p, qs, host) {
+  if (!qs.length) { host.innerHTML = '<div class="empty">没有可显示的题。</div>'; return; }
+  host.innerHTML = qs.map(q => `
+    <div class="paper-q" data-qid="${q.id}">
+      <div class="paper-q-head">
+        <span class="section-label">第 ${q.no} 题</span>
+        ${q.linkedQid ? '<span class="badge-note">已在错题本</span>' : ''}
+      </div>
+      <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
+      ${paperRenderAnswer(q)}
+      <div class="paper-q-acts">
+        <div class="paper-tri" data-qid="${q.id}">
+          <button data-wrong="right" class="${q.wrong === 'right' ? 'on right' : ''}">对</button>
+          <button data-wrong="wrong" class="${q.wrong === 'wrong' ? 'on wrong' : ''}">错</button>
+          <button data-wrong="unset" class="${q.wrong === 'unset' ? 'on unset' : ''}">未标</button>
+        </div>
+      </div>
+    </div>`).join('');
+  host.querySelectorAll('.paper-tri').forEach(tri => {
+    tri.querySelectorAll('button').forEach(b => {
+      b.onclick = () => markPaperQuestion(tri.dataset.qid, b.dataset.wrong);
+    });
+  });
+  host.querySelectorAll('.paper-reveal').forEach(b => {
+    b.onclick = () => { paperState.revealed.add(b.dataset.reveal); renderPaperView(); };
+  });
+}
+
+// 单题答案块：可见则渲染；重做模式未揭示则给「显示答案」按钮
+function paperRenderAnswer(q) {
+  if (!q.answer) return '';
+  if (paperAnswerVisible(q)) {
+    return `<div class="paper-q-answer"><span class="section-label">答案</span><div class="body">${renderMath(q.answer)}</div></div>`;
+  }
+  return `<button class="paper-reveal" data-reveal="${q.id}">👁 显示答案</button>`;
+}
+
+// 专注模式（一题一屏）：顶部进度条 + 题干/答案 + 大按钮「做对/做错」
+function renderPaperFocus(p, qs, host) {
+  const q = qs.find(x => x.id === paperState.curId) || qs[0];
+  if (!q) { host.innerHTML = '<div class="empty">没有可显示的题。</div>'; return; }
+  const idx = qs.findIndex(x => x.id === q.id);
+  const pct = qs.length ? Math.round(((idx + 1) / qs.length) * 100) : 0;
+  host.innerHTML = `
+    <div class="paper-focus-progress"><div class="paper-focus-bar" style="width:${pct}%"></div></div>
+    <div class="paper-focus-card">
+      <div class="paper-focus-head">
+        <span class="section-label">第 ${q.no} 题</span>
+        <span class="spacer"></span>
+        <span class="section-label">${idx + 1} / ${qs.length}</span>
+      </div>
+      <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
+      ${paperRenderAnswer(q)}
+      <div class="paper-focus-acts">
+        <button class="paper-big right ${q.wrong === 'right' ? 'on' : ''}" data-wrong="right">做对</button>
+        <button class="paper-big wrong ${q.wrong === 'wrong' ? 'on' : ''}" data-wrong="wrong">做错</button>
+      </div>
+    </div>`;
+  host.querySelectorAll('.paper-big').forEach(b => {
+    b.onclick = () => markPaperQuestion(q.id, b.dataset.wrong);
+  });
+  host.querySelectorAll('.paper-reveal').forEach(b => {
+    b.onclick = () => { paperState.revealed.add(b.dataset.reveal); renderPaperView(); };
+  });
+}
+
+/* ===================== 试卷编辑页（独立入口，可改题）===================== */
+const paperEditState = { paperId: null };
+
+function openPaperEdit(id) {
+  paperEditState.paperId = id;
+  renderPaperEdit();
+  document.getElementById('paperEdit').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closePaperEdit() {
+  document.getElementById('paperEdit').classList.remove('open');
+  document.body.style.overflow = '';
+  paperEditState.paperId = null;
+  renderPapers();       // 刷新卡片标题/错数统计
+}
+
+function renderPaperEdit() {
+  const p = paperOf(paperEditState.paperId);
+  if (!p) { closePaperEdit(); return; }
+  const host = document.getElementById('paperEditBody');
+  host.innerHTML = `
+    <div class="paperedit-head">
+      <input id="paperEditTitle" value="${esc(p.title)}" placeholder="试卷名">
+      <input id="paperEditDate" type="date" value="${esc(p.date)}">
+    </div>
+    <div class="paperedit-qs">
+      ${p.questions.map(q => `
+        <div class="paperedit-q" data-qid="${q.id}">
+          <div class="paper-q-head">
+            <span class="section-label">第 ${q.no} 题</span>
+            <span class="spacer"></span>
             <button class="link" data-act="editq" data-qid="${q.id}">编辑</button>
             <button class="link" data-act="delq" data-qid="${q.id}">删除</button>
           </div>
-        </div>`).join('') || '<div class="empty">没有可显示的题。</div>'}
-    </div>
-    <div class="row paper-foot">
-      <button id="paperAllWrong">全部标错</button>
-      <button id="paperAllRight">全部标对</button>
-      <button id="paperWrongOnly">${paperWrongOnly ? '显示全部' : '仅看错题'}</button>
-      <span class="spacer"></span>
-      <button class="primary" id="paperToWrong">把已标错题加入错题本</button>
+          <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
+          ${q.answer ? `<div class="body">${renderMath(q.answer)}</div>` : ''}
+        </div>`).join('') || '<div class="empty">这张试卷还没有题目。</div>'}
     </div>`;
-
-  const setQ = (qid, patch) => {
-    const q = p.questions.find(x => x.id === qid);
-    if (!q) return;
-    Object.assign(q, patch);
-    p.updatedAt = Date.now();
-    savePapers();
-  };
-
-  document.getElementById('paperTitleInput').onchange = e => {
+  document.getElementById('paperEditTitle').onchange = e => {
     p.title = e.target.value.trim() || '未命名试卷';
     p.updatedAt = Date.now();
     savePapers();
-    document.getElementById('paperModalTitle').textContent = p.title;
   };
-  document.getElementById('paperDateInput').onchange = e => {
+  document.getElementById('paperEditDate').onchange = e => {
     p.date = e.target.value;
     p.updatedAt = Date.now();
     savePapers();
   };
-  body.querySelectorAll('select[data-act="wrong"]').forEach(sel => {
-    sel.onchange = () => { setQ(sel.dataset.qid, { wrong: sel.value }); renderPaperDetail(); };
+  host.querySelectorAll('[data-act="editq"]').forEach(b => {
+    b.onclick = () => openPaperQ(paperEditState.paperId, b.dataset.qid);
   });
-  body.querySelectorAll('[data-act="delq"]').forEach(btn => {
-    btn.onclick = () => {
+  host.querySelectorAll('[data-act="delq"]').forEach(b => {
+    b.onclick = () => {
       if (!confirm('删除这道题？（若已加入错题本，错题条目会保留）')) return;
-      p.questions = p.questions.filter(x => x.id !== btn.dataset.qid);
+      p.questions = p.questions.filter(x => x.id !== b.dataset.qid);
       p.updatedAt = Date.now();
       savePapers();
-      renderPaperDetail();
+      renderPaperEdit();
     };
   });
-  body.querySelectorAll('[data-act="editq"]').forEach(btn => {
-    btn.onclick = () => openPaperQ(p.id, btn.dataset.qid);
-  });
-  document.getElementById('paperAllWrong').onclick = () => {
-    p.questions.forEach(q => { q.wrong = 'wrong'; });
-    p.updatedAt = Date.now(); savePapers(); renderPaperDetail();
-  };
-  document.getElementById('paperAllRight').onclick = () => {
-    p.questions.forEach(q => { q.wrong = 'right'; });
-    p.updatedAt = Date.now(); savePapers(); renderPaperDetail();
-  };
-  document.getElementById('paperWrongOnly').onclick = () => { paperWrongOnly = !paperWrongOnly; renderPaperDetail(); };
-  document.getElementById('paperToWrong').onclick = addPaperWrongToBook;
 }
 
-document.getElementById('paperDetailClose').onclick = () => {
-  document.getElementById('paperModal').classList.remove('open');
-  renderPapers();
-};
-document.getElementById('paperModal').onclick = e => {
-  if (e.target === document.getElementById('paperModal')) { document.getElementById('paperModal').classList.remove('open'); renderPapers(); }
-};
+document.getElementById('paperEditBack').onclick = closePaperEdit;
 
-/* 题目编辑小弹层 */
+function markPaperQuestion(qid, wrong) {
+  setPaperQ(qid, { wrong });
+  renderPaperView();
+}
+
+// 点击题号方块 → 更新高亮并滚动定位（专注模式在 Task 6 处理）
+function goToPaperQuestion(qid) {
+  paperState.curId = qid;
+  const p = curPaper();
+  if (!p) return;
+  if (paperState.focus) { renderPaperView(); return; }
+  renderPaperNav(p, paperVisibleQuestions(p));
+  const el = document.getElementById('paperQs').querySelector(`.paper-q[data-qid="${qid}"]`);
+  if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+// 上/下一题：列表模式滚动定位，专注模式切换题（专注分支在 Task 6 补齐）
+function paperStep(delta) {
+  const p = curPaper();
+  if (!p) return;
+  const qs = paperVisibleQuestions(p);
+  if (!qs.length) return;
+  let i = qs.findIndex(q => q.id === paperState.curId);
+  if (i < 0) i = 0;
+  const ni = Math.max(0, Math.min(qs.length - 1, i + delta));
+  paperState.curId = qs[ni].id;
+  if (paperState.focus) renderPaperView();
+  else goToPaperQuestion(paperState.curId);
+}
+
+// 底部「跳到下一道未标」：从当前题之后找，回绕；找不到则提示
+function jumpToNextUnmarked() {
+  const p = curPaper();
+  if (!p) return;
+  const next = nextUnmarked(p.questions, paperState.curId);
+  if (!next) { paperToast('已无未标'); return; }
+  if (paperState.wrongOnly) paperState.wrongOnly = false;   // 目标题未标，先取消「仅看错题」以便可见
+  paperState.curId = next.id;
+  renderPaperView();
+  const el = document.getElementById('paperQs').querySelector(`.paper-q[data-qid="${next.id}"]`);
+  if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+function isPaperViewOpen() {
+  return document.getElementById('paperView').classList.contains('open');
+}
+// 试卷页快捷键：仅当焦点不在 input/textarea/select 时生效
+function handlePaperKey(e) {
+  const t = e.target;
+  const tag = t && t.tagName ? t.tagName.toLowerCase() : '';
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return false;
+  if (e.key === '1') { if (paperState.curId) markPaperQuestion(paperState.curId, 'right'); e.preventDefault(); return true; }
+  if (e.key === '2') { if (paperState.curId) markPaperQuestion(paperState.curId, 'wrong'); e.preventDefault(); return true; }
+  if (e.key === '0') { if (paperState.curId) markPaperQuestion(paperState.curId, 'unset'); e.preventDefault(); return true; }
+  if (e.key === 'ArrowUp' || e.key === 'p' || e.key === 'P') { paperStep(-1); e.preventDefault(); return true; }
+  if (e.key === 'ArrowDown' || e.key === 'n' || e.key === 'N') { paperStep(1); e.preventDefault(); return true; }
+  if (e.key === 'Escape') { closePaperView(); return true; }
+  return false;
+}
+
+document.getElementById('paperBack').onclick = closePaperView;
+document.getElementById('paperFocusBtn').onclick = () => { paperState.focus = !paperState.focus; renderPaperView(); };
+document.getElementById('paperWrongOnlyBtn').onclick = () => { paperState.wrongOnly = !paperState.wrongOnly; renderPaperView(); };
+document.getElementById('paperAnsBtn').onclick = () => {
+  paperState.showAnswers = !paperState.showAnswers;
+  if (!paperState.showAnswers) paperState.revealed = new Set();   // 隐藏时把逐题揭示也复位
+  renderPaperView();
+};
+document.getElementById('paperToWrongBtn').onclick = addPaperWrongToBook;
+document.getElementById('paperModeSec').querySelectorAll('button').forEach(b => {
+  b.onclick = () => {
+    paperState.mode = b.dataset.mode;
+    paperState.showAnswers = false;
+    paperState.revealed = new Set();
+    renderPaperView();
+  };
+});
+
+
+/* 题目编辑小弹层：仅供编辑页调用 */
 function openPaperQ(paperId, qid) {
   const p = paperOf(paperId);
   const q = p && p.questions.find(x => x.id === qid);
@@ -966,20 +1221,21 @@ function openPaperQ(paperId, qid) {
 }
 document.getElementById('pqCancel').onclick = () => document.getElementById('paperQModal').classList.remove('open');
 document.getElementById('pqSave').onclick = () => {
-  if (!pqEditing) return;
-  const p = paperOf(pqEditing.paperId);
-  const q = p && p.questions.find(x => x.id === pqEditing.questionId);
-  if (q) {
-    const no = parseInt(document.getElementById('pqNo').value, 10);
-    q.no = Number.isFinite(no) ? no : q.no;
-    q.stem = document.getElementById('pqStem').value;
-    q.answer = document.getElementById('pqAnswer').value;
-    p.updatedAt = Date.now();
-    savePapers();
+  if (pqEditing) {
+    const p = paperOf(pqEditing.paperId);
+    const q = p && p.questions.find(x => x.id === pqEditing.questionId);
+    if (q) {
+      const no = parseInt(document.getElementById('pqNo').value, 10);
+      q.no = Number.isFinite(no) ? no : q.no;
+      q.stem = document.getElementById('pqStem').value;
+      q.answer = document.getElementById('pqAnswer').value;
+      p.updatedAt = Date.now();
+      savePapers();
+    }
+    pqEditing = null;
+    document.getElementById('paperQModal').classList.remove('open');
+    renderPaperEdit();
   }
-  pqEditing = null;
-  document.getElementById('paperQModal').classList.remove('open');
-  renderPaperDetail();
 };
 
 function savePapers() { return persist(K_P, stores.p.items); }
@@ -1008,6 +1264,7 @@ function renderPapers() {
         ${p.date ? `<span class="tag">${esc(p.date)}</span>` : ''}
         <div class="cardacts">
           <button class="link" data-act="open">打开</button>
+          <button class="link" data-act="edit">编辑</button>
           <button class="link" data-act="rename">改名</button>
           <button class="link" data-act="delete">删除</button>
         </div>
@@ -1021,6 +1278,7 @@ function renderPapers() {
       const act = e.target.dataset && e.target.dataset.act;
       const paper = stores.p.items.find(x => x.id === card.dataset.id);
       if (!paper) return;
+      if (act === 'edit') { openPaperEdit(paper.id); return; }
       if (act === 'delete') {
         if (confirm(`删除试卷「${paper.title}」？已加入错题本的题会保留。`)) {
           stores.p.items = stores.p.items.filter(x => x.id !== paper.id);
@@ -1136,6 +1394,14 @@ const colBackdrop = document.getElementById('colBackdrop');
 const colCollapsed = new Set();   // 被折叠的合集 id（默认展开）
 
 const colKind = () => active === 'k' ? 'k' : 'q';
+
+// 「侧栏收起为竖条」的偏好：全局（错题 / 知识点共用），存于 mq_settings.rail（'on' | 'off'）
+const colRailOn = () => settings.rail === 'on';
+function setColRail(on) {
+  settings.rail = on ? 'on' : 'off';
+  saveSettings();
+  applySettings();
+}
 const colList = kind => (colStores[kind] || []);
 function collectionById(kind, id) { return colList(kind).find(c => c.id === id); }
 function collectionName(kind, id) { const c = collectionById(kind, id); return c ? c.name : '未分类'; }
@@ -1172,6 +1438,8 @@ function openColDrawer() { colTreeEl.classList.add('open'); colBackdrop.classLis
 function closeColDrawer() { colTreeEl.classList.remove('open'); colBackdrop.classList.remove('show'); }
 function closeColDrawerIfNarrow() { if (window.innerWidth < 1024) closeColDrawer(); }
 document.getElementById('colToggle').onclick = () => {
+  // 宽屏：一键在「完整侧栏 ⇄ 窄竖条」之间切换；窄屏：开合抽屉（行为不变）
+  if (window.innerWidth >= 1024) { setColRail(!colRailOn()); return; }
   colTreeEl.classList.contains('open') ? closeColDrawer() : openColDrawer();
 };
 
@@ -1184,6 +1452,12 @@ function renderColTree() {
   const { subtree, unassigned } = collectionCounts(curItems(), cols);
   const sel = v.collectionFilter;
   const st = colTreeEl.scrollTop;
+
+  // 宽屏 + 已收起 → 渲染窄竖条（平铺所有合集）；否则保持现有完整树
+  if (colRailOn() && window.innerWidth >= 1024) {
+    renderColRail(kind, cols, subtree, unassigned, sel);
+    return;
+  }
 
   const nodeRow = o => {
     const pad = 6 + o.depth * 14;
@@ -1201,7 +1475,7 @@ function renderColTree() {
     </div>`;
   };
 
-  let html = `<div class="coltree-head"><span class="t">合集</span><button class="cls" id="colClose" title="关闭">✕</button></div>`;
+  let html = `<div class="coltree-head"><span class="t">合集</span><button class="railbtn" id="colCollapse" title="收起侧栏">«</button><button class="cls" id="colClose" title="关闭">✕</button></div>`;
   html += nodeRow({ id: COL_ALL, name: '全部', count: curItems().length, active: sel === COL_ALL, depth: 0, virtual: true });
   html += nodeRow({ id: NONE_ID, name: '未分类', count: unassigned, active: sel == null, depth: 0, virtual: true });
 
@@ -1245,6 +1519,51 @@ function renderColTree() {
   if (nb) nb.onclick = () => createCollection(null);
   const cb = colTreeEl.querySelector('#colClose');
   if (cb) cb.onclick = () => closeColDrawer();
+  const cc = colTreeEl.querySelector('#colCollapse');
+  if (cc) cc.onclick = () => setColRail(true);
+}
+
+// 首字（竖条方块上显示一个字符；对代理对/emoji 安全）
+const firstChar = s => { const t = String(s == null ? '' : s).trim(); return t ? [...t][0] : '?'; };
+
+// 窄竖条：平铺「全部」「未分类」+ 所有合集（含子合集，不体现缩进），复用同一份 collectionFilter 选中态
+function renderColRail(kind, cols, subtree, unassigned, sel) {
+  const v = cur();
+  // 保留竖条内部滚动位置
+  const prev = colTreeEl.querySelector('.colrail-items');
+  const st = prev ? prev.scrollTop : 0;
+
+  const item = (id, name, active, tip) =>
+    `<button class="colrail-item${active ? ' active' : ''}" data-rrow="${esc(id)}" title="${esc(tip)}">${esc(firstChar(name))}</button>`;
+
+  let items = '';
+  items += item(COL_ALL, '全部', sel === COL_ALL, `全部 · ${curItems().length} 条`);
+  items += item(NONE_ID, '未分类', sel == null, `未分类 · ${unassigned} 条`);
+  for (const c of flattenCollections(cols)) {
+    const path = collectionPath(cols, c.id).map(x => x.name).join(' / ');
+    items += item(c.id, c.name, sel === c.id, `${path} · ${subtree.get(c.id) || 0} 条`);
+  }
+
+  colTreeEl.innerHTML = '<div class="colrail">'
+    + '<button class="colrail-btn" id="colRailExpand" title="展开合集侧栏">»</button>'
+    + `<div class="colrail-items">${items}</div>`
+    + '<button class="colrail-btn" id="colRailNew" title="新建合集">＋</button>'
+    + '</div>';
+
+  const itemsEl = colTreeEl.querySelector('.colrail-items');
+  if (itemsEl) itemsEl.scrollTop = st;
+
+  colTreeEl.querySelectorAll('[data-rrow]').forEach(el => {
+    el.onclick = () => {
+      const raw = el.dataset.rrow;
+      v.collectionFilter = raw === NONE_ID ? null : raw;   // COL_ALL 原样保留
+      applyFilters();                                       // 重渲染 → 竖条高亮与列表同步更新
+    };
+  });
+  const ex = colTreeEl.querySelector('#colRailExpand');
+  if (ex) ex.onclick = () => setColRail(false);
+  const nw = colTreeEl.querySelector('#colRailNew');
+  if (nw) nw.onclick = () => createCollection(null);
 }
 
 const NONE_ID = '__none__';   // 侧栏「未分类」虚拟行的 id
@@ -1424,6 +1743,95 @@ document.getElementById('exitSelect').onclick = () => {
   document.getElementById('selectBtn').classList.remove('primary');
   render();
 };
+
+/* ---------- 拖拽手动排序 ----------
+   仅「列表视图 + 未搜索 + 无标签/状态/收藏/待复习筛选 + 未分组 + 合集为全部 + 未背题 + 未随机复习」时可用。
+   指针事件实现（pointerdown/move/up），桌面与触屏通用，不依赖 HTML5 DnD；长按多选不受影响。 */
+let dragState = null;
+
+function dragAllowed() {
+  if (active === 'p') return false;
+  const v = cur();
+  return !v.search && !v.status && !v.starOnly && !v.dueOnly
+    && v.activeTags.size === 0 && !v.groupMode && v.collectionFilter === COL_ALL
+    && !cram.open && !randomModal.classList.contains('open');
+}
+
+function dragPointerDown(e) {
+  if (e.button != null && e.button !== 0) return;      // 仅左键 / 触摸
+  const handle = e.currentTarget;
+  const card = handle.closest && handle.closest('.card');
+  if (!card) return;
+  e.preventDefault();
+  dragState = {
+    id: card.dataset.id,
+    el: card,
+    startY: e.clientY,
+    fromIndex: [...listEl.querySelectorAll('.card')].indexOf(card),
+    moved: false,
+    pointerId: e.pointerId,
+  };
+  try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+}
+
+function dragPointerMove(e) {
+  if (!dragState || e.pointerId !== dragState.pointerId) return;
+  if (!dragState.moved && Math.abs(e.clientY - dragState.startY) < 4) return;
+  dragState.moved = true;
+  dragState.el.classList.add('dragging');
+  const x = e.clientX, y = e.clientY;
+  // 命中指针所在的其它卡片，按指针在其上半/下半决定插入到前/后
+  let over = null;
+  for (const c of listEl.querySelectorAll('.card')) {
+    if (c === dragState.el) continue;
+    const r = c.getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) { over = c; break; }
+  }
+  if (over) {
+    const r = over.getBoundingClientRect();
+    if (y < r.top + r.height / 2) over.parentNode.insertBefore(dragState.el, over);
+    else over.parentNode.insertBefore(dragState.el, over.nextSibling);
+    return;
+  }
+  // 指针已落到所有卡片下方：移到末尾
+  const rest = [...listEl.querySelectorAll('.card')].filter(c => c !== dragState.el);
+  const last = rest[rest.length - 1];
+  if (last) {
+    const r = last.getBoundingClientRect();
+    if (y > r.bottom) last.parentNode.appendChild(dragState.el);
+  }
+}
+
+function dragPointerUp(e) {
+  if (!dragState || e.pointerId !== dragState.pointerId) return;
+  const st = dragState;
+  dragState = null;
+  try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+  st.el.classList.remove('dragging');
+  if (!st.moved) { render(); return; }                 // 只是点了下手柄：恢复
+  const targetIndex = [...listEl.querySelectorAll('.card')].findIndex(c => c.dataset.id === st.id);
+  if (targetIndex < 0 || targetIndex === st.fromIndex) { render(); return; }  // 拖回原位：不写盘
+  const mode = (settings.sortMode && settings.sortMode[active]) || 'auto';
+  let items;
+  if (mode !== 'manual') {                             // 首次拖拽：整库固化为手动
+    items = materializeOrder(sortItems(curItems(), 'auto'));
+    settings.sortMode[active] = 'manual';
+    saveSettings();
+  } else {
+    items = sortItems(curItems(), 'manual');
+  }
+  stores[active].items = reorderItems(items, st.id, targetIndex);
+  saveActive();
+  applySettings();
+  render();
+}
+
+function bindDragHandle(handle) {
+  handle.addEventListener('pointerdown', dragPointerDown);
+  handle.addEventListener('pointermove', dragPointerMove);
+  handle.addEventListener('pointerup', dragPointerUp);
+  handle.addEventListener('pointercancel', dragPointerUp);
+}
 document.querySelectorAll('[data-batch-status]').forEach(btn => {
   btn.onclick = () => {
     const v = cur();
@@ -1983,7 +2391,7 @@ function renderStats() {
 /* ---------- 导出 Markdown ---------- */
 function toMarkdown() {
   const isQ = active === 'q';
-  const items = curItems().slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const items = sortItems(curItems(), (settings.sortMode && settings.sortMode[active]) || 'auto');
   const out = [`# 数学复习本 · ${isQ ? '错题' : '知识点'}`, '', `> 导出时间：${new Date().toLocaleString('zh-CN')} · 共 ${items.length} 项`, ''];
   items.forEach((it, idx) => {
     const tags = it.tags.join('、') || '—';
@@ -2029,7 +2437,7 @@ document.getElementById('exportMdBtn').onclick = () => {
 document.getElementById('printBtn').onclick = () => {
   settingsDrawer.classList.remove('open');
   const isQ = active === 'q';
-  const items = curItems().slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const items = sortItems(curItems(), (settings.sortMode && settings.sortMode[active]) || 'auto');
   if (!items.length) { alert(`当前${isQ ? '错题' : '知识点'}库是空的。`); return; }
   const area = document.getElementById('printArea');
   const head = `<h1>数学复习本 · ${isQ ? '错题' : '知识点'}</h1>
@@ -2203,17 +2611,27 @@ document.addEventListener('keydown', e => {
     else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); revealNext(); }
     return;
   }
+  if (isPaperViewOpen() && handlePaperKey(e)) return;
   if (e.key === 'Escape' && settingsDrawer.classList.contains('open')) settingsDrawer.classList.remove('open');
 });
 
 /* ---------- 设置抽屉 ---------- */
 const settingsDrawer = document.getElementById('settingsDrawer');
-document.getElementById('settingsBtn').onclick = () => settingsDrawer.classList.add('open');
+document.getElementById('settingsBtn').onclick = () => { applySettings(); settingsDrawer.classList.add('open'); };
 document.getElementById('settingsClose').onclick = () => settingsDrawer.classList.remove('open');
 settingsDrawer.onclick = e => { if (e.target === settingsDrawer) settingsDrawer.classList.remove('open'); };
 settingsDrawer.querySelectorAll('.seg button').forEach(btn => {
   btn.onclick = () => {
-    const key = btn.closest('.seg').id.slice(3).toLowerCase(); // setCols→cols 等
+    const seg = btn.closest('.seg');
+    if (seg.id === 'setSort') {                 // 排序：按当前库写入 sortMode
+      if (active === 'p') return;
+      settings.sortMode[active] = btn.dataset.sort;
+      saveSettings();
+      applySettings();
+      render();
+      return;
+    }
+    const key = seg.id.slice(3).toLowerCase();  // setCols→cols 等
     settings[key] = btn.dataset[key];
     saveSettings();
     applySettings();

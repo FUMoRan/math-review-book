@@ -10,7 +10,9 @@ const {
   DAY, STATUS, STATUS_NEXT, uid,
   normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
   normalizeSrs, scheduleSrs, isDue, dueLabel,
-  normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers, paperWrongToQuestion,
+  normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers, paperWrongToQuestion, nextUnmarked,
+  paperProgress,
+  sortItems, materializeOrder, reorderItems,
   parseText, parsePaper, parseSearch,
   normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
   collectionPath, flattenCollections, addCollection, renameCollection,
@@ -271,6 +273,66 @@ test('paperWrongToQuestion 只挑标错且未加入的题', () => {
 test('paperWrongToQuestion 无错题时返回空数组', () => {
   const paper = normalizePaper({ questions: [{ stem: 'a', wrong: 'right' }] });
   assert.deepEqual(paperWrongToQuestion(paper, 0), []);
+});
+
+test('nextUnmarked 从 fromId 之后返回第一个未标题', () => {
+  const qs = [
+    { id: 'a', wrong: 'right' },
+    { id: 'b', wrong: 'unset' },
+    { id: 'c', wrong: 'unset' },
+  ];
+  assert.equal(nextUnmarked(qs, 'a').id, 'b');
+  assert.equal(nextUnmarked(qs, 'b').id, 'c');
+});
+
+test('nextUnmarked 到末尾后回绕到开头', () => {
+  const qs = [
+    { id: 'a', wrong: 'unset' },
+    { id: 'b', wrong: 'right' },
+    { id: 'c', wrong: 'right' },
+  ];
+  assert.equal(nextUnmarked(qs, 'c').id, 'a');       // 末尾回绕
+});
+
+test('nextUnmarked 不含当前题本身，唯一未标题回绕到自身', () => {
+  const qs = [
+    { id: 'a', wrong: 'unset' },
+    { id: 'b', wrong: 'unset' },
+  ];
+  assert.equal(nextUnmarked(qs, 'a').id, 'b');       // 跳过自身
+  assert.equal(nextUnmarked([{ id: 'only', wrong: 'unset' }], 'only').id, 'only');  // 回绕到自身
+});
+
+test('nextUnmarked 全部已标返回 null，fromId 不存在时从开头找', () => {
+  const all = [
+    { id: 'a', wrong: 'right' },
+    { id: 'b', wrong: 'wrong' },
+  ];
+  assert.equal(nextUnmarked(all, 'a'), null);
+  assert.equal(nextUnmarked([], 'x'), null);
+  const qs = [
+    { id: 'a', wrong: 'unset' },
+    { id: 'b', wrong: 'right' },
+  ];
+  assert.equal(nextUnmarked(qs, 'nope').id, 'a');    // fromId 不存在 → 从头找
+});
+
+test('paperProgress 统计对/错/未标与已标数', () => {
+  const qs = [
+    { wrong: 'right' }, { wrong: 'right' }, { wrong: 'wrong' }, { wrong: 'unset' },
+  ];
+  const pr = paperProgress(qs);
+  assert.equal(pr.total, 4);
+  assert.equal(pr.right, 2);
+  assert.equal(pr.wrong, 1);
+  assert.equal(pr.unset, 1);
+  assert.equal(pr.marked, 3);
+});
+
+test('paperProgress 空与非法入参安全，缺字段按未标计', () => {
+  assert.deepEqual(paperProgress([]), { total: 0, right: 0, wrong: 0, unset: 0, marked: 0 });
+  assert.deepEqual(paperProgress(null), { total: 0, right: 0, wrong: 0, unset: 0, marked: 0 });
+  assert.equal(paperProgress([{ id: 'a' }]).unset, 1);
 });
 
 test('mergeSeedPapers 只追加本地没有的试卷', () => {
@@ -721,5 +783,120 @@ test('条目归一化带上 collectionId；来自试卷的错题默认未分类'
   const [converted] = paperWrongToQuestion(paper, 0);
   assert.equal(converted.collectionId, null);
   assert.equal(converted.fromPaper.paperId, 'p1');
+});
+
+/* ===================== 排序（order 字段） ===================== */
+test('normalizeQuestion / normalizeKp 保留数字 order，非法值归 null', () => {
+  assert.equal(normalizeQuestion({ order: 3 }).order, 3);
+  assert.equal(normalizeQuestion({ order: 0 }).order, 0);
+  assert.equal(normalizeQuestion({ order: '3' }).order, null);   // 字符串不是 number
+  assert.equal(normalizeQuestion({ order: NaN }).order, null);   // NaN 是非法的 number
+  assert.equal(normalizeQuestion({ order: Infinity }).order, null);
+  assert.equal(normalizeQuestion({}).order, null);
+  assert.equal(normalizeKp({ title: 't', order: 5 }).order, 5);
+  assert.equal(normalizeKp({ title: 't', order: -2 }).order, -2);
+  assert.equal(normalizeKp({ title: 't', order: null }).order, null);
+});
+
+test('paperWrongToQuestion 生成的错题默认 order=null', () => {
+  const paper = normalizePaper({ id: 'p1', questions: [{ id: 'q1', stem: 'x', wrong: 'wrong' }] });
+  const [converted] = paperWrongToQuestion(paper, 0);
+  assert.equal(converted.order, null);
+});
+
+test('sortItems auto 按 createdAt 倒序', () => {
+  const items = [
+    { id: 'a', createdAt: 100 },
+    { id: 'b', createdAt: 300 },
+    { id: 'c', createdAt: 200 },
+  ];
+  assert.deepEqual(sortItems(items, 'auto').map(i => i.id), ['b', 'c', 'a']);
+});
+
+test('sortItems manual 按 order 升序，order=null 排最前并按 createdAt 倒序', () => {
+  const items = [
+    { id: 'a', order: 1, createdAt: 100 },
+    { id: 'b', order: 0, createdAt: 100 },
+    { id: 'new1', order: null, createdAt: 100 },
+    { id: 'new2', order: null, createdAt: 200 },
+    { id: 'c', order: 2, createdAt: 100 },
+  ];
+  assert.deepEqual(sortItems(items, 'manual').map(i => i.id), ['new2', 'new1', 'b', 'a', 'c']);
+});
+
+test('sortItems manual：order 相同用 createdAt 倒序兜底', () => {
+  const items = [
+    { id: 'a', order: 0, createdAt: 100 },
+    { id: 'b', order: 0, createdAt: 300 },
+    { id: 'c', order: 0, createdAt: 200 },
+  ];
+  assert.deepEqual(sortItems(items, 'manual').map(i => i.id), ['b', 'c', 'a']);
+});
+
+test('sortItems 不修改入参，且非法入参安全', () => {
+  const items = [{ id: 'a', createdAt: 1 }, { id: 'b', createdAt: 2 }];
+  const copy = items.slice();
+  sortItems(items, 'auto');
+  assert.deepEqual(items, copy);
+  assert.deepEqual(sortItems(null, 'auto'), []);
+  assert.deepEqual(sortItems(undefined, 'auto'), []);
+});
+
+test('materializeOrder 按输入顺序产出 order 0..n-1，且不改入参', () => {
+  const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const out = materializeOrder(items);
+  assert.deepEqual(out.map(i => [i.id, i.order]), [['a', 0], ['b', 1], ['c', 2]]);
+  assert.deepEqual(items.map(i => i.order), [undefined, undefined, undefined]);
+  assert.deepEqual(out.map(i => i.id), ['a', 'b', 'c']);   // 顺序与输入一致
+});
+
+test('materializeOrder 非法入参安全', () => {
+  assert.deepEqual(materializeOrder(null), []);
+  assert.deepEqual(materializeOrder(undefined), []);
+});
+
+test('reorderItems 移到首/末并重编 order 0..n-1', () => {
+  const items = [
+    { id: 'a', order: 0, createdAt: 1 },
+    { id: 'b', order: 1, createdAt: 1 },
+    { id: 'c', order: 2, createdAt: 1 },
+  ];
+  const toFirst = reorderItems(items, 'c', 0);
+  assert.deepEqual(toFirst.map(i => i.id), ['c', 'a', 'b']);
+  assert.deepEqual(toFirst.map(i => i.order), [0, 1, 2]);
+  const toLast = reorderItems(items, 'a', 2);
+  assert.deepEqual(toLast.map(i => i.id), ['b', 'c', 'a']);
+  assert.deepEqual(toLast.map(i => i.order), [0, 1, 2]);
+});
+
+test('reorderItems 移到自身与相邻交换', () => {
+  const items = [
+    { id: 'a', order: 0, createdAt: 1 },
+    { id: 'b', order: 1, createdAt: 1 },
+    { id: 'c', order: 2, createdAt: 1 },
+  ];
+  const same = reorderItems(items, 'b', 1);
+  assert.deepEqual(same.map(i => i.id), ['a', 'b', 'c']);
+  assert.deepEqual(same.map(i => i.order), [0, 1, 2]);
+  const swap = reorderItems(items, 'b', 2);
+  assert.deepEqual(swap.map(i => i.id), ['a', 'c', 'b']);
+  assert.deepEqual(swap.map(i => i.order), [0, 1, 2]);
+});
+
+test('reorderItems 目标下标越界钳制，且返回新数组', () => {
+  const items = [
+    { id: 'a', order: 0, createdAt: 1 },
+    { id: 'b', order: 1, createdAt: 1 },
+    { id: 'c', order: 2, createdAt: 1 },
+  ];
+  assert.deepEqual(reorderItems(items, 'c', -5).map(i => i.id), ['c', 'a', 'b']);
+  assert.deepEqual(reorderItems(items, 'a', 99).map(i => i.id), ['b', 'c', 'a']);
+  assert.notEqual(reorderItems(items, 'a', 99), items);
+});
+
+test('reorderItems 未知 id 只做重编号', () => {
+  const items = [{ id: 'a', order: 0, createdAt: 1 }, { id: 'b', order: 5, createdAt: 1 }];
+  const out = reorderItems(items, 'zzz', 0);
+  assert.deepEqual(out.map(i => [i.id, i.order]), [['a', 0], ['b', 1]]);
 });
 
