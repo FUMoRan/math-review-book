@@ -26,7 +26,7 @@ const {
 
 /* ===================== 设置（偏好，与数据分开存） ===================== */
 const K_SET = 'mq_settings';
-const SET_DEF = { cols: 'auto', theme: 'system', density: 'comfortable', anim: 'on', rail: 'off' };
+const SET_DEF = { cols: 'auto', theme: 'system', density: 'comfortable', anim: 'on', rail: 'off', sortMode: { q: 'auto', k: 'auto' } };
 
 function readSettings() {
   try {
@@ -35,6 +35,8 @@ function readSettings() {
   } catch (e) { return {}; }
 }
 const settings = Object.assign({}, SET_DEF, readSettings());
+// sortMode 是嵌套对象，浅合并会整体覆盖，这里单独补全两库默认值
+settings.sortMode = Object.assign({ q: 'auto', k: 'auto' }, settings.sortMode);
 
 function saveSettings() {
   try { localStorage.setItem(K_SET, JSON.stringify(settings)); } catch (e) {}
@@ -71,6 +73,11 @@ function applySettings() {
   document.querySelectorAll('#setTheme button').forEach(b => b.classList.toggle('on', b.dataset.theme === settings.theme));
   document.querySelectorAll('#setDensity button').forEach(b => b.classList.toggle('on', b.dataset.density === settings.density));
   document.querySelectorAll('#setAnim button').forEach(b => b.classList.toggle('on', b.dataset.anim === settings.anim));
+
+  const sm = (settings.sortMode && settings.sortMode[active]) || 'auto';
+  document.querySelectorAll('#setSort button').forEach(b => b.classList.toggle('on', b.dataset.sort === sm));
+  const sortLib = document.getElementById('sortLibName');
+  if (sortLib) sortLib.textContent = active === 'p' ? '试卷（不适用）' : (active === 'k' ? '知识点' : '错题');
   document.querySelectorAll('#setRail button').forEach(b => b.classList.toggle('on', b.dataset.rail === settings.rail));
 
   // 宽屏且已「收起」→ 侧栏切成窄竖条；窄屏（<1024）始终是抽屉，不加该类
@@ -2276,12 +2283,21 @@ document.addEventListener('keydown', e => {
 
 /* ---------- 设置抽屉 ---------- */
 const settingsDrawer = document.getElementById('settingsDrawer');
-document.getElementById('settingsBtn').onclick = () => settingsDrawer.classList.add('open');
+document.getElementById('settingsBtn').onclick = () => { applySettings(); settingsDrawer.classList.add('open'); };
 document.getElementById('settingsClose').onclick = () => settingsDrawer.classList.remove('open');
 settingsDrawer.onclick = e => { if (e.target === settingsDrawer) settingsDrawer.classList.remove('open'); };
 settingsDrawer.querySelectorAll('.seg button').forEach(btn => {
   btn.onclick = () => {
-    const key = btn.closest('.seg').id.slice(3).toLowerCase(); // setCols→cols 等
+    const seg = btn.closest('.seg');
+    if (seg.id === 'setSort') {                 // 排序：按当前库写入 sortMode
+      if (active === 'p') return;
+      settings.sortMode[active] = btn.dataset.sort;
+      saveSettings();
+      applySettings();
+      render();
+      return;
+    }
+    const key = seg.id.slice(3).toLowerCase();  // setCols→cols 等
     settings[key] = btn.dataset[key];
     saveSettings();
     applySettings();
