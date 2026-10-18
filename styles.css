@@ -488,16 +488,49 @@ img.thumb.broken{opacity:.35;}
 /* 触屏没有 hover，常显节点操作按钮 */
 @media (hover:none){ .colrow .cacts{display:flex;} }
 
+/* 收起后的窄竖条（仅宽屏出现；窄屏始终是抽屉，不带 .rail 类） */
+.coltree-head .railbtn{
+  display:none; border:0; background:transparent; color:var(--muted);
+  font-size:16px; padding:0 4px; cursor:pointer;
+}
+.coltree-head .railbtn:hover{color:var(--brand);}
+.colrail{
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+  flex:1 1 auto; min-height:0; width:100%;
+}
+.colrail-btn{
+  width:28px; height:26px; border:0; background:transparent; color:var(--muted);
+  font-size:15px; line-height:1; border-radius:6px; cursor:pointer; padding:0;
+}
+.colrail-btn:hover{background:var(--sunken); color:var(--brand);}
+.colrail-items{
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+  flex:1 1 auto; min-height:0; overflow-y:auto; width:100%;
+}
+.colrail-item{
+  width:28px; height:28px; flex:0 0 auto; padding:0;
+  display:flex; align-items:center; justify-content:center;
+  border:1px solid var(--line); border-radius:8px; background:var(--card);
+  color:var(--text-2); font-size:13px; cursor:pointer;
+}
+.colrail-item:hover{border-color:var(--brand);}
+.colrail-item.active{background:var(--brand-soft); border-color:var(--brand); color:var(--brand); font-weight:700;}
+
 @media (min-width: 1024px){
-  #colToggle{display:none;}
+  #colToggle{display:inline-block;}
   .shell{display:flex; align-items:flex-start;}
   .coltree{
     position:sticky; top:var(--hdr,64px); left:auto; bottom:auto;
     width:238px; flex:0 0 238px; max-width:none; height:calc(100vh - var(--hdr,64px));
     transform:none; transition:none; box-shadow:none; z-index:1;
   }
+  .coltree.rail{
+    width:44px; flex:0 0 44px; padding:10px 8px 16px;
+    align-items:center; gap:0; overflow:hidden;
+  }
   .coltree-backdrop{display:none !important;}
   .coltree-head .cls{display:none;}
+  .coltree-head .railbtn{display:inline-block;}
   main{flex:1 1 auto; min-width:0;}
 }
 
