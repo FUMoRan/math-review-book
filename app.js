@@ -18,6 +18,7 @@ const {
   parseText, parseSearch,
   normalizeQuestion, normalizeKp, scheduleSrs, isDue, dueLabel, DAY,
   normalizePaper, parsePaper, paperWrongToQuestion, mergeSeedPapers,
+  nextUnmarked, paperProgress,
   sortItems, materializeOrder, reorderItems,
   settleCollections, collectionSubtreeIds, flattenCollections, collectionChildren,
   collectionPath, addCollection, renameCollection, canMoveCollection, moveCollection,
@@ -841,12 +842,26 @@ function makeCard(it) {
   return card;
 }
 
-let curPaperId = null;
-let paperWrongOnly = false;
-let pqEditing = null;   // { paperId, questionId }
+/* ===================== 试卷：全屏试卷页（打开后）===================== */
+
+let pqEditing = null;   // { paperId, questionId } —— 单题编辑弹层（编辑页）用
+
+// 试卷页状态（打开后）：判分/重做、专注、仅看错题、答案显隐、当前题
+const paperState = {
+  paperId: null,
+  mode: 'grade',        // 'grade' 判分 | 'redo' 重做
+  focus: false,         // 专注模式（一题一屏）
+  wrongOnly: false,     // 仅看错题
+  showAnswers: false,   // 重做模式下整卷显示答案
+  revealed: new Set(),  // 重做模式下逐题手动揭示过的题 id
+  curId: null,          // 当前题 id（导航高亮 / 专注当前题）
+};
+
+function paperOf(id) { return stores.p.items.find(p => p.id === id); }
+function curPaper() { return paperOf(paperState.paperId); }
 
 function addPaperWrongToBook() {
-  const p = paperOf(curPaperId);
+  const p = curPaper();
   if (!p) return;
   // 已在本子里（按 fromPaper 判重）的题目 id
   const inBook = new Set(
@@ -867,112 +882,209 @@ function addPaperWrongToBook() {
   saveStore(K_Q, stores.q.items);
   savePapers();
   refreshTagPicker();
-  renderPaperDetail();
+  renderPaperView();
   alert(`已加入错题本 ${added.length} 道（解析留空，可在错题本里用「复制提示词」让 AI 补解析）。`);
 }
 
-function paperOf(id) { return stores.p.items.find(p => p.id === id); }
-
 function openPaper(id) {
-  curPaperId = id;
-  paperWrongOnly = false;
-  renderPaperDetail();
-  document.getElementById('paperModal').classList.add('open');
+  paperState.paperId = id;
+  paperState.mode = 'grade';       // 默认判分模式
+  paperState.focus = false;
+  paperState.wrongOnly = false;
+  paperState.showAnswers = false;
+  paperState.revealed = new Set();
+  paperState.curId = null;
+  renderPaperView();
+  document.getElementById('paperView').classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
 
-function renderPaperDetail() {
-  const p = paperOf(curPaperId);
-  const modal = document.getElementById('paperModal');
-  if (!p) { modal.classList.remove('open'); return; }
-  document.getElementById('paperModalTitle').textContent = p.title;
-  const qs = p.questions.filter(q => !paperWrongOnly || q.wrong === 'wrong');
-  const body = document.getElementById('paperBody');
-  const wrongN = p.questions.filter(q => q.wrong === 'wrong').length;
-  body.innerHTML = `
-    <div class="paper-head">
-      <input id="paperTitleInput" value="${esc(p.title)}" placeholder="试卷名">
-      <input id="paperDateInput" type="date" value="${esc(p.date)}">
+function closePaperView() {
+  document.getElementById('paperView').classList.remove('open');
+  document.body.style.overflow = '';
+  paperState.paperId = null;
+  renderPapers();      // 刷新卡片「错 n」统计
+}
+
+let paperToastTimer = null;
+function paperToast(msg) {
+  const view = document.getElementById('paperView');
+  let el = document.getElementById('paperToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'paperToast';
+    el.className = 'paper-toast';
+    view.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(paperToastTimer);
+  paperToastTimer = setTimeout(() => el.classList.remove('show'), 1600);
+}
+
+// 当前可见题目（应用「仅看错题」）
+function paperVisibleQuestions(p) {
+  return p.questions.filter(q => !paperState.wrongOnly || q.wrong === 'wrong');
+}
+// 答案是否对某题可见：判分模式始终可见；重做模式需整卷开或该题已揭示
+function paperAnswerVisible(q) {
+  return paperState.mode === 'grade' || paperState.showAnswers || paperState.revealed.has(q.id);
+}
+// 更新某题三态（沿用 papers 数据结构，只改 wrong 字段）
+function setPaperQ(qid, patch) {
+  const p = curPaper();
+  const q = p && p.questions.find(x => x.id === qid);
+  if (!q) return;
+  Object.assign(q, patch);
+  p.updatedAt = Date.now();
+  savePapers();
+}
+
+// 整块渲染：工具栏状态 → 题号导航条 → 题目区 → 底栏
+function renderPaperView() {
+  const p = curPaper();
+  if (!p) { closePaperView(); return; }
+  const bodyEl = document.querySelector('.paperview-body');
+  const keepTop = bodyEl ? bodyEl.scrollTop : 0;
+
+  document.getElementById('paperViewTitle').textContent = p.title;
+  document.getElementById('paperModeSec').querySelectorAll('button')
+    .forEach(b => b.classList.toggle('on', b.dataset.mode === paperState.mode));
+  document.getElementById('paperWrongOnlyBtn').classList.toggle('on', paperState.wrongOnly);
+  const ansBtn = document.getElementById('paperAnsBtn');
+  ansBtn.disabled = paperState.mode === 'grade';
+  ansBtn.classList.toggle('on', paperState.showAnswers);
+  ansBtn.textContent = paperState.showAnswers ? '隐藏答案' : '显示答案';
+
+  const qs = paperVisibleQuestions(p);
+  if (!qs.some(q => q.id === paperState.curId)) paperState.curId = qs.length ? qs[0].id : null;
+
+  renderPaperNav(p, qs);
+  renderPaperList(p, qs, document.getElementById('paperQs'));
+
+  const footEl = document.getElementById('paperFoot');
+  footEl.innerHTML = '<span class="spacer"></span><button class="primary" id="paperNextUnmarked">跳到下一道未标</button>';
+  footEl.querySelector('#paperNextUnmarked').onclick = jumpToNextUnmarked;
+
+  const body2 = document.querySelector('.paperview-body');
+  if (body2) body2.scrollTop = keepTop;
+}
+
+// 右侧/顶部题号导航条：进度 + 每题的 对/错/未标 颜色方块 + 当前高亮
+function renderPaperNav(p, qs) {
+  const pr = paperProgress(p.questions);
+  const nav = document.getElementById('paperNav');
+  nav.innerHTML = `
+    <div class="paper-nav-head">
+      <span class="section-label">已标 ${pr.marked} / 共 ${pr.total}</span>
+      <span class="badge-note">错 ${pr.wrong}</span>
     </div>
-    <div class="badge-note">共 ${p.questions.length} 题 · 已标错 ${wrongN}${paperWrongOnly ? ' · 仅看错题' : ''}</div>
-    <div class="paper-qs">
-      ${qs.map(q => `
-        <div class="paper-q" data-qid="${q.id}">
-          <div class="paper-q-head"><span class="section-label">第 ${q.no} 题</span>
-            ${q.linkedQid ? '<span class="badge-note">已在错题本</span>' : ''}</div>
-          <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
-          ${q.answer ? `<details><summary>查看答案</summary><div class="body">${renderMath(q.answer)}</div></details>` : ''}
-          <div class="paper-q-acts">
-            <select data-act="wrong" data-qid="${q.id}">
-              <option value="unset"${q.wrong === 'unset' ? ' selected' : ''}>未标</option>
-              <option value="right"${q.wrong === 'right' ? ' selected' : ''}>做对</option>
-              <option value="wrong"${q.wrong === 'wrong' ? ' selected' : ''}>错题</option>
-            </select>
-            <button class="link" data-act="editq" data-qid="${q.id}">编辑</button>
-            <button class="link" data-act="delq" data-qid="${q.id}">删除</button>
-          </div>
-        </div>`).join('') || '<div class="empty">没有可显示的题。</div>'}
-    </div>
-    <div class="row paper-foot">
-      <button id="paperAllWrong">全部标错</button>
-      <button id="paperAllRight">全部标对</button>
-      <button id="paperWrongOnly">${paperWrongOnly ? '显示全部' : '仅看错题'}</button>
-      <span class="spacer"></span>
-      <button class="primary" id="paperToWrong">把已标错题加入错题本</button>
+    <div class="paper-nav-grid">
+      ${qs.map(q => `<button class="paper-nav-sq ${q.wrong}${q.id === paperState.curId ? ' cur' : ''}" data-qid="${q.id}" title="第 ${q.no} 题">${q.no}</button>`).join('')}
     </div>`;
-
-  const setQ = (qid, patch) => {
-    const q = p.questions.find(x => x.id === qid);
-    if (!q) return;
-    Object.assign(q, patch);
-    p.updatedAt = Date.now();
-    savePapers();
-  };
-
-  document.getElementById('paperTitleInput').onchange = e => {
-    p.title = e.target.value.trim() || '未命名试卷';
-    p.updatedAt = Date.now();
-    savePapers();
-    document.getElementById('paperModalTitle').textContent = p.title;
-  };
-  document.getElementById('paperDateInput').onchange = e => {
-    p.date = e.target.value;
-    p.updatedAt = Date.now();
-    savePapers();
-  };
-  body.querySelectorAll('select[data-act="wrong"]').forEach(sel => {
-    sel.onchange = () => { setQ(sel.dataset.qid, { wrong: sel.value }); renderPaperDetail(); };
+  nav.querySelectorAll('.paper-nav-sq').forEach(btn => {
+    btn.onclick = () => goToPaperQuestion(btn.dataset.qid);
   });
-  body.querySelectorAll('[data-act="delq"]').forEach(btn => {
-    btn.onclick = () => {
-      if (!confirm('删除这道题？（若已加入错题本，错题条目会保留）')) return;
-      p.questions = p.questions.filter(x => x.id !== btn.dataset.qid);
-      p.updatedAt = Date.now();
-      savePapers();
-      renderPaperDetail();
-    };
-  });
-  body.querySelectorAll('[data-act="editq"]').forEach(btn => {
-    btn.onclick = () => openPaperQ(p.id, btn.dataset.qid);
-  });
-  document.getElementById('paperAllWrong').onclick = () => {
-    p.questions.forEach(q => { q.wrong = 'wrong'; });
-    p.updatedAt = Date.now(); savePapers(); renderPaperDetail();
-  };
-  document.getElementById('paperAllRight').onclick = () => {
-    p.questions.forEach(q => { q.wrong = 'right'; });
-    p.updatedAt = Date.now(); savePapers(); renderPaperDetail();
-  };
-  document.getElementById('paperWrongOnly').onclick = () => { paperWrongOnly = !paperWrongOnly; renderPaperDetail(); };
-  document.getElementById('paperToWrong').onclick = addPaperWrongToBook;
 }
 
-document.getElementById('paperDetailClose').onclick = () => {
-  document.getElementById('paperModal').classList.remove('open');
-  renderPapers();
+// 一览整卷：每题显眼的三态切换 + 答案（按模式显隐）
+function renderPaperList(p, qs, host) {
+  if (!qs.length) { host.innerHTML = '<div class="empty">没有可显示的题。</div>'; return; }
+  host.innerHTML = qs.map(q => `
+    <div class="paper-q" data-qid="${q.id}">
+      <div class="paper-q-head">
+        <span class="section-label">第 ${q.no} 题</span>
+        ${q.linkedQid ? '<span class="badge-note">已在错题本</span>' : ''}
+      </div>
+      <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
+      ${paperRenderAnswer(q)}
+      <div class="paper-q-acts">
+        <div class="paper-tri" data-qid="${q.id}">
+          <button data-wrong="right" class="${q.wrong === 'right' ? 'on right' : ''}">对</button>
+          <button data-wrong="wrong" class="${q.wrong === 'wrong' ? 'on wrong' : ''}">错</button>
+          <button data-wrong="unset" class="${q.wrong === 'unset' ? 'on unset' : ''}">未标</button>
+        </div>
+      </div>
+    </div>`).join('');
+  host.querySelectorAll('.paper-tri').forEach(tri => {
+    tri.querySelectorAll('button').forEach(b => {
+      b.onclick = () => markPaperQuestion(tri.dataset.qid, b.dataset.wrong);
+    });
+  });
+  host.querySelectorAll('.paper-reveal').forEach(b => {
+    b.onclick = () => { paperState.revealed.add(b.dataset.reveal); renderPaperView(); };
+  });
+}
+
+// 单题答案块：可见则渲染；重做模式未揭示则给「显示答案」按钮
+function paperRenderAnswer(q) {
+  if (!q.answer) return '';
+  if (paperAnswerVisible(q)) {
+    return `<div class="paper-q-answer"><span class="section-label">答案</span><div class="body">${renderMath(q.answer)}</div></div>`;
+  }
+  return `<button class="paper-reveal" data-reveal="${q.id}">👁 显示答案</button>`;
+}
+
+function markPaperQuestion(qid, wrong) {
+  setPaperQ(qid, { wrong });
+  renderPaperView();
+}
+
+// 点击题号方块 → 更新高亮并滚动定位（专注模式在 Task 6 处理）
+function goToPaperQuestion(qid) {
+  paperState.curId = qid;
+  const p = curPaper();
+  if (!p) return;
+  if (paperState.focus) { renderPaperView(); return; }
+  renderPaperNav(p, paperVisibleQuestions(p));
+  const el = document.getElementById('paperQs').querySelector(`.paper-q[data-qid="${qid}"]`);
+  if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+// 上/下一题：列表模式滚动定位，专注模式切换题（专注分支在 Task 6 补齐）
+function paperStep(delta) {
+  const p = curPaper();
+  if (!p) return;
+  const qs = paperVisibleQuestions(p);
+  if (!qs.length) return;
+  let i = qs.findIndex(q => q.id === paperState.curId);
+  if (i < 0) i = 0;
+  const ni = Math.max(0, Math.min(qs.length - 1, i + delta));
+  paperState.curId = qs[ni].id;
+  if (paperState.focus) renderPaperView();
+  else goToPaperQuestion(paperState.curId);
+}
+
+// 底部「跳到下一道未标」：从当前题之后找，回绕；找不到则提示
+function jumpToNextUnmarked() {
+  const p = curPaper();
+  if (!p) return;
+  const next = nextUnmarked(p.questions, paperState.curId);
+  if (!next) { paperToast('已无未标'); return; }
+  if (paperState.wrongOnly) paperState.wrongOnly = false;   // 目标题未标，先取消「仅看错题」以便可见
+  paperState.curId = next.id;
+  renderPaperView();
+  const el = document.getElementById('paperQs').querySelector(`.paper-q[data-qid="${next.id}"]`);
+  if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+document.getElementById('paperBack').onclick = closePaperView;
+document.getElementById('paperWrongOnlyBtn').onclick = () => { paperState.wrongOnly = !paperState.wrongOnly; renderPaperView(); };
+document.getElementById('paperAnsBtn').onclick = () => {
+  paperState.showAnswers = !paperState.showAnswers;
+  if (!paperState.showAnswers) paperState.revealed = new Set();   // 隐藏时把逐题揭示也复位
+  renderPaperView();
 };
-document.getElementById('paperModal').onclick = e => {
-  if (e.target === document.getElementById('paperModal')) { document.getElementById('paperModal').classList.remove('open'); renderPapers(); }
-};
+document.getElementById('paperToWrongBtn').onclick = addPaperWrongToBook;
+document.getElementById('paperModeSec').querySelectorAll('button').forEach(b => {
+  b.onclick = () => {
+    paperState.mode = b.dataset.mode;
+    paperState.showAnswers = false;
+    paperState.revealed = new Set();
+    renderPaperView();
+  };
+});
+
 
 /* 题目编辑小弹层 */
 function openPaperQ(paperId, qid) {
@@ -1000,7 +1112,6 @@ document.getElementById('pqSave').onclick = () => {
   }
   pqEditing = null;
   document.getElementById('paperQModal').classList.remove('open');
-  renderPaperDetail();
 };
 
 function savePapers() { return persist(K_P, stores.p.items); }
