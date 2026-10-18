@@ -175,6 +175,38 @@
   </div>
 </div>
 
+<!-- 全屏试卷页（打开后：判分 / 重做，可叠加专注模式） -->
+<div class="paperview" id="paperView">
+  <div class="paperview-bar">
+    <button class="ghost" id="paperBack">‹ 返回</button>
+    <span class="paperview-title" id="paperViewTitle"></span>
+    <span class="spacer"></span>
+    <div class="seg" id="paperModeSec">
+      <button data-mode="grade">判分</button>
+      <button data-mode="redo">重做</button>
+    </div>
+    <button id="paperFocusBtn" title="一题一屏">专注</button>
+    <button id="paperWrongOnlyBtn">仅看错题</button>
+    <button id="paperAnsBtn">显示答案</button>
+    <button class="primary" id="paperToWrongBtn">加入错题本</button>
+  </div>
+  <div class="paperview-nav" id="paperNav"></div>
+  <div class="paperview-body">
+    <div class="paperview-qs" id="paperQs"></div>
+    <div class="paperview-focus" id="paperFocus"></div>
+  </div>
+  <div class="paperview-foot" id="paperFoot"></div>
+</div>
+
+<!-- 试卷编辑页（从卡片「编辑」进入；做题/判分界面不提供改题能力） -->
+<div class="paperedit" id="paperEdit">
+  <div class="paperedit-bar">
+    <button class="ghost" id="paperEditBack">‹ 返回</button>
+    <span class="section-label">编辑试卷</span>
+  </div>
+  <div class="paperedit-body" id="paperEditBody"></div>
+</div>
+
 <!-- 试卷详情 -->
 <div class="modal" id="paperModal">
   <div class="panel wide">
