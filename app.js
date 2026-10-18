@@ -1187,6 +1187,8 @@ function openColDrawer() { colTreeEl.classList.add('open'); colBackdrop.classLis
 function closeColDrawer() { colTreeEl.classList.remove('open'); colBackdrop.classList.remove('show'); }
 function closeColDrawerIfNarrow() { if (window.innerWidth < 1024) closeColDrawer(); }
 document.getElementById('colToggle').onclick = () => {
+  // 宽屏：一键在「完整侧栏 ⇄ 窄竖条」之间切换；窄屏：开合抽屉（行为不变）
+  if (window.innerWidth >= 1024) { setColRail(!colRailOn()); return; }
   colTreeEl.classList.contains('open') ? closeColDrawer() : openColDrawer();
 };
 
