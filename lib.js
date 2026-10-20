@@ -591,6 +591,17 @@
     return { kps: out, changed };
   }
 
+  /* 统计每个考点被多少错题挂到：返回 Map<kpId, 次数> */
+  function kpUsage(items) {
+    const m = new Map();
+    for (const it of (Array.isArray(items) ? items : [])) {
+      for (const id of ((it && it.kpIds) || [])) {
+        if (typeof id === 'string' && id) m.set(id, (m.get(id) || 0) + 1);
+      }
+    }
+    return m;
+  }
+
   /* ---------- 期3：相似题聚类（纯本地，零 API 成本） ----------
      贪心聚类：按顺序取未归组的项作「种子」，把其后与种子相似度 >= threshold 的项并入同组；
      只有成员数 >= 2 的组会被返回。textOf 缺省取 stem。 */
@@ -972,7 +983,7 @@
     filterItemsByCollection, collectionCounts, sanitizeItemCollections,
     parseAiJson, normTag, mergeSuggestTags,
     resolveCollectionPath, applyOrganizePlan,
-    planKpTaxonomy, applyKpLinks, applyKpExplain,
+    planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage,
     clusterBySimilarity, groupStats,
     parseSearch,
     bareMathSegments,

@@ -1161,3 +1161,16 @@ test('applyKpExplain 覆盖模式可改写已有讲解，空内容与未知 key 
   assert.equal(r.changed, 1);
 });
 
+test('kpUsage 统计每个考点被多少错题挂到', () => {
+  const u = kpUsage([
+    { kpIds: ['k1', 'k2'] },
+    { kpIds: ['k1'] },
+    { kpIds: [] },
+    { },
+  ]);
+  assert.equal(u.get('k1'), 2);
+  assert.equal(u.get('k2'), 1);
+  assert.equal(u.get('k9'), undefined);
+  assert.equal(u.size, 2);
+});
+
