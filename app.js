@@ -24,7 +24,7 @@ const {
   collectionPath, addCollection, renameCollection, canMoveCollection, moveCollection,
   deleteCollection, collectionCounts, sanitizeItemCollections,
   parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
-  planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage,
+  planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy,
   clusterBySimilarity, groupStats,
   bareMathSegments,
 } = MQ;
@@ -3687,6 +3687,7 @@ function openAiKp() {
   kpState = { items: [], mode: kpMode(), taxonomy: [], entries: [], keyMap: new Map(), rows: [], explains: [], undo: null };
   kpShowStep('aiKpSetup');
   kpEl('aiKpMsg').textContent = '';
+  kpShowRaw('');
   kpEl('aiKpNote').textContent = stores.k.items.length
     ? `知识点库已有 ${stores.k.items.length} 个条目，AI 会优先复用同名考点。`
     : '知识点库还是空的，AI 会新建整套考点。';
@@ -3697,20 +3698,14 @@ kpEl('aiKpCancel').onclick = () => kpModal.classList.remove('open');
 kpEl('aiKpClose').onclick = () => kpModal.classList.remove('open');
 kpModal.onclick = e => { if (e.target === kpModal) kpModal.classList.remove('open'); };
 
-/* ---------- 把 AI / 粘贴得到的体系 JSON 整理成待审阅的行 ---------- */
-function kpNormTaxonomy(raw) {
-  const out = [];
-  for (const ch of (Array.isArray(raw) ? raw : [])) {
-    if (!ch || typeof ch !== 'object') continue;
-    const subject = String(ch.subject == null ? '' : ch.subject).trim();
-    const chapter = String(ch.chapter == null ? '' : ch.chapter).trim();
-    if (!subject || !chapter) continue;
-    const topics = (Array.isArray(ch.topics) ? ch.topics : [])
-      .map(t => ({ title: String((t && t.title) || '').trim(), kpId: (t && typeof t.kpId === 'string' && t.kpId) || null }))
-      .filter(t => t.title);
-    if (topics.length) out.push({ subject, chapter, topics });
-  }
-  return out;
+/* ---------- 把 AI / 粘贴得到的体系 JSON 整理成待审阅的行（纯逻辑见 lib.js 的 normalizeKpTaxonomy） ---------- */
+// 解析后仍认不出体系时，把原始返回贴到设置屏，方便照抄给 AI 复跑 / 排查
+function kpShowRaw(text) {
+  const pre = kpEl('aiKpRaw');
+  if (!pre) return;
+  const s = String(text == null ? '' : text);
+  pre.textContent = s.slice(0, 2000) + (s.length > 2000 ? '\n…（已截断）' : '');
+  pre.style.display = s ? '' : 'none';
 }
 
 /* ---------- 步骤 2 渲染：三层体系审阅 ---------- */
@@ -3809,8 +3804,15 @@ kpEl('aiKpRun').onclick = async () => {
     });
     const raw = parseAiJson(text);
     hideAiBusy();
-    kpState.taxonomy = kpNormTaxonomy(raw);
-    if (!kpState.taxonomy.length) { kpEl('aiKpMsg').textContent = 'AI 没有给出可用的考点体系，可重试或改用手动输入。'; return; }
+    kpState.taxonomy = normalizeKpTaxonomy(raw);
+    if (!kpState.taxonomy.length) {
+      kpShowRaw(text);
+      kpEl('aiKpMsg').textContent = raw == null
+        ? 'AI 返回的内容不是合法 JSON（常见于输出被 max_tokens 截断）。原始返回已贴在下方，可重试或改用「复制提示词（免 Key）」。'
+        : 'AI 返回的 JSON 认不出体系结构（需要 subject / chapter / topics）。原始返回已贴在下方，可重试或改用「复制提示词（免 Key）」。';
+      return;
+    }
+    kpShowRaw('');
     renderKpTax();
     kpShowStep('aiKpTaxWrap');
   } catch (e) {
@@ -3866,8 +3868,9 @@ kpEl('aiKpPasteGo').onclick = () => {
     kpEl('aiKpLinkMsg2').textContent = `已解析 ${list.length} 条讲解。`;
     return;
   }
-  kpState.taxonomy = kpNormTaxonomy(raw);
-  if (!kpState.taxonomy.length) { alert('没解析出可用的考点体系。'); return; }
+  kpState.taxonomy = normalizeKpTaxonomy(raw);
+  if (!kpState.taxonomy.length) { alert('没解析出可用的考点体系（需要 subject / chapter / topics 结构）。'); return; }
+  kpShowRaw('');
   renderKpTax();
   kpShowStep('aiKpTaxWrap');
 };

@@ -19,7 +19,7 @@ const {
   canMoveCollection, moveCollection, deleteCollection,
   filterItemsByCollection, collectionCounts, sanitizeItemCollections,
   parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
-  planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage,
+  planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy,
   clusterBySimilarity, groupStats,
   bareMathSegments,
 } = MQ;
@@ -1173,4 +1173,53 @@ test('kpUsage 统计每个考点被多少错题挂到', () => {
   assert.equal(u.get('k9'), undefined);
   assert.equal(u.size, 2);
 });
+
+/* ===================== 考点体系 JSON 的容错归一 ===================== */
+test('normalizeKpTaxonomy 认标准结构，并把非法项过滤掉', () => {
+  const out = normalizeKpTaxonomy([
+    { subject: '高等数学', chapter: '极限', topics: [{ title: '夹逼定理', kpId: null }] },
+    { subject: '', chapter: '空学科', topics: [{ title: 'x' }] },
+    { subject: '高等数学', chapter: '空考点', topics: [] },
+    null,
+  ]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].subject, '高等数学');
+  assert.equal(out[0].chapter, '极限');
+  assert.deepEqual(out[0].topics, [{ title: '夹逼定理', kpId: null }]);
+});
+
+test('normalizeKpTaxonomy 兼容被对象包一层、学科下再套 chapters', () => {
+  const wrapped = normalizeKpTaxonomy({
+    subjects: [
+      { subject: '线性代数', chapters: [
+        { name: '行列式', topics: [{ name: '范德蒙德行列式' }, '按行展开'] },
+      ] },
+    ],
+  });
+  assert.equal(wrapped.length, 1);
+  assert.equal(wrapped[0].chapter, '行列式');
+  assert.deepEqual(wrapped[0].topics.map(t => t.title), ['范德蒙德行列式', '按行展开']);
+  assert.equal(wrapped[0].topics[0].kpId, null);
+
+  // 只含一个数组字段的对象也能认出来
+  const only = normalizeKpTaxonomy({ result: [{ subject: '概率论', chapter: '分布', topics: ['正态分布'] }] });
+  assert.equal(only.length, 1);
+  assert.equal(only[0].topics[0].title, '正态分布');
+});
+
+test('normalizeKpTaxonomy 兼容中文字段名与 kp_id，并保留复用 id', () => {
+  const out = normalizeKpTaxonomy([
+    { 学科: '高等数学', 章节: '中值定理', 考点: [{ 名称: '罗尔定理', kp_id: 'k9' }] },
+  ]);
+  assert.equal(out.length, 1);
+  assert.deepEqual(out[0], { subject: '高等数学', chapter: '中值定理', topics: [{ title: '罗尔定理', kpId: 'k9' }] });
+});
+
+test('normalizeKpTaxonomy 对 null / 字符串 / 空对象返回空数组', () => {
+  assert.deepEqual(normalizeKpTaxonomy(null), []);
+  assert.deepEqual(normalizeKpTaxonomy('not json'), []);
+  assert.deepEqual(normalizeKpTaxonomy({}), []);
+  assert.deepEqual(normalizeKpTaxonomy([{ foo: 1 }]), []);
+});
+
 

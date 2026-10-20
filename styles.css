@@ -693,4 +693,5 @@ img.thumb.broken{opacity:.35;}
 .kp-tax-del{border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:13px; padding:0 4px; flex:0 0 auto;}
 .kp-tax-del:hover{color:var(--danger, var(--brand));}
 .kp-exp-ta{width:100%; min-height:56px;}
+.ai-raw{max-height:220px; overflow:auto; white-space:pre-wrap; word-break:break-all; font-size:12px; line-height:1.5; background:var(--bg-soft, #f6f7f9); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:8px 0 0; color:var(--muted);}
 

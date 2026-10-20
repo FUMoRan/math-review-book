@@ -602,6 +602,68 @@
     return m;
   }
 
+  /* 把 AI / 粘贴回来的考点体系 JSON 归一成 [{ subject, chapter, topics: [{ title, kpId }] }]。
+     模型经常不按示例给，这里对常见变形做容错：
+       · 外层被对象包一层：{ subjects|data|items|result|taxonomy: [...] }
+       · 学科下再套一层：[{ subject, chapters: [{ name, topics }] }]
+       · 考点写成纯字符串，或键名用 name / 考点 / 名称
+       · kpId 写成 kp_id
+     两种情况都认不出来时返回 []，由上层提示用户重试。 */
+  function normalizeKpTaxonomy(raw) {
+    let arr = [];
+    if (Array.isArray(raw)) arr = raw;
+    else if (raw && typeof raw === 'object') {
+      for (const k of ['subjects', 'subject', 'chapters', 'data', 'items', 'list', 'result', 'taxonomy', '体系', '学科']) {
+        if (Array.isArray(raw[k])) { arr = raw[k]; break; }
+      }
+      if (!arr.length) {
+        const only = Object.values(raw).filter(Array.isArray);
+        if (only.length === 1) arr = only[0];
+      }
+    }
+    const pick = (o, keys) => {
+      if (!o || typeof o !== 'object') return '';
+      for (const k of keys) {
+        const v = o[k];
+        if (typeof v === 'string' && v.trim()) return v.trim();
+      }
+      return '';
+    };
+    const topicsOf = ch => {
+      for (const k of ['topics', 'points', 'items', '考点']) {
+        if (Array.isArray(ch[k])) return ch[k];
+      }
+      return [];
+    };
+    const toTopic = t => {
+      if (typeof t === 'string') return { title: t.trim(), kpId: null };
+      const title = pick(t, ['title', 'name', 'topic', '考点', '名称']);
+      const kpId = (t && typeof t.kpId === 'string' && t.kpId)
+        || (t && typeof t.kp_id === 'string' && t.kp_id) || null;
+      return { title, kpId };
+    };
+    const out = [];
+    const pushCh = (subject, chapter, topics) => {
+      const s = String(subject || '').trim(), c = String(chapter || '').trim();
+      if (!s || !c) return;
+      const list = (Array.isArray(topics) ? topics : []).map(toTopic).filter(t => t.title);
+      if (list.length) out.push({ subject: s, chapter: c, topics: list });
+    };
+    for (const el of arr) {
+      if (!el || typeof el !== 'object') continue;
+      if (Array.isArray(el.chapters)) {
+        const subject = pick(el, ['subject', 'name', '学科', '科目']);
+        for (const ch of el.chapters) {
+          if (!ch || typeof ch !== 'object') continue;
+          pushCh(subject, pick(ch, ['chapter', 'name', '章节', '章']), topicsOf(ch));
+        }
+        continue;
+      }
+      pushCh(pick(el, ['subject', '学科', '科目']), pick(el, ['chapter', '章节', '章']), topicsOf(el));
+    }
+    return out;
+  }
+
   /* ---------- 期3：相似题聚类（纯本地，零 API 成本） ----------
      贪心聚类：按顺序取未归组的项作「种子」，把其后与种子相似度 >= threshold 的项并入同组；
      只有成员数 >= 2 的组会被返回。textOf 缺省取 stem。 */
@@ -983,7 +1045,7 @@
     filterItemsByCollection, collectionCounts, sanitizeItemCollections,
     parseAiJson, normTag, mergeSuggestTags,
     resolveCollectionPath, applyOrganizePlan,
-    planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage,
+    planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy,
     clusterBySimilarity, groupStats,
     parseSearch,
     bareMathSegments,
