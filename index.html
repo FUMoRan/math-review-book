@@ -43,7 +43,9 @@
   <button id="importBtn2">导入</button>
   <button class="primary" id="addBtn">+ 新增错题</button>
   <button id="aiBtn" title="上传题目图片，让 AI 识别并按格式整理">📷 AI 识题</button>
+  <button id="aiOrgBtn" title="让 AI 批量给错题打标签 / 归档 / 写考点">🧠 AI 整理</button>
   <button id="colToggle" title="合集">☰ 合集</button>
+  <button id="aiToolsBtn" title="相似题检测 / 薄弱诊断">🔍 整理工具</button>
   <button id="settingsBtn" title="设置" aria-label="设置">⚙️ 设置</button>
   <input type="file" id="fileInput" accept="application/json,.json" hidden>
   <input type="file" id="aiImgInput" accept="image/*" hidden>
@@ -275,6 +277,94 @@
       <button class="ghost" id="aiCheckCancel">取消</button>
       <span class="spacer"></span>
       <span class="badge-note" id="aiCheckMsg"></span>
+    </div>
+  </div>
+</div>
+
+<!-- AI 整理：范围/维度 → 提议 → 审阅 → 应用 -->
+<div class="modal" id="aiOrgModal">
+  <div class="panel wide">
+    <h2 id="aiOrgTitle">AI 整理错题</h2>
+    <p class="hint" id="aiOrgHint">AI 只负责<b>提议</b>，下面会列出每一条建议让你核对，确认后才写入。使用时会联网，错题原文会发送到你配置的服务商。</p>
+
+    <!-- 步骤 1：设置 -->
+    <div id="aiOrgSetup">
+      <div class="ai-org-fields">
+        <label class="ai-label" for="aiOrgScope">整理范围</label>
+        <select id="aiOrgScope">
+          <option value="all">全部错题</option>
+          <option value="filtered">当前筛选结果</option>
+          <option value="qualified">仅未分类或空白错题</option>
+        </select>
+        <label class="ai-label">整理维度（可多选）</label>
+        <div>
+          <label class="chkline"><input type="checkbox" id="aiOrgDimTags" checked> 打标签</label>
+          <label class="chkline"><input type="checkbox" id="aiOrgDimCol" checked> 归入合集</label>
+          <label class="chkline"><input type="checkbox" id="aiOrgDimKp"> 写考点讲解</label>
+        </div>
+        <p class="setnote" id="aiOrgVocabNote"></p>
+      </div>
+      <div class="row">
+        <button class="primary" id="aiOrgRun">开始整理</button>
+        <button class="ghost" id="aiOrgTree">先让 AI 建议分类体系</button>
+        <button class="ghost" id="aiOrgCopy">复制提示词（免 Key）</button>
+        <span class="spacer"></span>
+        <button class="ghost" id="aiOrgCancel">取消</button>
+        <span class="badge-note" id="aiOrgMsg"></span>
+      </div>
+    </div>
+
+    <!-- 步骤 2：粘贴 AI 输出（免 Key 路径） -->
+    <div id="aiOrgPasteWrap" style="display:none">
+      <p class="hint">把复制到的提示词粘到任意 AI，再把它的输出整段粘回下面。</p>
+      <textarea id="aiOrgPaste" placeholder='粘贴 AI 输出的 JSON 数组'></textarea>
+      <div class="row">
+        <button class="primary" id="aiOrgPasteGo">解析并进入审阅</button>
+        <button class="ghost" id="aiOrgPasteBack">返回</button>
+      </div>
+    </div>
+
+    <!-- 步骤 3：分类树建议 -->
+    <div id="aiOrgTreeWrap" style="display:none">
+      <p class="hint">AI 建议的分类体系（可改：每行一个「一级/二级」路径）。点「创建这些合集」后会按该体系建好空合集。</p>
+      <textarea id="aiOrgTreeText"></textarea>
+      <div class="row">
+        <button class="primary" id="aiOrgTreeCreate">创建这些合集</button>
+        <button class="ghost" id="aiOrgTreeBack">返回</button>
+      </div>
+    </div>
+
+    <!-- 步骤 4：审阅 -->
+    <div id="aiOrgReviewWrap" style="display:none">
+      <p class="hint" id="aiOrgReviewMsg"></p>
+      <div class="ai-org-table" id="aiOrgReview"></div>
+      <div class="row">
+        <button class="primary" id="aiOrgApply">应用并保存</button>
+        <button class="ghost" id="aiOrgAll">全选</button>
+        <button class="ghost" id="aiOrgNone">全不选</button>
+        <span class="spacer"></span>
+        <button class="ghost" id="aiOrgUndo" style="display:none">撤销上次应用</button>
+        <button class="ghost" id="aiOrgClose">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 整理工具：相似题检测 / 薄弱诊断 -->
+<div class="modal" id="aiToolsModal">
+  <div class="panel wide">
+    <h2>整理工具</h2>
+    <p class="hint">这两个功能优先用本地计算，零 API 成本；「让 AI 点评」是可选的。</p>
+    <div class="row">
+      <button id="aiToolDup">找出相似/重复错题</button>
+      <button id="aiToolWeak">薄弱考点诊断</button>
+      <span class="spacer"></span>
+      <button class="ghost" id="aiToolsClose">关闭</button>
+    </div>
+    <div class="ai-org-table" id="aiToolsBody"></div>
+    <div class="row" id="aiToolsAiRow" style="display:none">
+      <button class="ghost" id="aiToolsAiBtn">让 AI 点评</button>
+      <span class="badge-note" id="aiToolsMsg"></span>
     </div>
   </div>
 </div>

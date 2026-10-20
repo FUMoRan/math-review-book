@@ -99,6 +99,7 @@
       star: !!o.star,
       images: Array.isArray(o.images) ? o.images.filter(s => typeof s === 'string' && s) : [],
       collectionId: typeof o.collectionId === 'string' && o.collectionId ? o.collectionId : null,
+      kpId: typeof o.kpId === 'string' && o.kpId ? o.kpId : null,
       srs: normalizeSrs(o.srs),
       order: Number.isFinite(o.order) ? o.order : null,
       createdAt: o.createdAt || Date.now(),
@@ -259,6 +260,7 @@
         star: false,
         images: Array.isArray(q.images) ? q.images.slice() : [],
         collectionId: null,
+        kpId: null,
         srs: normalizeSrs(undefined),
         order: null,
         createdAt: t,
@@ -332,6 +334,174 @@
       arr.splice(to, 0, moved);
     }
     return arr.map((it, i) => Object.assign({}, it, { order: i }));
+  }
+
+  /* ---------- AI 整理：输出解析与标签合并 ---------- */
+
+  // 从 AI 输出里抽取 JSON：容忍 ```json 围栏、前后夹带的说明文字
+  function parseAiJson(text) {
+    const s = String(text == null ? '' : text);
+    const fence = s.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    const body = (fence ? fence[1] : s).trim();
+    try { return JSON.parse(body); } catch (e) { /* 继续退化尝试 */ }
+    // 退化：取「最先出现的开括号」配对到同类型的最后一个闭括号
+    // （散文里嵌 JSON 对象时，先出现的 { 优先于对象内部的 [，避免误取内层数组）
+    const cands = [];
+    for (const [a, b] of [['[', ']'], ['{', '}']]) {
+      const i = body.indexOf(a), j = body.lastIndexOf(b);
+      if (i >= 0 && j > i) cands.push([i, j]);
+    }
+    cands.sort((x, y) => x[0] - y[0]);
+    for (const [i, j] of cands) {
+      try { return JSON.parse(body.slice(i, j + 1)); } catch (e) { /* 换下一个候选 */ }
+    }
+    return null;
+  }
+
+  // 标签归一：先去首尾空白，再去掉 # 前缀（用户/模型常写成 #标签）
+  function normTag(t) {
+    return String(t == null ? '' : t).trim().replace(/^#+/, '').trim();
+  }
+
+  // 把 AI 建议的标签合并进已有标签：
+  //  · 归一后能命中 vocab（现有词表）的，采用词表里的原写法，避免「导数/求导/微分」各写一份；
+  //  · 其余作为新标签追加，最多补 maxNew 个；整体去重。
+  function mergeSuggestTags(existing, suggested, vocab, maxNew) {
+    const canonBy = new Map((Array.isArray(vocab) ? vocab : [])
+      .map(v => normTag(v)).filter(Boolean)
+      .map(v => [v.toLowerCase(), v]));
+    const out = [];
+    const has = t => out.includes(t);
+    for (const t of (Array.isArray(existing) ? existing : [])) {
+      const v = normTag(t);
+      if (v && !has(v)) out.push(v);
+    }
+    const cap = Number.isFinite(maxNew) ? maxNew : 3;
+    let added = 0;
+    for (const s of (Array.isArray(suggested) ? suggested : [])) {
+      const v = normTag(s);
+      if (!v) continue;
+      const canon = canonBy.get(v.toLowerCase()) || v;
+      if (has(canon)) continue;
+      if (added >= cap) break;
+      out.push(canon);
+      added++;
+    }
+    return out;
+  }
+
+  // 按「高等数学/极限」「高等数学 > 极限」这类路径查找合集；缺哪级就建哪级。
+  // 返回新的 cols 与末级节点 id（路径为空时 id=null，cols 原样返回）。
+  function resolveCollectionPath(cols, path, now) {
+    const t = now || Date.now();
+    const parts = String(path == null ? '' : path)
+      .split(/\s*(?:\/|>|＞|\\)\s*/).map(s => s.trim()).filter(Boolean);
+    let list = Array.isArray(cols) ? cols.slice() : [];
+    if (!parts.length) return { cols: list, id: null };
+    let parentId = null, id = null;
+    for (const name of parts) {
+      let found = list.find(c => (c.parentId || null) === parentId && c.name === name);
+      if (!found) {
+        const r = addCollection(list, name, parentId, t);
+        list = r.cols;
+        found = r.node;
+      }
+      id = found.id;
+      parentId = found.id;
+    }
+    return { cols: list, id };
+  }
+
+  /* 把审阅后的 AI 计划应用到错题数组（纯函数，不改动入参对象）。
+     plan:  [{ id, tags?, collectionPath?, knowledge?, kpTitle?, skip? }]
+     opts:  { cols, vocab, maxNewTags, now, matchKp }
+       matchKp: (title) => kpId | null   用于把「考点名」挂到知识点库条目上（缺省不处理）
+     返回:  { items, cols, changed } */
+  function applyOrganizePlan(items, plan, opts) {
+    const o = opts || {};
+    const now = o.now || Date.now();
+    const decided = new Map();
+    for (const p of (Array.isArray(plan) ? plan : [])) {
+      if (p && typeof p.id === 'string' && !p.skip) decided.set(p.id, p);
+    }
+    let cols = Array.isArray(o.cols) ? o.cols.slice() : [];
+    const pathCache = new Map();
+    let changed = 0;
+    const out = (Array.isArray(items) ? items : []).map(it => {
+      const p = it && decided.get(it.id);
+      if (!p) return it;
+      let next = it, dirty = false;
+      const set = (k, v) => { if (next[k] !== v) { next = Object.assign({}, next, { [k]: v }); dirty = true; } };
+
+      if (Array.isArray(p.tags) && p.tags.length) {
+        const tags = mergeSuggestTags(next.tags, p.tags, o.vocab, o.maxNewTags);
+        if (tags.join('\u0001') !== (next.tags || []).join('\u0001')) set('tags', tags);
+      }
+      if (typeof p.collectionPath === 'string' && p.collectionPath.trim()) {
+        const key = p.collectionPath.trim();
+        if (!pathCache.has(key)) pathCache.set(key, resolveCollectionPath(cols, key, now));
+        const r = pathCache.get(key);
+        cols = r.cols;
+        if (r.id && next.collectionId !== r.id) set('collectionId', r.id);
+      }
+      if (typeof p.knowledge === 'string' && p.knowledge.trim() && !next.knowledge) {
+        set('knowledge', p.knowledge.trim());
+      }
+      if (typeof p.kpTitle === 'string' && p.kpTitle.trim() && typeof o.matchKp === 'function') {
+        const kpId = o.matchKp(p.kpTitle.trim());
+        if (kpId && next.kpId !== kpId) set('kpId', kpId);
+      }
+      if (dirty) { next = Object.assign({}, next, { updatedAt: now }); changed++; }
+      return next;
+    });
+    return { items: out, cols, changed };
+  }
+
+  /* ---------- 期3：相似题聚类（纯本地，零 API 成本） ----------
+     贪心聚类：按顺序取未归组的项作「种子」，把其后与种子相似度 >= threshold 的项并入同组；
+     只有成员数 >= 2 的组会被返回。textOf 缺省取 stem。 */
+  function clusterBySimilarity(items, threshold, textOf) {
+    const arr = Array.isArray(items) ? items : [];
+    const th = Number.isFinite(threshold) ? threshold : 0.75;
+    const pick = typeof textOf === 'function' ? textOf : (it => it && it.stem);
+    const profiles = arr.map(it => makeGramProfile(pick(it) || ''));
+    const used = new Array(arr.length).fill(false);
+    const out = [];
+    for (let i = 0; i < arr.length; i++) {
+      if (used[i]) continue;
+      used[i] = true;
+      const group = [arr[i]];
+      for (let j = i + 1; j < arr.length; j++) {
+        if (used[j]) continue;
+        if (simFromProfile(profiles[i], pick(arr[j]) || '') >= th) { used[j] = true; group.push(arr[j]); }
+      }
+      if (group.length > 1) out.push(group);
+    }
+    return out;
+  }
+
+  /* ---------- 期3：分组统计（供薄弱诊断，纯本地） ----------
+     pick: it => key | [keys] | null     统计每个 key 的条目数、到期数、三态分布。
+     按 count 降序，同 count 按 key 中文序。 */
+  function groupStats(items, pick, now) {
+    const t = now || Date.now();
+    const m = new Map();
+    for (const it of (Array.isArray(items) ? items : [])) {
+      const raw = typeof pick === 'function' ? pick(it) : null;
+      const keys = Array.isArray(raw) ? raw : (raw == null ? [] : [raw]);
+      for (const k of keys) {
+        const key = normTag(k);
+        if (!key) continue;
+        const g = m.get(key) || { key, count: 0, due: 0, newc: 0, reviewing: 0, mastered: 0 };
+        g.count++;
+        if (it.status === 'mastered') g.mastered++;
+        else if (it.status === 'reviewing') g.reviewing++;
+        else g.newc++;
+        if (isDue(it, t)) g.due++;
+        m.set(key, g);
+      }
+    }
+    return [...m.values()].sort((a, b) => (b.count - a.count) || String(a.key).localeCompare(String(b.key), 'zh'));
   }
 
   /* ---------- 搜索语法 ----------
@@ -666,6 +836,9 @@
     collectionPath, flattenCollections, addCollection, renameCollection,
     canMoveCollection, moveCollection, deleteCollection,
     filterItemsByCollection, collectionCounts, sanitizeItemCollections,
+    parseAiJson, normTag, mergeSuggestTags,
+    resolveCollectionPath, applyOrganizePlan,
+    clusterBySimilarity, groupStats,
     parseSearch,
     bareMathSegments,
   };

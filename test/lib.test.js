@@ -18,6 +18,8 @@ const {
   collectionPath, flattenCollections, addCollection, renameCollection,
   canMoveCollection, moveCollection, deleteCollection,
   filterItemsByCollection, collectionCounts, sanitizeItemCollections,
+  parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
+  clusterBySimilarity, groupStats,
   bareMathSegments,
 } = MQ;
 
@@ -911,5 +913,131 @@ test('reorderItems 未知 id 只做重编号', () => {
   const items = [{ id: 'a', order: 0, createdAt: 1 }, { id: 'b', order: 5, createdAt: 1 }];
   const out = reorderItems(items, 'zzz', 0);
   assert.deepEqual(out.map(i => [i.id, i.order]), [['a', 0], ['b', 1]]);
+});
+
+/* ===================== AI 整理：kpId ===================== */
+test('normalizeQuestion 保留 kpId，非法值归 null', () => {
+  assert.equal(normalizeQuestion({ kpId: 'k1' }).kpId, 'k1');
+  assert.equal(normalizeQuestion({ kpId: '' }).kpId, null);
+  assert.equal(normalizeQuestion({ kpId: 123 }).kpId, null);
+  assert.equal(normalizeQuestion({}).kpId, null);
+});
+
+/* ===================== AI 整理：解析与标签合并 ===================== */
+test('parseAiJson 容忍 ``` 围栏与前后废话', () => {
+  assert.deepEqual(parseAiJson('[{"id":"a"}]'), [{ id: 'a' }]);
+  assert.deepEqual(parseAiJson('```json\n[{"id":"a"}]\n```'), [{ id: 'a' }]);
+  assert.deepEqual(parseAiJson('好的，结果如下：\n[{"id":"a"}]\n希望有帮助'), [{ id: 'a' }]);
+  assert.deepEqual(parseAiJson('前言 {"paths":["高数/极限"]} 后记'), { paths: ['高数/极限'] });
+  assert.equal(parseAiJson('完全不是 JSON'), null);
+  assert.equal(parseAiJson(''), null);
+});
+
+test('normTag 去掉 # 前缀与首尾空白', () => {
+  assert.equal(normTag('  #导数 '), '导数');
+  assert.equal(normTag(null), '');
+});
+
+test('mergeSuggestTags 优先命中已有词表，限制新增数量', () => {
+  const vocab = ['导数', '单调性', '中值定理'];
+  // maxNew=2：'导数'、'单调性' 两个新标签占满额度，'拉格朗日' 被截断
+  assert.deepEqual(mergeSuggestTags(['极限'], ['导数', ' 单调性 ', '拉格朗日'], vocab, 2), ['极限', '导数', '单调性']);
+  assert.deepEqual(mergeSuggestTags(['极限'], ['导数', ' 单调性 ', '拉格朗日'], vocab, 3), ['极限', '导数', '单调性', '拉格朗日']);
+  assert.deepEqual(mergeSuggestTags([], ['a', 'b', 'c'], [], 2), ['a', 'b']);
+  assert.deepEqual(mergeSuggestTags(['导数'], ['导数', '#导数'], [], 3), ['导数']);
+  assert.deepEqual(mergeSuggestTags(['x'], [], [], 3), ['x']);
+});
+
+/* ===================== AI 整理：路径解析与应用计划 ===================== */
+test('resolveCollectionPath 逐级创建，重复调用复用同一节点', () => {
+  let cols = [];
+  const r1 = resolveCollectionPath(cols, '高等数学/极限', 1000);
+  cols = r1.cols;
+  assert.equal(cols.length, 2);
+  assert.equal(collectionPath(cols, r1.id).map(c => c.name).join('/'), '高等数学/极限');
+
+  const r2 = resolveCollectionPath(cols, '高等数学/极限', 2000);
+  assert.equal(r2.cols.length, 2);
+  assert.equal(r2.id, r1.id);
+
+  const r3 = resolveCollectionPath(r2.cols, '高等数学> 导数', 3000);
+  assert.equal(r3.cols.length, 3);
+  assert.equal(r3.id, r3.cols.find(c => c.name === '导数').id);
+});
+
+test('resolveCollectionPath 空路径返回 id=null 且不改动合集', () => {
+  assert.deepEqual(resolveCollectionPath([], '', 1), { cols: [], id: null });
+  assert.equal(resolveCollectionPath([], '   ', 1).id, null);
+});
+
+test('applyOrganizePlan 合并标签、归入合集、写考点，并新建合集', () => {
+  const items = [
+    normalizeQuestion({ id: 'q1', stem: 'a', tags: ['极限'] }),
+    normalizeQuestion({ id: 'q2', stem: 'b' }),
+  ];
+  const plan = [
+    { id: 'q1', tags: ['导数'], collectionPath: '高等数学/极限', knowledge: '考点A' },
+    { id: 'q2', tags: ['行列式'], collectionPath: '线性代数/行列式', knowledge: '考点B' },
+  ];
+  const r = applyOrganizePlan(items, plan, { cols: [], vocab: ['导数'], now: 5000 });
+  assert.equal(r.changed, 2);
+  assert.deepEqual(r.items[0].tags, ['极限', '导数']);
+  assert.equal(r.items[0].knowledge, '考点A');
+  assert.equal(r.items[0].updatedAt, 5000);
+  assert.equal(collectionPath(r.cols, r.items[0].collectionId).map(c => c.name).join('/'), '高等数学/极限');
+  assert.equal(r.cols.length, 4);
+  assert.deepEqual(r.items[1].tags, ['行列式']);
+
+  const r2 = applyOrganizePlan([normalizeQuestion({ id: 'q3', knowledge: '已写' })],
+    [{ id: 'q3', knowledge: '新' }], { cols: [] });
+  assert.equal(r2.items[0].knowledge, '已写');
+  assert.equal(r2.changed, 0);
+});
+
+test('applyOrganizePlan 跳过 skip 项，不改动原数组', () => {
+  const items = [normalizeQuestion({ id: 'q1', stem: 'a' })];
+  const snap = JSON.stringify(items);
+  const r = applyOrganizePlan(items, [{ id: 'q1', tags: ['x'], skip: true }], { cols: [] });
+  assert.equal(r.changed, 0);
+  assert.equal(JSON.stringify(items), snap);
+  assert.deepEqual(r.items[0].tags, []);
+});
+
+test('applyOrganizePlan 按 matchKp 把考点挂到知识点条目上', () => {
+  const items = [normalizeQuestion({ id: 'q1', stem: 'a' })];
+  const r = applyOrganizePlan(items, [{ id: 'q1', kpTitle: '中值定理' }], { cols: [], matchKp: t => (t === '中值定理' ? 'k9' : null) });
+  assert.equal(r.items[0].kpId, 'k9');
+  assert.equal(r.changed, 1);
+});
+
+/* ===================== 期3：相似聚类与分组统计 ===================== */
+test('clusterBySimilarity 把高度相似项归组，相似度低于阈值的不归组', () => {
+  const items = [
+    normalizeQuestion({ id: 'a', stem: '求函数 f(x)=x^2-2x+1 的最小值' }),
+    normalizeQuestion({ id: 'b', stem: '求函数 f(x)=x^2-2x+1 的最小值。' }),
+    normalizeQuestion({ id: 'c', stem: '求矩阵 A 的行列式' }),
+  ];
+  const cs = clusterBySimilarity(items, 0.75, it => it.stem);
+  assert.equal(cs.length, 1);
+  assert.deepEqual(cs[0].map(x => x.id), ['a', 'b']);
+});
+
+test('clusterBySimilarity 空输入与无重复都返回空数组', () => {
+  assert.deepEqual(clusterBySimilarity([], 0.75, it => it.stem), []);
+  const items = [normalizeQuestion({ id: 'a', stem: '甲' }), normalizeQuestion({ id: 'b', stem: '乙丙丁戊' })];
+  assert.deepEqual(clusterBySimilarity(items, 0.9, it => it.stem), []);
+});
+
+test('groupStats 按 key 计数并统计到期/状态', () => {
+  const now = 1000;
+  const items = [
+    normalizeQuestion({ id: '1', tags: ['导数'], status: 'mastered', srs: { due: 0 } }),
+    normalizeQuestion({ id: '2', tags: ['导数', '单调性'], status: 'new', srs: { due: 0 } }),
+    normalizeQuestion({ id: '3', tags: ['导数'], status: 'reviewing', srs: { due: 9999999999999 } }),
+  ];
+  const gs = groupStats(items, it => it.tags, now);
+  assert.deepEqual(gs[0], { key: '导数', count: 3, due: 2, newc: 1, reviewing: 1, mastered: 1 });
+  assert.equal(gs[1].key, '单调性');
+  assert.equal(gs[1].count, 1);
 });
 
