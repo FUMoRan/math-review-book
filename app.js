@@ -3720,15 +3720,27 @@ function renderKpTax() {
   kpState.taxonomy.forEach((ch, ci) => {
     if (!subs.includes(ch.subject)) subs.push(ch.subject);
   });
+  // 「复用」判定：AI 给的 kpId 真实存在，或「归一化考点名 + 同章节合集」命中已有条目
+  const clean = s => String(s == null ? '' : s).replace(/\//g, '·').trim();
+  const kpIds = new Set(stores.k.items.map(k => k.id));
+  const reuseSet = new Set();
+  for (const k of stores.k.items) {
+    if (k.collectionId && k.title) reuseSet.add(normText(k.title) + '\u0001' + k.collectionId);
+  }
+  let workCols = colStores.k.slice();
   let html = '';
   for (const sub of subs) {
     const ids = kpState.taxonomy.map((ch, ci) => ch.subject === sub ? ci : -1).filter(i => i >= 0);
     html += `<div class="kp-tax-lv1" data-kp-sub="${esc(sub)}"><input type="checkbox" data-kp-keep="sub:${esc(sub)}" checked><span class="kp-tax-name">${esc(sub)}</span><span class="kp-tax-badge">学科</span></div>`;
     for (const ci of ids) {
       const ch = kpState.taxonomy[ci];
+      // 用当前合集树推算该章节的合集 id（纯函数，不改动 colStores.k），用于判断同名考点是否可复用
+      const r = resolveCollectionPath(workCols, clean(sub) + '/' + clean(ch.chapter), Date.now());
+      workCols = r.cols;
+      const colId = r.id;
       html += `<div class="kp-tax-lv2" data-kp-ch="${ci}"><input type="checkbox" data-kp-keep="ch:${ci}" checked><input class="kp-tax-name" data-kp-name="ch:${ci}" value="${esc(ch.chapter)}"><span class="kp-tax-badge">章节</span><button class="kp-tax-del" data-kp-del="ch:${ci}" title="不建这个章节">✕</button></div>`;
       ch.topics.forEach((t, ti) => {
-        const exists = t.kpId && stores.k.items.some(k => k.id === t.kpId);
+        const exists = (t.kpId && kpIds.has(t.kpId)) || reuseSet.has(normText(t.title) + '\u0001' + colId);
         html += `<div class="kp-tax-lv3" data-kp-tp="${ci}:${ti}"><input type="checkbox" data-kp-keep="tp:${ci}:${ti}" checked><input class="kp-tax-name" data-kp-name="tp:${ci}:${ti}" value="${esc(t.title)}"><span class="kp-tax-badge${exists ? '' : ' new'}">${exists ? '复用' : '新建'}</span><button class="kp-tax-del" data-kp-del="tp:${ci}:${ti}" title="不建这个考点">✕</button></div>`;
       });
     }
@@ -3814,6 +3826,7 @@ kpEl('aiKpCopy').onclick = async () => {
   kpState.items = items;
   kpState.mode = kpMode();
   const text = aiKpCopyText('taxonomy', items, []);
+  kpState.pasteStep = 'taxonomy';
   kpEl('aiKpPaste').value = '';
   kpEl('aiKpPasteHint').textContent = '把 AI 输出的 JSON 数组粘到下面（Step1 的体系 JSON）。';
   try { await navigator.clipboard.writeText(text); kpEl('aiKpMsg').textContent = '提示词已复制，去任意 AI 跑一遍再粘回来。'; }
@@ -3821,11 +3834,26 @@ kpEl('aiKpCopy').onclick = async () => {
   kpShowStep('aiKpPasteWrap');
 };
 
-kpEl('aiKpPasteBack').onclick = () => kpShowStep('aiKpSetup');
+kpEl('aiKpPasteBack').onclick = () => kpShowStep(kpState.pasteStep === 'taxonomy' ? 'aiKpSetup' : 'aiKpLinkWrap');
 kpEl('aiKpPasteGo').onclick = () => {
   const text = kpEl('aiKpPaste').value;
   let raw;
   try { raw = parseAiJson(text); } catch (e) { alert('解析失败：' + ((e && e.message) || e)); return; }
+  if (kpState.pasteStep === 'link') {
+    // 挂载 JSON：映射成逐题行，未知 qid 自然被丢弃
+    const list = (Array.isArray(raw) ? raw : []).map(r => ({
+      qid: r && typeof r.qid === 'string' ? r.qid : '',
+      kpKeys: r && Array.isArray(r.kpKeys) ? r.kpKeys.filter(k => typeof k === 'string' && k) : [],
+      knowledge: r && typeof r.knowledge === 'string' ? r.knowledge : '',
+      skip: false,
+    })).filter(r => r.qid);
+    kpState.rows = kpDefaultRows(kpState.items, list);
+    kpState.explains = kpState.explains || [];
+    kpShowStep('aiKpLinkWrap');
+    renderKpLink();
+    kpEl('aiKpLinkMsg2').textContent = `已解析 ${list.length} 条挂载建议。`;
+    return;
+  }
   if (kpState.pasteStep === 'explain') {
     // 讲解 JSON 直接进入挂载审阅的讲解区
     const list = (Array.isArray(raw) ? raw : []).map(e => ({
@@ -3859,9 +3887,10 @@ kpEl('aiKpTaxApply').onclick = async () => {
   await saveCols('k');
   await saveStore(stores.k.key, stores.k.items);
   render();
-  // 进入挂载：有 Key 调 AI，没 Key 走复制
+  // 进入挂载：有 Key 调 AI，没 Key 走手动 / 复制粘贴
   if (!aiReady()) {
-    kpEl('aiKpLinkMsg').textContent = `已建 ${r.entries.filter(e => e.isNew).length} 个新考点、复用 ${r.entries.filter(e => !e.isNew).length} 个。未配置 AI：请复制提示词，再把 AI 输出的 JSON 粘回来。`;
+    kpState.rows = kpDefaultRows(kpState.items, []);
+    kpEl('aiKpLinkMsg').textContent = `已建 ${r.entries.filter(e => e.isNew).length} 个新考点、复用 ${r.entries.filter(e => !e.isNew).length} 个。未配置 AI：可逐题用「＋考点」手动挂载，或用「复制挂载提示词 / 粘贴 AI 结果」。`;
     renderKpLink();
     kpShowStep('aiKpLinkWrap');
     return;
@@ -3871,7 +3900,7 @@ kpEl('aiKpTaxApply').onclick = async () => {
   try {
     const res = await aiKpPlanRun(kpState.items, r.entries, kpState.mode);
     hideAiBusy();
-    kpState.rows = res.rows;
+    kpState.rows = kpDefaultRows(kpState.items, res.rows);
     kpState.explains = res.explains;
     renderKpLink();
     kpEl('aiKpLinkMsg2').textContent = res.errors.join('；');
@@ -3885,6 +3914,32 @@ kpEl('aiKpTaxApply').onclick = async () => {
     kpShowStep('aiKpLinkWrap');
   } finally { kpEl('aiKpTaxApply').disabled = false; }
 };
+
+/* ---------- 默认挂载行：每道错题一行，AI 没给建议的补空行 ---------- */
+function kpDefaultRows(items, aiRows) {
+  const byId = new Map();
+  for (const r of (Array.isArray(aiRows) ? aiRows : [])) {
+    if (r && typeof r.qid === 'string') byId.set(r.qid, r);
+  }
+  const out = [];
+  const seen = new Set();
+  for (const it of (Array.isArray(items) ? items : [])) {
+    if (!it || seen.has(it.id)) continue;
+    seen.add(it.id);
+    const r = byId.get(it.id);
+    const kpKeys = (r && Array.isArray(r.kpKeys)) ? r.kpKeys.filter(k => typeof k === 'string' && k) : [];
+    out.push({ qid: it.id, kpKeys, knowledge: (r && typeof r.knowledge === 'string') ? r.knowledge : '', skip: false });
+  }
+  return out;
+}
+
+/* ---------- 免 Key：切到粘贴屏 ---------- */
+function kpOpenPaste(step, hint, presetText) {
+  kpState.pasteStep = step;
+  kpEl('aiKpPaste').value = presetText || '';
+  kpEl('aiKpPasteHint').textContent = hint;
+  kpShowStep('aiKpPasteWrap');
+}
 
 /* ---------- 步骤 3 渲染：逐题挂载 + 待补讲解 ---------- */
 function renderKpLink() {
@@ -3961,6 +4016,28 @@ function renderKpLink() {
 
 kpEl('aiKpAll').onclick = () => { (kpState.rows || []).forEach(r => { r.skip = false; }); renderKpLink(); };
 kpEl('aiKpNone').onclick = () => { (kpState.rows || []).forEach(r => { r.skip = true; }); renderKpLink(); };
+
+/* ---------- 免 Key：挂载 / 讲解 的复制与粘贴 ---------- */
+kpEl('aiKpLinkCopy').onclick = async () => {
+  const text = aiKpCopyText('link', kpState.items, kpState.entries);
+  let pre = '';
+  try { await navigator.clipboard.writeText(text); kpEl('aiKpLinkMsg2').textContent = '挂载提示词已复制，去任意 AI 跑一遍再粘回来。'; }
+  catch (e) { pre = text; kpEl('aiKpLinkMsg2').textContent = '复制失败，提示词已填在下面的框里，请手动复制。'; }
+  kpOpenPaste('link', '把 AI 输出的挂载 JSON 数组粘到下面。', pre);
+};
+kpEl('aiKpLinkPaste').onclick = () => kpOpenPaste('link', '把 AI 输出的挂载 JSON 数组粘到下面。');
+kpEl('aiKpExpCopy').onclick = async () => {
+  const used = new Set();
+  for (const row of (kpState.rows || [])) if (!row.skip) for (const k of row.kpKeys) used.add(k);
+  const need = (kpState.entries || []).filter(e => used.has(e.key));
+  if (!need.length) { kpEl('aiKpLinkMsg2').textContent = '还没有挂到任何考点，先挂载再复制讲解提示词。'; return; }
+  const text = aiKpCopyText('explain', kpState.items, need);
+  let pre = '';
+  try { await navigator.clipboard.writeText(text); kpEl('aiKpLinkMsg2').textContent = '讲解提示词已复制。'; }
+  catch (e) { pre = text; kpEl('aiKpLinkMsg2').textContent = '复制失败，提示词已填在下面的框里，请手动复制。'; }
+  kpOpenPaste('explain', '把 AI 输出的讲解 JSON 数组粘到下面。', pre);
+};
+kpEl('aiKpExpPaste').onclick = () => kpOpenPaste('explain', '把 AI 输出的讲解 JSON 数组粘到下面。');
 
 /* ---------- 应用并保存 + 撤销 ---------- */
 kpEl('aiKpApply').onclick = async () => {
