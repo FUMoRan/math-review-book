@@ -604,6 +604,10 @@
       <input id="aiModel" class="ai-input" autocomplete="off" spellcheck="false" placeholder="例如 gemini-2.5-flash">
       <p class="setnote" id="aiModelNote">各家模型名更新频繁，若报「模型不存在」，请到你控制台复制实际可用的模型名。</p>
 
+      <label class="ai-label" for="aiMaxTokens">单次输出上限（max tokens）</label>
+      <input id="aiMaxTokens" class="ai-input" type="number" min="256" max="65536" step="256" inputmode="numeric" placeholder="4096">
+      <p class="setnote">留空用 4096。这是单次回复的上限，不是每次都会用满；调大不会变慢，也不会多扣费。考点体系这类长 JSON 建议 8192；超过服务商允许值会直接报错，届时调回较小数字。</p>
+
       <label class="ai-label" for="aiKey">API Key</label>
       <input id="aiKey" class="ai-input" type="password" autocomplete="off" spellcheck="false" placeholder="只保存在本机浏览器">
 

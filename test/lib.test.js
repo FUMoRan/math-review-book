@@ -20,6 +20,7 @@ const {
   filterItemsByCollection, collectionCounts, sanitizeItemCollections,
   parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
   planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy, sampleEvenly,
+  clampMaxTokens, MAX_TOKENS_DEF,
   clusterBySimilarity, groupStats,
   bareMathSegments,
 } = MQ;
@@ -1249,6 +1250,31 @@ test('sampleEvenly 对非法上限返回空数组', () => {
   assert.deepEqual(sampleEvenly([1, 2, 3], NaN), []);
   assert.deepEqual(sampleEvenly(null, 10), []);
 });
+
+/* ===================== 用户自定义的输出上限 ===================== */
+test('clampMaxTokens 空值与非法值回落到 4096', () => {
+  assert.equal(MAX_TOKENS_DEF, 4096);
+  assert.equal(clampMaxTokens(''), 4096);
+  assert.equal(clampMaxTokens(undefined), 4096);
+  assert.equal(clampMaxTokens(null), 4096);
+  assert.equal(clampMaxTokens(0), 4096);
+  assert.equal(clampMaxTokens('abc'), 4096);
+  assert.equal(clampMaxTokens(NaN), 4096);
+});
+
+test('clampMaxTokens 保留合法值并取整', () => {
+  assert.equal(clampMaxTokens(8192), 8192);
+  assert.equal(clampMaxTokens('8192'), 8192);
+  assert.equal(clampMaxTokens('16384'), 16384);
+  assert.equal(clampMaxTokens(8000.9), 8000);
+});
+
+test('clampMaxTokens 越界按边界夹住', () => {
+  assert.equal(clampMaxTokens(100), 256);        // 低于下限
+  assert.equal(clampMaxTokens(999999), 65536);   // 高于上限
+  assert.equal(clampMaxTokens(-5), 4096);        // 负数视为非法
+});
+
 
 
 

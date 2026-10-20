@@ -602,6 +602,18 @@
     return m;
   }
 
+  /* ---------- AI 单次输出上限 ----------
+     用户在设置里可自定义，空值或非法值回落到 4096；越界按边界夹住。
+     这是「上限」而非实际用量，调大不会增加耗时或扣费。 */
+  const MAX_TOKENS_DEF = 4096;
+  const MAX_TOKENS_MIN = 256;
+  const MAX_TOKENS_MAX = 65536;
+  function clampMaxTokens(v) {
+    const n = Math.floor(Number(v));
+    if (!Number.isFinite(n) || n <= 0) return MAX_TOKENS_DEF;
+    return Math.min(MAX_TOKENS_MAX, Math.max(MAX_TOKENS_MIN, n));
+  }
+
   /* 把 AI / 粘贴回来的考点体系 JSON 归一成 [{ subject, chapter, topics: [{ title, kpId }] }]。
      模型经常不按示例给，这里对常见变形做容错：
        · 外层被对象包一层：{ subjects|data|items|result|taxonomy: [...] }
@@ -1060,7 +1072,7 @@
     parseAiJson, normTag, mergeSuggestTags,
     resolveCollectionPath, applyOrganizePlan,
     planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy,
-    sampleEvenly,
+    sampleEvenly, clampMaxTokens, MAX_TOKENS_DEF,
     clusterBySimilarity, groupStats,
     parseSearch,
     bareMathSegments,

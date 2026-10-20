@@ -24,7 +24,7 @@ const {
   collectionPath, addCollection, renameCollection, canMoveCollection, moveCollection,
   deleteCollection, collectionCounts, sanitizeItemCollections,
   parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
-  planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy, sampleEvenly,
+  planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy, sampleEvenly, clampMaxTokens,
   clusterBySimilarity, groupStats,
   bareMathSegments,
 } = MQ;
@@ -2843,6 +2843,7 @@ function fillAiForm() {
   aiEl('aiProtocol').value = aiCfg.protocol || 'gemini';
   aiEl('aiBase').value = aiCfg.baseUrl || '';
   aiEl('aiModel').value = aiCfg.model || '';
+  aiEl('aiMaxTokens').value = aiCfg.maxTokens || '';
   aiEl('aiKey').value = aiCfg.key || '';
   updateAiHint();
 }
@@ -2852,6 +2853,7 @@ function readAiForm() {
     protocol: aiEl('aiProtocol').value,
     baseUrl: aiEl('aiBase').value.trim().replace(/\/+$/, ''),
     model: aiEl('aiModel').value.trim(),
+    maxTokens: clampMaxTokens(aiEl('aiMaxTokens').value),
     key: aiEl('aiKey').value.trim(),
   };
   saveAiCfg();
@@ -2869,7 +2871,7 @@ function applyAiPreset() {
 }
 aiEl('aiPreset').onchange = applyAiPreset;
 aiEl('aiApplyPreset').onclick = applyAiPreset;
-['aiProtocol', 'aiBase', 'aiModel', 'aiKey'].forEach(id => {
+['aiProtocol', 'aiBase', 'aiModel', 'aiMaxTokens', 'aiKey'].forEach(id => {
   aiEl(id).onchange = () => { readAiForm(); aiEl('aiMsg').textContent = ''; };
 });
 
@@ -3138,7 +3140,7 @@ async function aiKpPlanRun(items, entries, mode, onProgress) {
     if (typeof onProgress === 'function') onProgress(Math.min(i + KP_LINK_BATCH, total), total);
     const nth = i / KP_LINK_BATCH + 1;
     try {
-      const text = await aiCall({ system: aiKpLinkPrompt(entries), ask: aiKpUserText(chunk), maxTokens: AI_MAX_TOKENS_KP });
+      const text = await aiCall({ system: aiKpLinkPrompt(entries), ask: aiKpUserText(chunk) });
       const o = parseAiJson(text);
       if (!Array.isArray(o)) { errors.push(`第 ${nth} 批没返回 JSON 数组`); continue; }
       for (const r of o) {
@@ -3163,7 +3165,7 @@ async function aiKpPlanRun(items, entries, mode, onProgress) {
     const chunk = need.slice(i, i + KP_EXPLAIN_BATCH);
     if (typeof onProgress === 'function') onProgress(Math.min(i + KP_EXPLAIN_BATCH, need.length), need.length, 'explain');
     try {
-      const t2 = await aiCall({ system: aiKpExplainPrompt(chunk), ask: '请写讲解。', maxTokens: AI_MAX_TOKENS_KP });
+      const t2 = await aiCall({ system: aiKpExplainPrompt(chunk), ask: '请写讲解。' });
       const o2 = parseAiJson(t2);
       if (Array.isArray(o2)) {
         for (const e of o2) {
@@ -3267,21 +3269,16 @@ function aiHttpErr(status, data) {
   return `请求失败（HTTP ${status}）${m ? '：' + m : ''}`;
 }
 
-/* ---------- 请求参数 ---------- */
-const AI_MAX_TOKENS = 4096;        // 常规请求的输出上限
-const AI_MAX_TOKENS_KP = 8192;     // 考点体系 / 挂载这类长 JSON 的输出上限
-
 /* ---------- 发起请求（system=角色设定；ask=本次指令；可选带图） ----------
-   maxTokens：输出上限，缺省 4096。长 JSON 传 8192，避免整段被截断
-   （部分服务商对上限有更严限制，会直接报错，此时可改回较小值）。
-   超时随输出上限放宽，否则长输出容易在返回前被 abort。 */
-async function aiCall({ system, ask, b64, mime, maxTokens }) {
+   输出上限取设置里的「单次输出上限」（空则 4096），见 lib.js 的 clampMaxTokens。
+   超时随上限放宽，否则长输出容易在返回前被 abort。 */
+async function aiCall({ system, ask, b64, mime }) {
   readAiForm();
   if (!aiReady()) throw new Error('AI 配置不完整（需要 Base URL、模型名、API Key）。');
   const cfg = aiCfg;
   const base = cfg.baseUrl.replace(/\/+$/, '');
   const hasImg = !!(b64 && mime);
-  const maxOut = Math.max(256, Math.floor(+maxTokens || AI_MAX_TOKENS));
+  const maxOut = clampMaxTokens(cfg.maxTokens);
   const ctrl = new AbortController();
   aiAbort = ctrl;
   const timer = setTimeout(() => ctrl.abort(), Math.max(120000, Math.round(maxOut / 4096 * 120000)));
@@ -3860,7 +3857,6 @@ kpEl('aiKpRun').onclick = async () => {
     const text = await aiCall({
       system: aiKpTaxonomyPrompt(),
       ask: ['下面是错题（JSON）：', aiKpUserText(kpTaxSample(items)), '', '下面是知识点库里已有的考点清单：', aiKpExistingText()].join('\n'),
-      maxTokens: AI_MAX_TOKENS_KP,
     });
     const raw = parseAiJson(text);
     hideAiBusy();
