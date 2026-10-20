@@ -1641,23 +1641,31 @@ function renderColTree() {
 // 首字（竖条方块上显示一个字符；对代理对/emoji 安全）
 const firstChar = s => { const t = String(s == null ? '' : s).trim(); return t ? [...t][0] : '?'; };
 
-// 窄竖条：平铺「全部」「未分类」+ 所有合集（含子合集，不体现缩进），复用同一份 collectionFilter 选中态
+// 窄竖条：收起后的一列方块。递归分组体现父子层级（子合集缩进 + 左侧竖线），
+// 复用同一份 collectionFilter 选中态。
 function renderColRail(kind, cols, subtree, unassigned, sel) {
   const v = cur();
   // 保留竖条内部滚动位置
   const prev = colTreeEl.querySelector('.colrail-items');
   const st = prev ? prev.scrollTop : 0;
 
-  const item = (id, name, active, tip) =>
-    `<button class="colrail-item${active ? ' active' : ''}" data-rrow="${esc(id)}" title="${esc(tip)}">${esc(firstChar(name))}</button>`;
+  const item = (id, name, active, tip, extra) =>
+    `<button class="colrail-item${extra ? ' ' + extra : ''}${active ? ' active' : ''}" data-rrow="${esc(id)}" title="${esc(tip)}">${esc(firstChar(name))}</button>`;
 
-  let items = '';
-  items += item(COL_ALL, '全部', sel === COL_ALL, `全部 · ${curItems().length} 条`);
+  const walk = parentId => {
+    let s = '';
+    for (const c of collectionChildren(cols, parentId)) {
+      const kids = collectionChildren(cols, c.id);
+      const path = collectionPath(cols, c.id).map(x => x.name).join(' / ');
+      s += item(c.id, c.name, sel === c.id, `${path} · ${subtree.get(c.id) || 0} 条`, kids.length ? 'has-kids' : '');
+      if (kids.length) s += `<div class="colrail-sub">${walk(c.id)}</div>`;
+    }
+    return s;
+  };
+
+  let items = item(COL_ALL, '全部', sel === COL_ALL, `全部 · ${curItems().length} 条`);
   items += item(NONE_ID, '未分类', sel == null, `未分类 · ${unassigned} 条`);
-  for (const c of flattenCollections(cols)) {
-    const path = collectionPath(cols, c.id).map(x => x.name).join(' / ');
-    items += item(c.id, c.name, sel === c.id, `${path} · ${subtree.get(c.id) || 0} 条`);
-  }
+  items += `<div class="colrail-group">${walk(null)}</div>`;
 
   colTreeEl.innerHTML = '<div class="colrail">'
     + '<button class="colrail-btn" id="colRailExpand" title="展开合集侧栏">»</button>'

@@ -612,15 +612,30 @@ img.thumb.broken{opacity:.35;}
 }
 .colrail-btn:hover{background:var(--sunken); color:var(--brand);}
 .colrail-items{
-  display:flex; flex-direction:column; align-items:center; gap:5px;
+  display:flex; flex-direction:column; align-items:flex-start; gap:5px;
   flex:1 1 auto; min-height:0; overflow-y:auto; width:100%;
 }
+/* 合集分组：与上面「全部/未分类」用分隔线断开 */
+.colrail-group{
+  display:flex; flex-direction:column; align-items:flex-start; gap:5px;
+  width:100%; margin-top:4px; padding-top:6px; border-top:1px solid var(--line);
+}
+/* 子合集：整体右缩进并画一条左侧竖线，与父级方块区分开 */
+.colrail-sub{
+  display:flex; flex-direction:column; align-items:flex-start; gap:5px;
+  margin-left:5px; padding-left:4px; border-left:1px solid var(--line);
+}
+.colrail-sub .colrail-sub{margin-left:2px; padding-left:2px; border-left:1px solid var(--line);}
+.colrail-sub .colrail-sub .colrail-sub{margin-left:0; padding-left:0; border-left:0;}
+.colrail-sub .colrail-sub .colrail-item{width:18px; height:18px; font-size:11px; border-radius:6px;}
 .colrail-item{
-  width:28px; height:28px; flex:0 0 auto; padding:0;
+  width:26px; height:26px; flex:0 0 auto; padding:0;
   display:flex; align-items:center; justify-content:center;
   border:1px solid var(--line); border-radius:8px; background:var(--card);
   color:var(--text-2); font-size:13px; cursor:pointer;
 }
+.colrail-item.has-kids{color:var(--text); font-weight:700;}
+.colrail-sub .colrail-item{width:22px; height:22px; font-size:12px; border-radius:7px; color:var(--muted);}
 .colrail-item:hover{border-color:var(--brand);}
 .colrail-item.active{background:var(--brand-soft); border-color:var(--brand); color:var(--brand); font-weight:700;}
 
@@ -633,7 +648,7 @@ img.thumb.broken{opacity:.35;}
     transform:none; transition:none; box-shadow:none; z-index:1;
   }
   .coltree.rail{
-    width:44px; flex:0 0 44px; padding:10px 8px 16px;
+    width:54px; flex:0 0 54px; padding:10px 10px 16px;
     align-items:center; gap:0; overflow:hidden;
   }
   .coltree-backdrop{display:none !important;}
