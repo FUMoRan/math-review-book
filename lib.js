@@ -462,6 +462,71 @@
     return { items: out, cols, changed };
   }
 
+  /* 把 AI 提出的三层考点体系落成「两级合集 + 考点条目」计划（纯函数，不改动入参）。
+     taxonomy: [{ subject, chapter, topics: [{ title, kpId }] }]
+     opts: { cols, kps, now }
+       cols —— 知识点库的合集数组；kps —— 知识点条目数组
+     返回: { cols, kps, entries }
+       entries: [{ key, kpId, title, collectionId, path, isNew }]
+         key —— 后续挂载环节用的标识：复用项就是它的 kpId，新建项是 'tmp1'、'tmp2'…
+         kpId —— 真实条目 id（新建项含本次生成的 id） */
+  function planKpTaxonomy(taxonomy, opts) {
+    const o = opts || {};
+    const now = o.now || Date.now();
+    // 合集名里的 / 会被当成路径分隔符，替换掉以免把考点名拆成层级
+    const clean = s => String(s == null ? '' : s).replace(/\//g, '·').trim();
+    let cols = Array.isArray(o.cols) ? o.cols.slice() : [];
+    let kps = Array.isArray(o.kps) ? o.kps.slice() : [];
+    const entries = [];
+    const seenKeys = new Set();
+    const hasId = new Set();
+    const byName = new Map();   // 归一化考点名 + '\u0001' + 章节合集 id → kpId
+    for (const k of kps) {
+      if (!k || !k.id) continue;
+      hasId.add(k.id);
+      if (k.collectionId && k.title) byName.set(normText(k.title) + '\u0001' + k.collectionId, k.id);
+    }
+    const pathOf = id => collectionPath(cols, id).map(x => x.name).join('/');
+    let tmp = 0;
+    for (const ch of (Array.isArray(taxonomy) ? taxonomy : [])) {
+      const subject = clean(ch && ch.subject), chapter = clean(ch && ch.chapter);
+      if (!subject || !chapter) continue;
+      const r = resolveCollectionPath(cols, subject + '/' + chapter, now);
+      cols = r.cols;
+      const colId = r.id;
+      for (const t of (Array.isArray(ch.topics) ? ch.topics : [])) {
+        const title = clean(t && t.title);
+        if (!title) continue;
+        const nk = normText(title) + '\u0001' + colId;
+        // 1) AI 指定且真实存在的 kpId → 复用（并用条目自身的章节，不搬家）
+        let kpId = (t && typeof t.kpId === 'string' && t.kpId) ? t.kpId : null;
+        if (kpId && !hasId.has(kpId)) kpId = null;
+        if (kpId && seenKeys.has(kpId)) continue;
+        // 2) 否则按「归一化名 + 同章节」命中已有条目 → 复用
+        if (!kpId && byName.has(nk)) kpId = byName.get(nk);
+        if (kpId) {
+          const cur = kps.find(k => k.id === kpId);
+          seenKeys.add(kpId);
+          byName.set(nk, kpId);
+          entries.push({
+            key: kpId, kpId, title: (cur && cur.title) || title,
+            collectionId: (cur && cur.collectionId) || colId,
+            path: pathOf((cur && cur.collectionId) || colId), isNew: false,
+          });
+          continue;
+        }
+        // 3) 新建
+        const np = normalizeKp({ title, collectionId: colId });
+        kps = kps.concat([np]);
+        hasId.add(np.id);
+        byName.set(nk, np.id);
+        const key = 'tmp' + (++tmp);
+        entries.push({ key, kpId: np.id, title, collectionId: colId, path: pathOf(colId), isNew: true });
+      }
+    }
+    return { cols, kps, entries };
+  }
+
   /* ---------- 期3：相似题聚类（纯本地，零 API 成本） ----------
      贪心聚类：按顺序取未归组的项作「种子」，把其后与种子相似度 >= threshold 的项并入同组；
      只有成员数 >= 2 的组会被返回。textOf 缺省取 stem。 */
@@ -843,6 +908,7 @@
     filterItemsByCollection, collectionCounts, sanitizeItemCollections,
     parseAiJson, normTag, mergeSuggestTags,
     resolveCollectionPath, applyOrganizePlan,
+    planKpTaxonomy,
     clusterBySimilarity, groupStats,
     parseSearch,
     bareMathSegments,

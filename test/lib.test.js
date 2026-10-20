@@ -19,6 +19,7 @@ const {
   canMoveCollection, moveCollection, deleteCollection,
   filterItemsByCollection, collectionCounts, sanitizeItemCollections,
   parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
+  planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage,
   clusterBySimilarity, groupStats,
   bareMathSegments,
 } = MQ;
@@ -1058,5 +1059,48 @@ test('groupStats 按 key 计数并统计到期/状态', () => {
   assert.deepEqual(gs[0], { key: '导数', count: 3, due: 2, newc: 1, reviewing: 1, mastered: 1 });
   assert.equal(gs[1].key, '单调性');
   assert.equal(gs[1].count, 1);
+});
+
+/* ===================== 知识点体系：计划与应用 ===================== */
+const TAX = [
+  { subject: '高等数学', chapter: '极限', topics: [{ title: '夹逼定理', kpId: null }, { title: '单调有界准则', kpId: null }, { title: '两个重要极限', kpId: null }] },
+  { subject: '高等数学', chapter: '中值定理', topics: [{ title: '罗尔定理', kpId: 'k9' }] },
+];
+
+test('planKpTaxonomy 建两级合集 + 考点条目，并给出 key 映射', () => {
+  const r = planKpTaxonomy(TAX, { cols: [], kps: [{ id: 'k9', title: '罗尔定理', content: '旧讲解', collectionId: 'z1' }], now: 1000 });
+  // 学科/章节都建成了合集
+  assert.deepEqual(r.cols.filter(c => c.parentId === null).map(c => c.name), ['高等数学']);
+  const chaps = r.cols.filter(c => c.parentId && c.parentId !== null).map(c => c.name);
+  assert.deepEqual(chaps.slice().sort(), ['中值定理', '极限'].sort());
+  // 4 个考点：3 新建 + 1 复用
+  assert.equal(r.entries.length, 4);
+  assert.equal(r.kps.length, 4);
+  const created = r.entries.filter(e => e.isNew);
+  assert.equal(created.length, 3);
+  assert.ok(created.every(e => /^tmp\d+$/.test(e.key)));
+  const reused = r.entries.find(e => e.title === '罗尔定理');
+  assert.equal(reused.key, 'k9');
+  assert.equal(reused.isNew, false);
+  // 复用项保留原有讲解，不被清空
+  assert.equal(r.kps.find(k => k.id === 'k9').content, '旧讲解');
+  // 新建条目 content 为空、带章节归属
+  assert.equal(r.kps.filter(k => k.content === '').length, 3);
+});
+
+test('planKpTaxonomy 幂等：同名 + 同章节命中已有条目则复用，不重复新建', () => {
+  const first = planKpTaxonomy(TAX, { cols: [], kps: [], now: 1000 });
+  const again = planKpTaxonomy(TAX, { cols: first.cols, kps: first.kps, now: 2000 });
+  assert.equal(again.kps.length, first.kps.length);          // 没有新增条目
+  assert.equal(again.cols.length, first.cols.length);        // 没有新增合集
+  assert.ok(again.entries.every(e => e.isNew === false));
+});
+
+test('planKpTaxonomy 丢弃 AI 编造的 kpId，并去掉合集名里的 /', () => {
+  const r = planKpTaxonomy(
+    [{ subject: '高数/极限', chapter: '夹逼', topics: [{ title: 'x', kpId: 'nope' }] }],
+    { cols: [], kps: [], now: 1000 });
+  assert.equal(r.entries[0].isNew, true);                    // 编造的 id 不生效，改为新建
+  assert.deepEqual(r.cols.map(c => c.name), ['高数·极限', '夹逼']);
 });
 
