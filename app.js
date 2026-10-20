@@ -3046,6 +3046,120 @@ function aiOrgPromptText(items, dims) {
   ].join('\n');
 }
 
+/* ---------- AI 整理知识点：Step1 体系 / Step2 挂载 / Step3 讲解 ---------- */
+function aiKpExistingText() {
+  return JSON.stringify(stores.k.items.map(k => ({
+    title: k.title || '',
+    path: k.collectionId ? collectionPath(colStores.k, k.collectionId).map(x => x.name).join('/') : '',
+    kpId: k.id,
+  })));
+}
+
+function aiKpUserText(items) {
+  return JSON.stringify((Array.isArray(items) ? items : []).map(it => ({
+    id: it.id,
+    stem: String(it.stem || '').replace(/\s+/g, ' ').slice(0, 300),
+    tags: it.tags || [],
+  })));
+}
+
+// Step1：让 AI 提出三层考点体系（学科 / 章节 / 考点）
+function aiKpTaxonomyPrompt() {
+  return [
+    '你是考研数学 / 高中数学的课程分类专家。下面会给你两段 JSON：一批错题原文与标签，以及知识点库里已有的考点清单。',
+    '请据此提出一套**三层考点体系**：学科 → 章节 → 考点。',
+    '严格只输出一个 JSON 数组，不要输出任何解释、标题或 ``` 围栏。每个元素形如：',
+    '{ "subject": "高等数学", "chapter": "极限", "topics": [ { "title": "夹逼定理", "kpId": "k12" }, { "title": "单调有界准则", "kpId": null } ] }',
+    '要求：',
+    '1. subject 控制在 2~6 个（如 高等数学 / 线性代数 / 概率论与数理统计）；',
+    '2. 每个 subject 下 2~8 个 chapter；每个 chapter 下 1~6 个 topics；',
+    '3. 考点名要短（不超过 12 字）、要能复用，同一考点不要换个说法重复出现；',
+    '4. 【已有清单】里出现过的考点，必须原样照抄它的 kpId 复用，禁止编造 kpId；新考点 kpId 一律用 null；',
+    '5. 同一个考点不要同时放进两个 chapter；学科名与章节名里不要出现 / 字符。',
+  ].join('\n');
+}
+
+// Step2：把错题挂到考点上（多选），必要时补一句「考点 + 易错点」
+function aiKpLinkPrompt(entries) {
+  return [
+    '你是数学错题整理助手。下面给你一份**已确定的考点清单**（每个考点有唯一 key）和一批错题。',
+    '请为每道错题挑出它涉及的全部考点（可多个，也可以一个都不涉及），并在需要时补一句「考点 + 易错点」。',
+    '严格只输出一个 JSON 数组，不要输出任何解释或 ``` 围栏。每个元素形如：',
+    '{ "qid": "错题 id（原样照抄）", "kpKeys": ["k12", "tmp3"], "knowledge": "夹逼定理：……" }',
+    '要求：',
+    '1. kpKeys 只能取自下面清单里的 key，禁止编造；一道题最多 3 个考点；',
+    '2. 不确定就给空数组，不要瞎猜；',
+    '3. knowledge 是可选的一句话（考点 + 易错点），公式用 $...$；不确定就给空字符串；',
+    '4. 输出元素个数、id 与输入错题一一对应。',
+    '考点清单：',
+    JSON.stringify((Array.isArray(entries) ? entries : []).map(e => ({ key: e.key, path: e.path, title: e.title }))),
+  ].join('\n');
+}
+
+// Step3：只为被挂到的考点写讲解
+function aiKpExplainPrompt(entries) {
+  return [
+    '你是数学助教。下面给你一批数学考点，请为每个考点写一段讲解。',
+    '严格只输出一个 JSON 数组，不要输出任何解释或 ``` 围栏。每个元素形如：',
+    '{ "kpKey": "k12", "content": "……" }',
+    '要求：',
+    '1. 讲解写清「定义 + 为什么成立 + 怎么用 + 易错点」，公式一律用 LaTeX 且必须带 $...$ 或 $$...$$；',
+    '2. 不要用 Markdown 语法（不要 **加粗**、# 标题、- 列表）；需要分步就用「第 1 步：」这类前缀；',
+    '3. kpKey 必须原样照抄，不要编造。',
+    '考点清单：',
+    JSON.stringify((Array.isArray(entries) ? entries : []).map(e => ({ kpKey: e.key, title: e.title }))),
+  ].join('\n');
+}
+
+// 免 Key：拼成一段可直接丢给任意对话式 AI 的文本
+function aiKpCopyText(step, items, entries) {
+  if (step === 'taxonomy') {
+    return [
+      aiKpTaxonomyPrompt(), '',
+      '下面是错题（JSON）：', aiKpUserText(items), '',
+      '下面是知识点库里已有的考点清单：', aiKpExistingText(), '',
+      '请只输出那个 JSON 数组。',
+    ].join('\n');
+  }
+  if (step === 'link') {
+    return [aiKpLinkPrompt(entries), '', '下面是错题（JSON）：', aiKpUserText(items), '', '请只输出那个 JSON 数组。'].join('\n');
+  }
+  return [aiKpExplainPrompt(entries), '', '请只输出那个 JSON 数组。'].join('\n');
+}
+
+// Step2 / Step3 的合并请求：一批错题 → { rows, explains }
+async function aiKpPlanRun(items, entries, mode) {
+  const rows = [], explains = [], errors = [];
+  const text = await aiCall({ system: aiKpLinkPrompt(entries), ask: aiKpUserText(items) });
+  const o = parseAiJson(text);
+  if (!Array.isArray(o)) throw new Error('AI 没有返回 JSON 数组。');
+  for (const r of o) {
+    if (!r || typeof r.qid !== 'string') continue;
+    const kpKeys = Array.isArray(r.kpKeys) ? r.kpKeys.filter(k => typeof k === 'string' && k) : [];
+    rows.push({ qid: r.qid, kpKeys, knowledge: typeof r.knowledge === 'string' ? r.knowledge : '', skip: false });
+  }
+  // 只为「本次挂到且讲解为空」的考点写讲解
+  const usedKeys = new Set();
+  for (const r of rows) for (const k of r.kpKeys) usedKeys.add(k);
+  const need = entries.filter(e => usedKeys.has(e.key) && !(e.content || '').trim());
+  if (need.length) {
+    try {
+      const t2 = await aiCall({ system: aiKpExplainPrompt(need), ask: '请写讲解。' });
+      const o2 = parseAiJson(t2);
+      if (Array.isArray(o2)) {
+        for (const e of o2) {
+          const key = e && typeof e.kpKey === 'string' ? e.kpKey : null;
+          const content = e && typeof e.content === 'string' ? e.content.trim() : '';
+          if (key && content) explains.push({ kpKey: key, content });
+        }
+      }
+    } catch (err) {
+      errors.push('讲解生成失败（可稍后单独重试）：' + ((err && err.message) || err));
+    }
+  }
+  return { rows, explains, errors };
+}
+
 // 分批请求，合并结果 → { plan, failed, errors, ok }
 async function aiOrganizeRun(items, dims, onProgress) {
   const list = Array.isArray(items) ? items : [];
