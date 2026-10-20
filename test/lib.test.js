@@ -915,12 +915,20 @@ test('reorderItems 未知 id 只做重编号', () => {
   assert.deepEqual(out.map(i => [i.id, i.order]), [['a', 0], ['b', 1]]);
 });
 
-/* ===================== AI 整理：kpId ===================== */
-test('normalizeQuestion 保留 kpId，非法值归 null', () => {
-  assert.equal(normalizeQuestion({ kpId: 'k1' }).kpId, 'k1');
-  assert.equal(normalizeQuestion({ kpId: '' }).kpId, null);
-  assert.equal(normalizeQuestion({ kpId: 123 }).kpId, null);
-  assert.equal(normalizeQuestion({}).kpId, null);
+/* ===================== 错题 ↔ 知识点（多对多） ===================== */
+test('normalizeQuestion 把 kpIds 归一为去重后的字符串数组', () => {
+  assert.deepEqual(normalizeQuestion({ kpIds: ['k1', 'k2'] }).kpIds, ['k1', 'k2']);
+  assert.deepEqual(normalizeQuestion({ kpIds: ['k1', 'k1', '', 123, null] }).kpIds, ['k1']);
+  assert.deepEqual(normalizeQuestion({ kpIds: 'k1' }).kpIds, []);
+  assert.deepEqual(normalizeQuestion({}).kpIds, []);
+});
+
+test('normalizeQuestion 把旧的单值 kpId 迁移进 kpIds', () => {
+  assert.deepEqual(normalizeQuestion({ kpId: 'k1' }).kpIds, ['k1']);
+  assert.deepEqual(normalizeQuestion({ kpId: '' }).kpIds, []);
+  assert.deepEqual(normalizeQuestion({ kpId: 123 }).kpIds, []);
+  // 已有 kpIds 时以 kpIds 为准，忽略旧的 kpId
+  assert.deepEqual(normalizeQuestion({ kpId: 'old', kpIds: ['k2'] }).kpIds, ['k2']);
 });
 
 /* ===================== AI 整理：解析与标签合并 ===================== */

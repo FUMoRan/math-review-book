@@ -88,6 +88,8 @@
   /* ---------- 归一化数据结构 ---------- */
   function normalizeQuestion(it) {
     const o = it && typeof it === 'object' ? it : {};
+    const rawKp = Array.isArray(o.kpIds) ? o.kpIds : (typeof o.kpId === 'string' && o.kpId ? [o.kpId] : []);
+    const kpIds = [...new Set(rawKp.filter(x => typeof x === 'string' && x))];
     return {
       id: o.id || uid(),
       stem: typeof o.stem === 'string' ? o.stem : '',
@@ -99,7 +101,7 @@
       star: !!o.star,
       images: Array.isArray(o.images) ? o.images.filter(s => typeof s === 'string' && s) : [],
       collectionId: typeof o.collectionId === 'string' && o.collectionId ? o.collectionId : null,
-      kpId: typeof o.kpId === 'string' && o.kpId ? o.kpId : null,
+      kpIds,
       srs: normalizeSrs(o.srs),
       order: Number.isFinite(o.order) ? o.order : null,
       createdAt: o.createdAt || Date.now(),
