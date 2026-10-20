@@ -564,6 +564,33 @@
     return { items: out, changed };
   }
 
+  /* 把 AI 写好的考点讲解写入知识点条目（纯函数，不改动入参）。
+     explains: [{ kpKey, content }]
+     opts: { keyMap, mode, now }   同 applyKpLinks
+     返回: { kps, changed } */
+  function applyKpExplain(kps, explains, opts) {
+    const o = opts || {};
+    const now = o.now || Date.now();
+    const map = o.keyMap instanceof Map ? o.keyMap : new Map(Object.entries(o.keyMap || {}));
+    const overwrite = o.mode === 'overwrite';
+    const byId = new Map();
+    for (const e of (Array.isArray(explains) ? explains : [])) {
+      const id = e && map.get(e.kpKey);
+      const text = e && typeof e.content === 'string' ? e.content.trim() : '';
+      if (id && text) byId.set(id, text);
+    }
+    let changed = 0;
+    const out = (Array.isArray(kps) ? kps : []).map(k => {
+      const text = k && byId.get(k.id);
+      if (!text) return k;
+      if (!overwrite && k.content) return k;
+      if (k.content === text) return k;
+      changed++;
+      return Object.assign({}, k, { content: text, updatedAt: now });
+    });
+    return { kps: out, changed };
+  }
+
   /* ---------- 期3：相似题聚类（纯本地，零 API 成本） ----------
      贪心聚类：按顺序取未归组的项作「种子」，把其后与种子相似度 >= threshold 的项并入同组；
      只有成员数 >= 2 的组会被返回。textOf 缺省取 stem。 */
@@ -945,7 +972,7 @@
     filterItemsByCollection, collectionCounts, sanitizeItemCollections,
     parseAiJson, normTag, mergeSuggestTags,
     resolveCollectionPath, applyOrganizePlan,
-    planKpTaxonomy, applyKpLinks,
+    planKpTaxonomy, applyKpLinks, applyKpExplain,
     clusterBySimilarity, groupStats,
     parseSearch,
     bareMathSegments,

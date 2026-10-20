@@ -1140,3 +1140,24 @@ test('applyKpLinks 跳过 skip 与未知 qid，不改动原数组', () => {
   assert.equal(JSON.stringify(items), snap);
 });
 
+test('applyKpExplain 只给 content 为空的考点写讲解', () => {
+  const kps = [
+    { id: 'k1', title: 'A', content: '', tags: [] },
+    { id: 'k2', title: 'B', content: '已有讲解', tags: [] },
+  ];
+  const r = applyKpExplain(kps, [{ kpKey: 'k1', content: '新讲解' }, { kpKey: 'k2', content: '想覆盖' }],
+    { keyMap: new Map([['k1', 'k1'], ['k2', 'k2']]), now: 1000 });
+  assert.equal(r.kps[0].content, '新讲解');
+  assert.equal(r.kps[1].content, '已有讲解');   // 非覆盖模式保留
+  assert.equal(r.changed, 1);
+  assert.equal(kps[0].content, '');            // 不改动入参
+});
+
+test('applyKpExplain 覆盖模式可改写已有讲解，空内容与未知 key 忽略', () => {
+  const kps = [{ id: 'k2', title: 'B', content: '旧', tags: [] }];
+  const r = applyKpExplain(kps, [{ kpKey: 'k2', content: '新' }, { kpKey: 'zz', content: 'x' }, { kpKey: 'k2', content: '   ' }],
+    { keyMap: new Map([['k2', 'k2']]), mode: 'overwrite' });
+  assert.equal(r.kps[0].content, '新');
+  assert.equal(r.changed, 1);
+});
+
