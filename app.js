@@ -3138,7 +3138,7 @@ async function aiKpPlanRun(items, entries, mode, onProgress) {
     if (typeof onProgress === 'function') onProgress(Math.min(i + KP_LINK_BATCH, total), total);
     const nth = i / KP_LINK_BATCH + 1;
     try {
-      const text = await aiCall({ system: aiKpLinkPrompt(entries), ask: aiKpUserText(chunk) });
+      const text = await aiCall({ system: aiKpLinkPrompt(entries), ask: aiKpUserText(chunk), maxTokens: AI_MAX_TOKENS_KP });
       const o = parseAiJson(text);
       if (!Array.isArray(o)) { errors.push(`第 ${nth} 批没返回 JSON 数组`); continue; }
       for (const r of o) {
@@ -3163,7 +3163,7 @@ async function aiKpPlanRun(items, entries, mode, onProgress) {
     const chunk = need.slice(i, i + KP_EXPLAIN_BATCH);
     if (typeof onProgress === 'function') onProgress(Math.min(i + KP_EXPLAIN_BATCH, need.length), need.length, 'explain');
     try {
-      const t2 = await aiCall({ system: aiKpExplainPrompt(chunk), ask: '请写讲解。' });
+      const t2 = await aiCall({ system: aiKpExplainPrompt(chunk), ask: '请写讲解。', maxTokens: AI_MAX_TOKENS_KP });
       const o2 = parseAiJson(t2);
       if (Array.isArray(o2)) {
         for (const e of o2) {
@@ -3267,16 +3267,24 @@ function aiHttpErr(status, data) {
   return `请求失败（HTTP ${status}）${m ? '：' + m : ''}`;
 }
 
-/* ---------- 发起请求（system=角色设定；ask=本次指令；可选带图） ---------- */
-async function aiCall({ system, ask, b64, mime }) {
+/* ---------- 请求参数 ---------- */
+const AI_MAX_TOKENS = 4096;        // 常规请求的输出上限
+const AI_MAX_TOKENS_KP = 8192;     // 考点体系 / 挂载这类长 JSON 的输出上限
+
+/* ---------- 发起请求（system=角色设定；ask=本次指令；可选带图） ----------
+   maxTokens：输出上限，缺省 4096。长 JSON 传 8192，避免整段被截断
+   （部分服务商对上限有更严限制，会直接报错，此时可改回较小值）。
+   超时随输出上限放宽，否则长输出容易在返回前被 abort。 */
+async function aiCall({ system, ask, b64, mime, maxTokens }) {
   readAiForm();
   if (!aiReady()) throw new Error('AI 配置不完整（需要 Base URL、模型名、API Key）。');
   const cfg = aiCfg;
   const base = cfg.baseUrl.replace(/\/+$/, '');
   const hasImg = !!(b64 && mime);
+  const maxOut = Math.max(256, Math.floor(+maxTokens || AI_MAX_TOKENS));
   const ctrl = new AbortController();
   aiAbort = ctrl;
-  const timer = setTimeout(() => ctrl.abort(), 120000);
+  const timer = setTimeout(() => ctrl.abort(), Math.max(120000, Math.round(maxOut / 4096 * 120000)));
   try {
     if (cfg.protocol === 'gemini') {
       const url = base + '/v1beta/models/' + encodeURIComponent(cfg.model) +
@@ -3288,7 +3296,7 @@ async function aiCall({ system, ask, b64, mime }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: gParts }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+          generationConfig: { temperature: 0.2, maxOutputTokens: maxOut },
         }),
         signal: ctrl.signal,
       });
@@ -3311,7 +3319,7 @@ async function aiCall({ system, ask, b64, mime }) {
         },
         body: JSON.stringify({
           model: cfg.model,
-          max_tokens: 4096,
+          max_tokens: maxOut,
           system,
           messages: [{ role: 'user', content: aContent }],
         }),
@@ -3331,7 +3339,7 @@ async function aiCall({ system, ask, b64, mime }) {
       body: JSON.stringify({
         model: cfg.model,
         temperature: 0.2,
-        max_tokens: 4096,
+        max_tokens: maxOut,
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: oContent },
@@ -3852,6 +3860,7 @@ kpEl('aiKpRun').onclick = async () => {
     const text = await aiCall({
       system: aiKpTaxonomyPrompt(),
       ask: ['下面是错题（JSON）：', aiKpUserText(kpTaxSample(items)), '', '下面是知识点库里已有的考点清单：', aiKpExistingText()].join('\n'),
+      maxTokens: AI_MAX_TOKENS_KP,
     });
     const raw = parseAiJson(text);
     hideAiBusy();
