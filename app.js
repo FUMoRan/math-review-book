@@ -24,7 +24,8 @@ const {
   collectionPath, addCollection, renameCollection, canMoveCollection, moveCollection,
   deleteCollection, collectionCounts, sanitizeItemCollections,
   parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
-  clusterBySimilarity, groupStats, kpUsage,
+  planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage,
+  clusterBySimilarity, groupStats,
   bareMathSegments,
 } = MQ;
 
@@ -3813,10 +3814,10 @@ kpEl('aiKpCopy').onclick = async () => {
   kpState.items = items;
   kpState.mode = kpMode();
   const text = aiKpCopyText('taxonomy', items, []);
+  kpEl('aiKpPaste').value = '';
+  kpEl('aiKpPasteHint').textContent = '把 AI 输出的 JSON 数组粘到下面（Step1 的体系 JSON）。';
   try { await navigator.clipboard.writeText(text); kpEl('aiKpMsg').textContent = '提示词已复制，去任意 AI 跑一遍再粘回来。'; }
   catch (e) { kpEl('aiKpPaste').value = text; kpEl('aiKpMsg').textContent = '复制失败，提示词已填在下面的框里，请手动复制。'; }
-  kpEl('aiKpPasteHint').textContent = '把 AI 输出的 JSON 数组粘到下面（Step1 的体系 JSON）。';
-  kpEl('aiKpPaste').value = '';
   kpShowStep('aiKpPasteWrap');
 };
 
