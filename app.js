@@ -30,7 +30,7 @@ const {
 
 /* ===================== 设置（偏好，与数据分开存） ===================== */
 const K_SET = 'mq_settings';
-const SET_DEF = { cols: 'auto', theme: 'system', density: 'comfortable', anim: 'on', rail: 'off', sortMode: { q: 'auto', k: 'auto' } };
+const SET_DEF = { cols: 'auto', theme: 'system', density: 'comfortable', anim: 'on', rail: 'off', sortMode: { q: 'auto', k: 'auto' }, colCollapsed: { q: [], k: [] } };
 
 function readSettings() {
   try {
@@ -41,6 +41,12 @@ function readSettings() {
 const settings = Object.assign({}, SET_DEF, readSettings());
 // sortMode 是嵌套对象，浅合并会整体覆盖，这里单独补全两库默认值
 settings.sortMode = Object.assign({ q: 'auto', k: 'auto' }, settings.sortMode);
+// 合集折叠状态同为嵌套对象，按库分开校验为字符串数组
+const ccRaw = settings.colCollapsed && typeof settings.colCollapsed === 'object' ? settings.colCollapsed : {};
+settings.colCollapsed = {
+  q: Array.isArray(ccRaw.q) ? ccRaw.q.filter(x => typeof x === 'string') : [],
+  k: Array.isArray(ccRaw.k) ? ccRaw.k.filter(x => typeof x === 'string') : [],
+};
 
 function saveSettings() {
   try { localStorage.setItem(K_SET, JSON.stringify(settings)); } catch (e) {}
@@ -1453,7 +1459,37 @@ function refreshTagPicker() {
 /* ===================== 合集（文件夹式，每库一棵可嵌套的树） ===================== */
 const colTreeEl = document.getElementById('colTree');
 const colBackdrop = document.getElementById('colBackdrop');
-const colCollapsed = new Set();   // 被折叠的合集 id（默认展开）
+// 折叠状态：按库（错题 / 知识点）分开维护，持久化到 settings.colCollapsed；默认展开
+const colCollapsedSets = {
+  q: new Set(settings.colCollapsed.q),
+  k: new Set(settings.colCollapsed.k),
+};
+const colCollapsedSet = () => colCollapsedSets[active === 'k' ? 'k' : 'q'];
+const isColCollapsed = id => colCollapsedSet().has(id);
+function setColCollapsed(id, collapsed) {
+  const s = colCollapsedSet();
+  if (collapsed) s.add(id); else s.delete(id);
+  persistColCollapsed();
+}
+function persistColCollapsed() {
+  settings.colCollapsed = { q: [...colCollapsedSets.q], k: [...colCollapsedSets.k] };
+  saveSettings();
+}
+// 合集被删除后清掉其折叠标记，避免残留失效 id
+function forgetCollapsed(ids) {
+  let changed = false;
+  for (const kind of ['q', 'k']) for (const id of ids) if (colCollapsedSets[kind].delete(id)) changed = true;
+  if (changed) persistColCollapsed();
+}
+// 启动时把指向已不存在合集的折叠标记清掉（如导入/别处删过）
+function pruneCollapsed() {
+  let changed = false;
+  for (const kind of ['q', 'k']) {
+    const valid = new Set(colList(kind).map(c => c.id));
+    for (const id of [...colCollapsedSets[kind]]) if (!valid.has(id)) { colCollapsedSets[kind].delete(id); changed = true; }
+  }
+  if (changed) persistColCollapsed();
+}
 
 const colKind = () => active === 'k' ? 'k' : 'q';
 
@@ -1490,7 +1526,7 @@ function addCollectionQuick(kind, parentId, name) {
   }
   const r = addCollection(colList(kind), nm, pid, Date.now());
   colStores[kind] = r.cols;
-  if (pid) colCollapsed.delete(pid);      // 展开父节点，让新建的子合集可见
+  if (pid) setColCollapsed(pid, false);      // 展开父节点，让新建的子合集可见
   saveCols(kind);
   return r.node.id;
 }
@@ -1505,6 +1541,7 @@ document.getElementById('colToggle').onclick = () => {
   colTreeEl.classList.contains('open') ? closeColDrawer() : openColDrawer();
 };
 
+let lastColSel = null;   // 上次渲染时的选中合集 id，用于「选中变化 → 滚动到可视区」
 function renderColTree() {
   if (!colTreeEl) return;
   if (active !== 'q' && active !== 'k') { colTreeEl.innerHTML = ''; return; }
@@ -1520,6 +1557,17 @@ function renderColTree() {
     renderColRail(kind, cols, subtree, unassigned, sel);
     return;
   }
+
+  // 选中的合集若被折叠的祖先挡住，自动展开其祖先（不改该合集自身折叠态），保证高亮可见
+  if (sel && sel !== COL_ALL) {
+    let expanded = false;
+    for (const n of collectionPath(cols, sel).slice(0, -1)) {
+      if (colCollapsedSets[kind].delete(n.id)) expanded = true;
+    }
+    if (expanded) persistColCollapsed();
+  }
+  const selChanged = sel !== lastColSel;   // 仅在选中项变化时滚动定位，避免每次重渲染都跳动
+  lastColSel = sel;
 
   const nodeRow = o => {
     const pad = 6 + o.depth * 14;
@@ -1545,7 +1593,7 @@ function renderColTree() {
     let s = '';
     for (const c of collectionChildren(cols, parentId)) {
       const kids = collectionChildren(cols, c.id);
-      const collapsed = colCollapsed.has(c.id);
+      const collapsed = isColCollapsed(c.id);
       s += nodeRow({ id: c.id, name: c.name, count: subtree.get(c.id) || 0, active: sel === c.id, depth, hasKids: !!kids.length, collapsed });
       if (kids.length && !collapsed) s += walk(c.id, depth + 1);
     }
@@ -1556,6 +1604,11 @@ function renderColTree() {
   html += `<button class="coltree-new" id="colNew">＋ 新建合集</button>`;
   colTreeEl.innerHTML = html;
   colTreeEl.scrollTop = st;
+  // 选中项变化时（如从下拉/搜索/归档切到深层合集）把它滚到可视区
+  if (selChanged && sel && sel !== COL_ALL) {
+    const row = colTreeEl.querySelector(`[data-crow="${esc(sel)}"]`);
+    if (row) row.scrollIntoView({ block: 'nearest' });
+  }
 
   colTreeEl.querySelectorAll('[data-crow]').forEach(el => {
     el.onclick = e => {
@@ -1570,7 +1623,7 @@ function renderColTree() {
     el.onclick = e => {
       e.stopPropagation();
       const id = el.dataset.twist;
-      colCollapsed.has(id) ? colCollapsed.delete(id) : colCollapsed.add(id);
+      setColCollapsed(id, !isColCollapsed(id));
       renderColTree();
     };
   });
@@ -1669,6 +1722,7 @@ function deleteCollectionPrompt(id) {
     + '\n此操作不可撤销。';
   if (!confirm(msg)) return;
   colStores[kind] = deleteCollection(cols, id).cols;
+  forgetCollapsed(ids);
   let changed = false;
   for (const it of curItems()) {
     if (it.collectionId && ids.has(it.collectionId)) { it.collectionId = null; changed = true; }
@@ -3303,6 +3357,7 @@ aiEl('aiTest').onclick = async () => {
 /* ---------- 初始化 ---------- */
 async function boot() {
   await loadInitial();
+  pruneCollapsed();   // 清掉指向已删合集的折叠标记
   applySettings();
   fillAiForm();
   purgeTrash();
