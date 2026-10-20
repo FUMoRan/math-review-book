@@ -198,6 +198,12 @@ test('normalizePaperQuestion 保留合法三态与已加入错题', () => {
   assert.equal(q.answer, 'A');
 });
 
+test('normalizePaperQuestion 保留合法配图 id，过滤空值', () => {
+  const q = normalizePaperQuestion({ stem: 'x', images: ['a', '', null, 0, 'b'] });
+  assert.deepEqual(q.images, ['a', 'b']);
+  assert.deepEqual(normalizePaperQuestion({}).images, []);
+});
+
 test('normalizePaper 补全试卷字段并逐题归一化', () => {
   const p = normalizePaper({ title: '  ', questions: [{ stem: 'a' }, null] });
   assert.ok(p.id);
@@ -268,6 +274,13 @@ test('paperWrongToQuestion 只挑标错且未加入的题', () => {
   assert.equal(out[0].status, 'new');
   assert.deepEqual(out[0].fromPaper, { paperId: 'p1', questionId: paper.questions[0].id });
   assert.equal(out[0].createdAt, 5000);
+});
+
+test('paperWrongToQuestion 把题目配图一并带到错题', () => {
+  const paper = normalizePaper({ id: 'p1', questions: [{ id: 'q1', stem: 'a', wrong: 'wrong', images: ['imgA', 'imgB'] }] });
+  const [converted] = paperWrongToQuestion(paper, 0);
+  assert.deepEqual(converted.images, ['imgA', 'imgB']);
+  assert.deepEqual(paperWrongToQuestion(normalizePaper({ questions: [{ stem: 'x', wrong: 'wrong' }] }), 0)[0].images, []);
 });
 
 test('paperWrongToQuestion 无错题时返回空数组', () => {

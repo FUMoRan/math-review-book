@@ -49,6 +49,7 @@
   <input type="file" id="aiImgInput" accept="image/*" hidden>
   <input type="file" id="addImgInput" accept="image/*" multiple hidden>
   <input type="file" id="editImgInput" accept="image/*" multiple hidden>
+  <input type="file" id="pqImgInput" accept="image/*" multiple hidden>
 </header>
 
 <div class="shell" id="shell">
@@ -219,6 +220,12 @@
     <textarea id="pqStem"></textarea>
     <label class="section-label">答案（可选）</label>
     <textarea id="pqAnswer"></textarea>
+    <label class="section-label">配图（几何图 / 函数图像等）</label>
+    <div class="thumbs" id="pqThumbs"></div>
+    <div class="row" style="margin-top:8px">
+      <button class="ghost" id="pqImgBtn">+ 添加图片</button>
+      <span class="badge-note" id="pqImgMsg"></span>
+    </div>
     <div class="row">
       <button class="primary" id="pqSave">保存</button>
       <button class="ghost" id="pqCancel">取消</button>

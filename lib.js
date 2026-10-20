@@ -141,6 +141,7 @@
       answer: typeof p.answer === 'string' ? p.answer : '',
       wrong: WRONG_STATES.includes(p.wrong) ? p.wrong : 'unset',
       tags: Array.isArray(p.tags) ? p.tags.filter(t => typeof t === 'string' && t.trim()) : [],
+      images: Array.isArray(p.images) ? p.images.filter(s => typeof s === 'string' && s) : [],
       linkedQid: typeof p.linkedQid === 'string' && p.linkedQid ? p.linkedQid : null,
     };
   }
@@ -256,7 +257,7 @@
         tags: Array.isArray(q.tags) ? q.tags.slice() : [],
         status: 'new',
         star: false,
-        images: [],
+        images: Array.isArray(q.images) ? q.images.slice() : [],
         collectionId: null,
         srs: normalizeSrs(undefined),
         order: null,

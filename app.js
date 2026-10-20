@@ -152,11 +152,12 @@ function b64ToBlob(b64, type) {
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
   return new Blob([arr], { type: type || 'image/jpeg' });
 }
-// 仍被引用（含回收站）的图片 id 集合，用于清理孤儿图片
+// 仍被引用（含回收站、试卷题目）的图片 id 集合，用于清理孤儿图片
 function referencedImageIds() {
   const s = new Set();
   const add = list => list.forEach(it => (it.images || []).forEach(id => s.add(id)));
   add(stores.q.items); add(stores.k.items); add(trash.map(t => t.item));
+  (stores.p.items || []).forEach(p => add(p.questions || []));
   return s;
 }
 async function gcImages() {
@@ -872,18 +873,38 @@ function addPaperWrongToBook() {
   const raws = paperWrongToQuestion(p, Date.now()).filter(raw => !inBook.has(raw.fromPaper.questionId));
   if (!raws.length) { alert('没有可加入的题（未标错题，或都已在错题本）。'); return; }
   const added = raws.map(raw => normalizeQuestion(raw));
-  added.forEach(it => stores.q.items.push(it));
-  // 回写 linkedQid，标记这些题已在错题本
-  added.forEach(it => {
-    const q = p.questions.find(x => x.id === it.fromPaper.questionId);
-    if (q) q.linkedQid = it.id;
+  duplicatePaperImages(added).then(() => {
+    added.forEach(it => stores.q.items.push(it));
+    // 回写 linkedQid，标记这些题已在错题本
+    added.forEach(it => {
+      const q = p.questions.find(x => x.id === it.fromPaper.questionId);
+      if (q) q.linkedQid = it.id;
+    });
+    p.updatedAt = Date.now();
+    saveStore(K_Q, stores.q.items);
+    savePapers();
+    refreshTagPicker();
+    renderPaperView();
+    alert(`已加入错题本 ${added.length} 道（解析留空，可在错题本里用「复制提示词」让 AI 补解析）。`);
   });
-  p.updatedAt = Date.now();
-  saveStore(K_Q, stores.q.items);
-  savePapers();
-  refreshTagPicker();
-  renderPaperView();
-  alert(`已加入错题本 ${added.length} 道（解析留空，可在错题本里用「复制提示词」让 AI 补解析）。`);
+}
+
+// 试卷题目若带配图，复制一份给错题条目：避免「删其一影响另一个」的共享引用
+async function duplicatePaperImages(items) {
+  for (const it of items) {
+    if (!it.images || !it.images.length) continue;
+    const copies = [];
+    for (const id of it.images) {
+      try {
+        const rec = await idbGet(id);
+        if (!rec || !rec.blob) continue;
+        const nid = 'img_' + uid();
+        await idbPut({ id: nid, blob: rec.blob, type: rec.type || 'image/jpeg', size: rec.blob.size || 0, addedAt: Date.now() });
+        copies.push(nid);
+      } catch (e) { /* 单张复制失败则忽略，宁可少一张也不留下悬空引用 */ }
+    }
+    it.images = copies;
+  }
 }
 
 function openPaper(id) {
@@ -979,6 +1000,8 @@ function renderPaperView() {
 
   const body2 = document.querySelector('.paperview-body');
   if (body2) body2.scrollTop = keepTop;
+  hydrateImages(qsEl);
+  hydrateImages(focusEl);
 }
 
 // 右侧/顶部题号导航条：进度 + 每题的 对/错/未标 颜色方块 + 当前高亮
@@ -1008,6 +1031,7 @@ function renderPaperList(p, qs, host) {
         ${q.linkedQid ? '<span class="badge-note">已在错题本</span>' : ''}
       </div>
       <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
+      ${imgStrip(q)}
       ${paperRenderAnswer(q)}
       <div class="paper-q-acts">
         <div class="paper-tri" data-qid="${q.id}">
@@ -1051,6 +1075,7 @@ function renderPaperFocus(p, qs, host) {
         <span class="section-label">${idx + 1} / ${qs.length}</span>
       </div>
       <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
+      ${imgStrip(q)}
       ${paperRenderAnswer(q)}
       <div class="paper-focus-acts">
         <button class="paper-big right ${q.wrong === 'right' ? 'on' : ''}" data-wrong="right">做对</button>
@@ -1100,9 +1125,11 @@ function renderPaperEdit() {
             <button class="link" data-act="delq" data-qid="${q.id}">删除</button>
           </div>
           <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
+          ${imgStrip(q)}
           ${q.answer ? `<div class="body">${renderMath(q.answer)}</div>` : ''}
         </div>`).join('') || '<div class="empty">这张试卷还没有题目。</div>'}
     </div>`;
+  hydrateImages(host);
   document.getElementById('paperEditTitle').onchange = e => {
     p.title = e.target.value.trim() || '未命名试卷';
     p.updatedAt = Date.now();
@@ -1209,6 +1236,8 @@ document.getElementById('paperModeSec').querySelectorAll('button').forEach(b => 
 
 
 /* 题目编辑小弹层：仅供编辑页调用 */
+let pqImgs = [];        // 配图草稿
+let pqOrig = null;      // 打开弹层时的原始配图集合
 function openPaperQ(paperId, qid) {
   const p = paperOf(paperId);
   const q = p && p.questions.find(x => x.id === qid);
@@ -1217,9 +1246,36 @@ function openPaperQ(paperId, qid) {
   document.getElementById('pqNo').value = q.no;
   document.getElementById('pqStem').value = q.stem;
   document.getElementById('pqAnswer').value = q.answer;
+  // 配图走草稿：弹层里的增删只改草稿，保存才落盘，取消则丢弃本次新增
+  pqOrig = new Set(q.images || []);
+  pqImgs = (q.images || []).slice();
+  document.getElementById('pqImgMsg').textContent = '';
+  renderPqThumbs();
   document.getElementById('paperQModal').classList.add('open');
 }
-document.getElementById('pqCancel').onclick = () => document.getElementById('paperQModal').classList.remove('open');
+function renderPqThumbs() {
+  renderThumbs(document.getElementById('pqThumbs'), pqImgs, id => {
+    pqImgs = pqImgs.filter(x => x !== id);
+    renderPqThumbs();
+  });
+}
+document.getElementById('pqImgBtn').onclick = () => document.getElementById('pqImgInput').click();
+document.getElementById('pqImgInput').onchange = async e => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  if (!files.length || !pqOrig) return;
+  const holder = { images: [] };
+  const n = await attachImages(holder, files);
+  pqImgs = pqImgs.concat(holder.images);
+  document.getElementById('pqImgMsg').textContent = n ? `已添加 ${n} 张` : '没有可用的图片';
+  renderPqThumbs();
+};
+function closePaperQ() {
+  if (pqOrig) pqImgs.filter(id => !pqOrig.has(id)).forEach(dropImage);  // 丢弃未保存的新增图片
+  pqImgs = []; pqOrig = null; pqEditing = null;
+  document.getElementById('paperQModal').classList.remove('open');
+}
+document.getElementById('pqCancel').onclick = closePaperQ;
 document.getElementById('pqSave').onclick = () => {
   if (pqEditing) {
     const p = paperOf(pqEditing.paperId);
@@ -1229,9 +1285,13 @@ document.getElementById('pqSave').onclick = () => {
       q.no = Number.isFinite(no) ? no : q.no;
       q.stem = document.getElementById('pqStem').value;
       q.answer = document.getElementById('pqAnswer').value;
+      // 提交草稿，并删除被移除的 blob
+      if (pqOrig) [...pqOrig].filter(id => !pqImgs.includes(id)).forEach(dropImage);
+      q.images = pqImgs.slice();
       p.updatedAt = Date.now();
       savePapers();
     }
+    pqImgs = []; pqOrig = null;
     pqEditing = null;
     document.getElementById('paperQModal').classList.remove('open');
     renderPaperEdit();
@@ -2236,7 +2296,7 @@ document.getElementById('exportBtn').onclick = () => {
 // 完整备份：把配图以 base64 一并写入，换设备后可完整还原
 document.getElementById('exportFullBtn').onclick = async () => {
   settingsDrawer.classList.remove('open');
-  const payload = { version: 4, questions: stores.q.items, knowledge: stores.k.items, collections: { q: colStores.q, k: colStores.k }, images: {} };
+  const payload = { version: 4, questions: stores.q.items, knowledge: stores.k.items, papers: stores.p.items, collections: { q: colStores.q, k: colStores.k }, images: {} };
   try {
     for (const id of referencedImageIds()) {
       const rec = await idbGet(id);
@@ -2265,18 +2325,20 @@ document.getElementById('fileInput').onchange = e => {
     let data;
     try { data = JSON.parse(reader.result); } catch (err) { alert('文件不是合法的 JSON。'); return; }
 
-    let qs = null, ks = null, imgs = null, cols = null;
+    let qs = null, ks = null, ps = null, imgs = null, cols = null;
     if (Array.isArray(data)) {
       qs = data; // 兼容旧版：数组即错题列表
     } else if (data && typeof data === 'object') {
       if (Array.isArray(data.questions)) qs = data.questions;
       if (Array.isArray(data.knowledge)) ks = data.knowledge;
+      if (Array.isArray(data.papers)) ps = data.papers;
       if (data.images && typeof data.images === 'object') imgs = data.images;
       if (data.collections && typeof data.collections === 'object') cols = data.collections;
     }
-    if (qs === null && ks === null) { alert('文件结构不符合要求，未做任何修改。'); return; }
+    if (qs === null && ks === null && ps === null) { alert('文件结构不符合要求，未做任何修改。'); return; }
     if (qs && !qs.every(x => x && typeof x === 'object')) { alert('questions 结构非法，未做任何修改。'); return; }
     if (ks && !ks.every(x => x && typeof x === 'object')) { alert('knowledge 结构非法，未做任何修改。'); return; }
+    if (ps && !ps.every(x => x && typeof x === 'object')) { alert('papers 结构非法，未做任何修改。'); return; }
 
     const mode = confirm('点「确定」= 替换现有全部数据；点「取消」= 追加到现有数据之后。');
     if (!mode) {
@@ -2291,6 +2353,7 @@ document.getElementById('fileInput').onchange = e => {
     }
     if (qs) { const inc = qs.map(normalizeQuestion); stores.q.items = mode ? inc : stores.q.items.concat(inc); saveStore(K_Q, stores.q.items); }
     if (ks) { const inc = ks.map(normalizeKp); stores.k.items = mode ? inc : stores.k.items.concat(inc); saveStore(K_K, stores.k.items); }
+    if (ps) { const inc = ps.map(normalizePaper); stores.p.items = mode ? inc : stores.p.items.concat(inc); savePapers(); }
 
     // 合集树：替换模式整体替换（文件不含合集则清空）；追加模式并入现有树，再修正非法引用
     for (const kind of ['q', 'k']) {
@@ -2318,7 +2381,8 @@ document.getElementById('fileInput').onchange = e => {
 
     refreshTagPicker();
     applyFilters();
-    alert(`导入完成：错题 ${stores.q.items.length} 道，知识点 ${stores.k.items.length} 个。` +
+    alert(`导入完成：错题 ${stores.q.items.length} 道，知识点 ${stores.k.items.length} 个` +
+      (ps ? `，试卷 ${stores.p.items.length} 张` : '') + '。' +
       (restored ? `\n已还原配图 ${restored} 张。` : ''));
   };
   reader.readAsText(file);
@@ -2348,6 +2412,8 @@ function renderStats() {
   const weekN = list => list.filter(i => (i.createdAt || 0) >= week).length;
 
   const q = stores.q.items, k = stores.k.items;
+  const paperImgs = stores.p.items.reduce((n, p) =>
+    n + (p.questions || []).reduce((m, pq) => m + ((pq.images && pq.images.length) || 0), 0), 0);
   const freq = new Map();
   [...q, ...k].forEach(i => i.tags.forEach(t => freq.set(t, (freq.get(t) || 0) + 1)));
   const topTags = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
@@ -2375,7 +2441,7 @@ function renderStats() {
     </div>
     <div class="stat-card" style="margin-top:12px">
       <h3>其他</h3>
-      <div class="stat-line"><span>配图数量</span><b>${imgN(q) + imgN(k)}</b></div>
+      <div class="stat-line"><span>配图数量</span><b>${imgN(q) + imgN(k) + paperImgs}</b></div>
       <div class="stat-line"><span>标签数量</span><b>${freq.size}</b></div>
       <div class="stat-line"><span>回收站</span><b>${trash.length}</b></div>
       <div style="margin-top:8px">

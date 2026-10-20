@@ -331,7 +331,7 @@ button:disabled:hover{border-color:var(--line); color:var(--muted);}
 .imgs,.thumbs{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;}
 .thumb-wrap{position:relative;}
 img.thumb{
-  display:block; width:74px; height:74px; object-fit:cover; border-radius:10px;
+  display:block; width:74px; height:74px; object-fit:contain; border-radius:10px;
   border:1px solid var(--line); background:var(--sunken); cursor:zoom-in;
 }
 img.thumb.broken{opacity:.35;}
