@@ -527,6 +527,43 @@
     return { cols, kps, entries };
   }
 
+  /* 把审阅后的挂载计划应用到错题数组（纯函数，不改动入参）。
+     plan: [{ qid, kpKeys: [...], knowledge?, skip? }]
+     opts: { keyMap, mode, now }
+       keyMap —— key → 真实 kpId（通常由 planKpTaxonomy 的 entries 得到）；未知 key 丢弃
+       mode   —— 'append'（默认，只补不覆盖）| 'overwrite'（覆盖）
+     返回: { items, changed } */
+  function applyKpLinks(items, plan, opts) {
+    const o = opts || {};
+    const now = o.now || Date.now();
+    const map = o.keyMap instanceof Map ? o.keyMap : new Map(Object.entries(o.keyMap || {}));
+    const overwrite = o.mode === 'overwrite';
+    const decided = new Map();
+    for (const p of (Array.isArray(plan) ? plan : [])) {
+      if (p && typeof p.qid === 'string' && !p.skip) decided.set(p.qid, p);
+    }
+    let changed = 0;
+    const out = (Array.isArray(items) ? items : []).map(it => {
+      const p = it && decided.get(it.id);
+      if (!p) return it;
+      let next = it, dirty = false;
+      const set = (k, v) => { if (next[k] !== v) { next = Object.assign({}, next, { [k]: v }); dirty = true; } };
+      const ids = [];
+      for (const key of (Array.isArray(p.kpKeys) ? p.kpKeys : [])) {
+        const id = map.get(key);
+        if (id && !ids.includes(id)) ids.push(id);
+      }
+      const merged = overwrite ? ids : [...new Set([...(next.kpIds || []), ...ids])];
+      if (merged.join('\u0001') !== (next.kpIds || []).join('\u0001')) set('kpIds', merged);
+      if (typeof p.knowledge === 'string' && p.knowledge.trim() && (overwrite || !next.knowledge)) {
+        set('knowledge', p.knowledge.trim());
+      }
+      if (dirty) { next = Object.assign({}, next, { updatedAt: now }); changed++; }
+      return next;
+    });
+    return { items: out, changed };
+  }
+
   /* ---------- 期3：相似题聚类（纯本地，零 API 成本） ----------
      贪心聚类：按顺序取未归组的项作「种子」，把其后与种子相似度 >= threshold 的项并入同组；
      只有成员数 >= 2 的组会被返回。textOf 缺省取 stem。 */
@@ -908,7 +945,7 @@
     filterItemsByCollection, collectionCounts, sanitizeItemCollections,
     parseAiJson, normTag, mergeSuggestTags,
     resolveCollectionPath, applyOrganizePlan,
-    planKpTaxonomy,
+    planKpTaxonomy, applyKpLinks,
     clusterBySimilarity, groupStats,
     parseSearch,
     bareMathSegments,

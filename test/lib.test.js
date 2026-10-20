@@ -1104,3 +1104,39 @@ test('planKpTaxonomy 丢弃 AI 编造的 kpId，并去掉合集名里的 /', () 
   assert.deepEqual(r.cols.map(c => c.name), ['高数·极限', '夹逼']);
 });
 
+test('applyKpLinks 只补不覆盖：并入现有 kpIds，已有 knowledge 不覆盖', () => {
+  const items = [
+    normalizeQuestion({ id: 'q1', stem: 'a' }),
+    normalizeQuestion({ id: 'q2', stem: 'b', kpIds: ['k1'], knowledge: '已写' }),
+  ];
+  const keyMap = new Map([['tmp1', 'kA'], ['k9', 'k9']]);
+  const r = applyKpLinks(items, [
+    { qid: 'q1', kpKeys: ['tmp1', 'k9', 'unknown'], knowledge: '新考点' },
+    { qid: 'q2', kpKeys: ['k9'], knowledge: '覆盖我' },
+  ], { keyMap, mode: 'append', now: 1000 });
+  assert.deepEqual(r.items[0].kpIds, ['kA', 'k9']);          // unknown 被丢弃
+  assert.equal(r.items[0].knowledge, '新考点');
+  assert.deepEqual(r.items[1].kpIds, ['k1', 'k9']);          // 并入而非替换
+  assert.equal(r.items[1].knowledge, '已写');                 // append 模式不覆盖
+  assert.equal(r.changed, 2);
+});
+
+test('applyKpLinks 覆盖模式：kpIds 全量替换，kpKeys 为空则清空', () => {
+  const items = [normalizeQuestion({ id: 'q1', stem: 'a', kpIds: ['k1', 'k2'], knowledge: '旧' })];
+  const keyMap = new Map([['tmp1', 'kA']]);
+  const r = applyKpLinks(items, [{ qid: 'q1', kpKeys: ['tmp1'], knowledge: '新' }], { keyMap, mode: 'overwrite' });
+  assert.deepEqual(r.items[0].kpIds, ['kA']);
+  assert.equal(r.items[0].knowledge, '新');
+  const r2 = applyKpLinks(items, [{ qid: 'q1', kpKeys: [] }], { keyMap, mode: 'overwrite' });
+  assert.deepEqual(r2.items[0].kpIds, []);
+});
+
+test('applyKpLinks 跳过 skip 与未知 qid，不改动原数组', () => {
+  const items = [normalizeQuestion({ id: 'q1', stem: 'a' })];
+  const snap = JSON.stringify(items);
+  const r = applyKpLinks(items, [{ qid: 'q1', kpKeys: ['k9'], skip: true }, { qid: 'zz', kpKeys: ['k9'] }], { keyMap: new Map([['k9', 'k9']]) });
+  assert.equal(r.changed, 0);
+  assert.deepEqual(r.items[0].kpIds, []);
+  assert.equal(JSON.stringify(items), snap);
+});
+
