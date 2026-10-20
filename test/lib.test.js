@@ -19,7 +19,7 @@ const {
   canMoveCollection, moveCollection, deleteCollection,
   filterItemsByCollection, collectionCounts, sanitizeItemCollections,
   parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
-  planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy,
+  planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy, sampleEvenly,
   clusterBySimilarity, groupStats,
   bareMathSegments,
 } = MQ;
@@ -1221,5 +1221,34 @@ test('normalizeKpTaxonomy 对 null / 字符串 / 空对象返回空数组', () =
   assert.deepEqual(normalizeKpTaxonomy({}), []);
   assert.deepEqual(normalizeKpTaxonomy([{ foo: 1 }]), []);
 });
+
+/* ===================== 均匀抽样（大题量下体系步的输入上限） ===================== */
+test('sampleEvenly 超限时均匀取 max 个，覆盖首尾且不重不漏', () => {
+  const items = Array.from({ length: 400 }, (_, i) => i);
+  const out = sampleEvenly(items, 80);
+  assert.equal(out.length, 80);
+  assert.equal(out[0], 0);            // 首
+  assert.equal(out[79], 395);         // 末（400/80=5，索引 79*5=395）
+  assert.equal(new Set(out).size, 80); // 无重复
+  for (let i = 1; i < out.length; i++) assert.ok(out[i] > out[i - 1]);
+  // 分布均匀：相邻取样间隔只可能是 5
+  for (let i = 1; i < out.length; i++) assert.equal(out[i] - out[i - 1], 5);
+});
+
+test('sampleEvenly 不足上限时原样返回，且不改动入参', () => {
+  const items = [{ id: 'a' }, { id: 'b' }];
+  const out = sampleEvenly(items, 80);
+  assert.deepEqual(out, items);
+  assert.notEqual(out, items);        // 副本
+  assert.deepEqual(sampleEvenly(items, 2), items);
+});
+
+test('sampleEvenly 对非法上限返回空数组', () => {
+  assert.deepEqual(sampleEvenly([1, 2, 3], 0), []);
+  assert.deepEqual(sampleEvenly([1, 2, 3], -1), []);
+  assert.deepEqual(sampleEvenly([1, 2, 3], NaN), []);
+  assert.deepEqual(sampleEvenly(null, 10), []);
+});
+
 
 

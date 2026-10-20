@@ -664,6 +664,20 @@
     return out;
   }
 
+  /* 均匀抽样：至多取 max 个，覆盖首尾、分布均匀。
+     用于「体系提议」这类只需要样本、却会被题量撑爆上下文的场景。
+     不足 max 个时返回全部（副本）。 */
+  function sampleEvenly(items, max) {
+    const arr = Array.isArray(items) ? items : [];
+    const n = Math.floor(max);
+    if (!Number.isFinite(n) || n <= 0) return [];
+    if (arr.length <= n) return arr.slice();
+    const step = arr.length / n;
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(arr[Math.floor(i * step)]);
+    return out;
+  }
+
   /* ---------- 期3：相似题聚类（纯本地，零 API 成本） ----------
      贪心聚类：按顺序取未归组的项作「种子」，把其后与种子相似度 >= threshold 的项并入同组；
      只有成员数 >= 2 的组会被返回。textOf 缺省取 stem。 */
@@ -1046,6 +1060,7 @@
     parseAiJson, normTag, mergeSuggestTags,
     resolveCollectionPath, applyOrganizePlan,
     planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy,
+    sampleEvenly,
     clusterBySimilarity, groupStats,
     parseSearch,
     bareMathSegments,

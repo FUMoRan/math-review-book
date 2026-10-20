@@ -24,7 +24,7 @@ const {
   collectionPath, addCollection, renameCollection, canMoveCollection, moveCollection,
   deleteCollection, collectionCounts, sanitizeItemCollections,
   parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
-  planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy,
+  planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy, sampleEvenly,
   clusterBySimilarity, groupStats,
   bareMathSegments,
 } = MQ;
@@ -3128,24 +3128,42 @@ function aiKpCopyText(step, items, entries) {
   return [aiKpExplainPrompt(entries), '', '请只输出那个 JSON 数组。'].join('\n');
 }
 
-// Step2 / Step3 的合并请求：一批错题 → { rows, explains }
-async function aiKpPlanRun(items, entries, mode) {
+// Step2 / Step3：分批挂载 + 分批讲解，合并结果 → { rows, explains, errors }
+async function aiKpPlanRun(items, entries, mode, onProgress) {
+  const list = Array.isArray(items) ? items : [];
+  const total = list.length;
   const rows = [], explains = [], errors = [];
-  const text = await aiCall({ system: aiKpLinkPrompt(entries), ask: aiKpUserText(items) });
-  const o = parseAiJson(text);
-  if (!Array.isArray(o)) throw new Error('AI 没有返回 JSON 数组。');
-  for (const r of o) {
-    if (!r || typeof r.qid !== 'string') continue;
-    const kpKeys = Array.isArray(r.kpKeys) ? r.kpKeys.filter(k => typeof k === 'string' && k) : [];
-    rows.push({ qid: r.qid, kpKeys, knowledge: typeof r.knowledge === 'string' ? r.knowledge : '', skip: false });
+  for (let i = 0; i < total; i += KP_LINK_BATCH) {
+    const chunk = list.slice(i, i + KP_LINK_BATCH);
+    if (typeof onProgress === 'function') onProgress(Math.min(i + KP_LINK_BATCH, total), total);
+    const nth = i / KP_LINK_BATCH + 1;
+    try {
+      const text = await aiCall({ system: aiKpLinkPrompt(entries), ask: aiKpUserText(chunk) });
+      const o = parseAiJson(text);
+      if (!Array.isArray(o)) { errors.push(`第 ${nth} 批没返回 JSON 数组`); continue; }
+      for (const r of o) {
+        if (!r || typeof r.qid !== 'string') continue;
+        const kpKeys = Array.isArray(r.kpKeys) ? r.kpKeys.filter(k => typeof k === 'string' && k) : [];
+        rows.push({ qid: r.qid, kpKeys, knowledge: typeof r.knowledge === 'string' ? r.knowledge : '', skip: false });
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') throw err;   // 用户取消 → 中断整步
+      errors.push(`第 ${nth} 批失败（${((err && err.message) || err)}）`);
+    }
   }
-  // 只为「本次挂到且讲解为空」的考点写讲解
+  const got = new Set(rows.map(r => r.qid));
+  const missed = list.filter(it => !got.has(it.id)).length;
+  if (missed) errors.push(`${missed} 道题没拿到建议（已留空行，可手动补）`);
+
+  // 讲解：只为「本次挂到且讲解为空」的考点写
   const usedKeys = new Set();
   for (const r of rows) for (const k of r.kpKeys) usedKeys.add(k);
   const need = entries.filter(e => usedKeys.has(e.key) && !(e.content || '').trim());
-  if (need.length) {
+  for (let i = 0; i < need.length; i += KP_EXPLAIN_BATCH) {
+    const chunk = need.slice(i, i + KP_EXPLAIN_BATCH);
+    if (typeof onProgress === 'function') onProgress(Math.min(i + KP_EXPLAIN_BATCH, need.length), need.length, 'explain');
     try {
-      const t2 = await aiCall({ system: aiKpExplainPrompt(need), ask: '请写讲解。' });
+      const t2 = await aiCall({ system: aiKpExplainPrompt(chunk), ask: '请写讲解。' });
       const o2 = parseAiJson(t2);
       if (Array.isArray(o2)) {
         for (const e of o2) {
@@ -3155,6 +3173,7 @@ async function aiKpPlanRun(items, entries, mode) {
         }
       }
     } catch (err) {
+      if (err && err.name === 'AbortError') throw err;
       errors.push('讲解生成失败（可稍后单独重试）：' + ((err && err.message) || err));
     }
   }
@@ -3667,6 +3686,18 @@ const kpEl = id => document.getElementById(id);
 const kpModal = kpEl('aiKpModal');
 let kpState = null;   // { items, mode, taxonomy, entries, keyMap, rows, explains, undo }
 
+/* ---------- 大题量参数 ----------
+   挂载步的输入与输出都随题量线性增长，必须分批：
+   一批 25 道的输入约 4k tokens、输出约 1.3k tokens，离 4096 上限有富余；
+   一批失败只影响该批（对应行留空，可在审阅里手动补）。 */
+const KP_LINK_BATCH = 25;
+// 讲解一次最多写 10 个考点，避免大段讲解把输出顶到上限
+const KP_EXPLAIN_BATCH = 10;
+/* 体系步是一次性请求（分批会产出多套互不相干的体系），所以给发送的题数设上限：
+   80 道 × 题干 300 字 ≈ 2.7 万字 ≈ 2 万 tokens，在安全区内。
+   超过就均匀抽样，见 kpTaxSample；挂载步不受这个上限约束。 */
+const KP_TAX_MAX = 80;
+
 function kpScopeItems() {
   const scope = kpEl('aiKpScope').value;
   if (scope === 'filtered') return currentFiltered();
@@ -3688,9 +3719,15 @@ function openAiKp() {
   kpShowStep('aiKpSetup');
   kpEl('aiKpMsg').textContent = '';
   kpShowRaw('');
-  kpEl('aiKpNote').textContent = stores.k.items.length
-    ? `知识点库已有 ${stores.k.items.length} 个条目，AI 会优先复用同名考点。`
+  const unlinked = stores.q.items.filter(it => !(it.kpIds || []).length).length;
+  const linked = stores.q.items.length - unlinked;
+  // 增量优先：只要挂过一部分，默认就只处理未挂的题，避免无意重跑全库
+  kpEl('aiKpScope').value = linked ? 'unlinked' : 'all';
+  let note = stores.k.items.length
+    ? `知识点库已有 ${stores.k.items.length} 个条目，AI 会优先复用同名考点。共 ${stores.q.items.length} 道错题，已挂 ${linked} 道、未挂 ${unlinked} 道。`
     : '知识点库还是空的，AI 会新建整套考点。';
+  if (linked && !unlinked) note += '全部错题都已挂过知识点；如需重跑全库，请把范围改成「全部错题」。';
+  kpEl('aiKpNote').textContent = note;
   kpModal.classList.add('open');
 }
 kpEl('aiKpBtn').onclick = () => openAiKp();
@@ -3784,6 +3821,19 @@ function kpCollectTaxonomy() {
   return out;
 }
 
+/* ---------- 体系这一步是一次性请求，范围太大必然超上下文 ----------
+   体系只需要覆盖「有哪些考点」，不需要逐题都在场，所以超限时均匀抽样；
+   抽样结果仍然要人工审阅，剩下没进抽样的题在挂载步归入已有考点。 */
+function kpTaxSample(items) {
+  return sampleEvenly(items, KP_TAX_MAX);
+}
+function kpTaxSampleNote(items) {
+  const used = kpTaxSample(items);
+  if (used.length === items.length) return '';
+  return `范围 ${items.length} 道，体系按其中 ${used.length} 道均匀抽样生成（不会逐题发送）；`
+    + '其余题在挂载步归入已有考点。若发现漏了章节，可缩小范围后再跑一次补充。';
+}
+
 /* ---------- 开始：调 AI 或粘贴 ---------- */
 kpEl('aiKpRun').onclick = async () => {
   const items = kpScopeItems();
@@ -3796,11 +3846,12 @@ kpEl('aiKpRun').onclick = async () => {
     return;
   }
   kpEl('aiKpRun').disabled = true;
+  kpEl('aiKpMsg').textContent = kpTaxSampleNote(items);
   showAiBusy('AI 正在提考点体系，请稍候…');
   try {
     const text = await aiCall({
       system: aiKpTaxonomyPrompt(),
-      ask: ['下面是错题（JSON）：', aiKpUserText(items), '', '下面是知识点库里已有的考点清单：', aiKpExistingText()].join('\n'),
+      ask: ['下面是错题（JSON）：', aiKpUserText(kpTaxSample(items)), '', '下面是知识点库里已有的考点清单：', aiKpExistingText()].join('\n'),
     });
     const raw = parseAiJson(text);
     hideAiBusy();
@@ -3827,12 +3878,13 @@ kpEl('aiKpCopy').onclick = async () => {
   if (!items.length) { kpEl('aiKpMsg').textContent = '这个范围里没有错题。'; return; }
   kpState.items = items;
   kpState.mode = kpMode();
-  const text = aiKpCopyText('taxonomy', items, []);
+  kpEl('aiKpMsg').textContent = kpTaxSampleNote(items);
+  const text = aiKpCopyText('taxonomy', kpTaxSample(items), []);
   kpState.pasteStep = 'taxonomy';
   kpEl('aiKpPaste').value = '';
   kpEl('aiKpPasteHint').textContent = '把 AI 输出的 JSON 数组粘到下面（Step1 的体系 JSON）。';
-  try { await navigator.clipboard.writeText(text); kpEl('aiKpMsg').textContent = '提示词已复制，去任意 AI 跑一遍再粘回来。'; }
-  catch (e) { kpEl('aiKpPaste').value = text; kpEl('aiKpMsg').textContent = '复制失败，提示词已填在下面的框里，请手动复制。'; }
+  try { await navigator.clipboard.writeText(text); kpEl('aiKpMsg').textContent = '提示词已复制，去任意 AI 跑一遍再粘回来。' + kpTaxSampleNote(items); }
+  catch (e) { kpEl('aiKpPaste').value = text; kpEl('aiKpMsg').textContent = '复制失败，提示词已填在下面的框里，请手动复制。' + kpTaxSampleNote(items); }
   kpShowStep('aiKpPasteWrap');
 };
 
@@ -3901,7 +3953,11 @@ kpEl('aiKpTaxApply').onclick = async () => {
   kpEl('aiKpTaxApply').disabled = true;
   showAiBusy('AI 正在把错题挂到考点上，请稍候…');
   try {
-    const res = await aiKpPlanRun(kpState.items, r.entries, kpState.mode);
+    const res = await aiKpPlanRun(kpState.items, r.entries, kpState.mode, (done, total, kind) => {
+      kpEl('aiBusyText').textContent = kind === 'explain'
+        ? `AI 正在补写考点讲解（${done}/${total}）…`
+        : `AI 正在挂载错题（${done}/${total} 道）…`;
+    });
     hideAiBusy();
     kpState.rows = kpDefaultRows(kpState.items, res.rows);
     kpState.explains = res.explains;
@@ -4026,6 +4082,11 @@ kpEl('aiKpLinkCopy').onclick = async () => {
   let pre = '';
   try { await navigator.clipboard.writeText(text); kpEl('aiKpLinkMsg2').textContent = '挂载提示词已复制，去任意 AI 跑一遍再粘回来。'; }
   catch (e) { pre = text; kpEl('aiKpLinkMsg2').textContent = '复制失败，提示词已填在下面的框里，请手动复制。'; }
+  // 免 Key 路径一次贴不了太多题：AI 输出会被截断，粘回来只能认出前面一部分
+  if (kpState.items.length > KP_LINK_BATCH) {
+    kpEl('aiKpLinkMsg2').textContent += ` 注意：这次有 ${kpState.items.length} 道题，AI 输出可能被截断；`
+      + '粘回来的部分照样能应用，剩余题可先用「仅未挂知识点」再跑一轮补上。';
+  }
   kpOpenPaste('link', '把 AI 输出的挂载 JSON 数组粘到下面。', pre);
 };
 kpEl('aiKpLinkPaste').onclick = () => kpOpenPaste('link', '把 AI 输出的挂载 JSON 数组粘到下面。');
@@ -4034,10 +4095,13 @@ kpEl('aiKpExpCopy').onclick = async () => {
   for (const row of (kpState.rows || [])) if (!row.skip) for (const k of row.kpKeys) used.add(k);
   const need = (kpState.entries || []).filter(e => used.has(e.key));
   if (!need.length) { kpEl('aiKpLinkMsg2').textContent = '还没有挂到任何考点，先挂载再复制讲解提示词。'; return; }
-  const text = aiKpCopyText('explain', kpState.items, need);
+  // 讲解一次给 10 个：一次贴太多容易被截断，剩下的应用后再点一次本按钮
+  const batch = need.slice(0, KP_EXPLAIN_BATCH);
+  const text = aiKpCopyText('explain', kpState.items, batch);
   let pre = '';
-  try { await navigator.clipboard.writeText(text); kpEl('aiKpLinkMsg2').textContent = '讲解提示词已复制。'; }
-  catch (e) { pre = text; kpEl('aiKpLinkMsg2').textContent = '复制失败，提示词已填在下面的框里，请手动复制。'; }
+  const more = need.length > batch.length ? `本次含 ${batch.length} 个考点，应用后再点一次本按钮继续剩下的 ${need.length - batch.length} 个。` : '';
+  try { await navigator.clipboard.writeText(text); kpEl('aiKpLinkMsg2').textContent = '讲解提示词已复制。' + more; }
+  catch (e) { pre = text; kpEl('aiKpLinkMsg2').textContent = '复制失败，提示词已填在下面的框里，请手动复制。' + more; }
   kpOpenPaste('explain', '把 AI 输出的讲解 JSON 数组粘到下面。', pre);
 };
 kpEl('aiKpExpPaste').onclick = () => kpOpenPaste('explain', '把 AI 输出的讲解 JSON 数组粘到下面。');
