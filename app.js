@@ -3661,6 +3661,342 @@ function undoAiOrg() {
 }
 orgEl('aiOrgUndo').onclick = () => undoAiOrg();
 
+/* ===================== AI 整理知识点（考点体系 + 挂载） ===================== */
+const kpEl = id => document.getElementById(id);
+const kpModal = kpEl('aiKpModal');
+let kpState = null;   // { items, mode, taxonomy, entries, keyMap, rows, explains, undo }
+
+function kpScopeItems() {
+  const scope = kpEl('aiKpScope').value;
+  if (scope === 'filtered') return currentFiltered();
+  if (scope === 'unlinked') return stores.q.items.filter(it => !(it.kpIds || []).length);
+  return stores.q.items.slice();
+}
+const kpMode = () => kpEl('aiKpMode').value === 'overwrite' ? 'overwrite' : 'append';
+
+function kpShowStep(name) {
+  ['aiKpSetup', 'aiKpPasteWrap', 'aiKpTaxWrap', 'aiKpLinkWrap'].forEach(id => {
+    kpEl(id).style.display = (id === name) ? '' : 'none';
+  });
+}
+
+function openAiKp() {
+  if (active !== 'q') { alert('AI 整理知识点需要从错题视图发起（结果写入知识点库）。'); return; }
+  if (!stores.q.items.length) { alert('错题库还是空的，先添加几道错题吧。'); return; }
+  kpState = { items: [], mode: kpMode(), taxonomy: [], entries: [], keyMap: new Map(), rows: [], explains: [], undo: null };
+  kpShowStep('aiKpSetup');
+  kpEl('aiKpMsg').textContent = '';
+  kpEl('aiKpNote').textContent = stores.k.items.length
+    ? `知识点库已有 ${stores.k.items.length} 个条目，AI 会优先复用同名考点。`
+    : '知识点库还是空的，AI 会新建整套考点。';
+  kpModal.classList.add('open');
+}
+kpEl('aiKpBtn').onclick = () => openAiKp();
+kpEl('aiKpCancel').onclick = () => kpModal.classList.remove('open');
+kpEl('aiKpClose').onclick = () => kpModal.classList.remove('open');
+kpModal.onclick = e => { if (e.target === kpModal) kpModal.classList.remove('open'); };
+
+/* ---------- 把 AI / 粘贴得到的体系 JSON 整理成待审阅的行 ---------- */
+function kpNormTaxonomy(raw) {
+  const out = [];
+  for (const ch of (Array.isArray(raw) ? raw : [])) {
+    if (!ch || typeof ch !== 'object') continue;
+    const subject = String(ch.subject == null ? '' : ch.subject).trim();
+    const chapter = String(ch.chapter == null ? '' : ch.chapter).trim();
+    if (!subject || !chapter) continue;
+    const topics = (Array.isArray(ch.topics) ? ch.topics : [])
+      .map(t => ({ title: String((t && t.title) || '').trim(), kpId: (t && typeof t.kpId === 'string' && t.kpId) || null }))
+      .filter(t => t.title);
+    if (topics.length) out.push({ subject, chapter, topics });
+  }
+  return out;
+}
+
+/* ---------- 步骤 2 渲染：三层体系审阅 ---------- */
+function renderKpTax() {
+  // 用「合集/条目」两级结构渲染：先按 subject/chapter 分组，再列考点
+  const subs = [];
+  kpState.taxonomy.forEach((ch, ci) => {
+    if (!subs.includes(ch.subject)) subs.push(ch.subject);
+  });
+  let html = '';
+  for (const sub of subs) {
+    const ids = kpState.taxonomy.map((ch, ci) => ch.subject === sub ? ci : -1).filter(i => i >= 0);
+    html += `<div class="kp-tax-lv1" data-kp-sub="${esc(sub)}"><input type="checkbox" data-kp-keep="sub:${esc(sub)}" checked><span class="kp-tax-name">${esc(sub)}</span><span class="kp-tax-badge">学科</span></div>`;
+    for (const ci of ids) {
+      const ch = kpState.taxonomy[ci];
+      html += `<div class="kp-tax-lv2" data-kp-ch="${ci}"><input type="checkbox" data-kp-keep="ch:${ci}" checked><input class="kp-tax-name" data-kp-name="ch:${ci}" value="${esc(ch.chapter)}"><span class="kp-tax-badge">章节</span><button class="kp-tax-del" data-kp-del="ch:${ci}" title="不建这个章节">✕</button></div>`;
+      ch.topics.forEach((t, ti) => {
+        const exists = t.kpId && stores.k.items.some(k => k.id === t.kpId);
+        html += `<div class="kp-tax-lv3" data-kp-tp="${ci}:${ti}"><input type="checkbox" data-kp-keep="tp:${ci}:${ti}" checked><input class="kp-tax-name" data-kp-name="tp:${ci}:${ti}" value="${esc(t.title)}"><span class="kp-tax-badge${exists ? '' : ' new'}">${exists ? '复用' : '新建'}</span><button class="kp-tax-del" data-kp-del="tp:${ci}:${ti}" title="不建这个考点">✕</button></div>`;
+      });
+    }
+  }
+  kpEl('aiKpTax').innerHTML = html || '<div class="col-empty">AI 没有给出可用的考点体系，请返回重试或改用手动输入。</div>';
+  kpState.keep = {};
+  kpEl('aiKpTax').querySelectorAll('[data-kp-keep]').forEach(cb => {
+    kpState.keep[cb.dataset.kpKeep] = cb.checked;
+    cb.onchange = () => { kpState.keep[cb.dataset.kpKeep] = cb.checked; };
+  });
+  kpEl('aiKpTax').querySelectorAll('[data-kp-name]').forEach(inp => {
+    inp.onchange = () => {
+      const [kind, a, b] = inp.dataset.kpName.split(':');
+      const v = inp.value.trim();
+      if (!v) { inp.value = kind === 'ch' ? kpState.taxonomy[a].chapter : kpState.taxonomy[a].topics[b].title; return; }
+      if (kind === 'ch') kpState.taxonomy[a].chapter = v;
+      else kpState.taxonomy[a].topics[b].title = v;
+    };
+  });
+  kpEl('aiKpTax').querySelectorAll('[data-kp-del]').forEach(btn => {
+    btn.onclick = () => {
+      const [kind, a, b] = btn.dataset.kpDel.split(':');
+      if (kind === 'ch') kpState.taxonomy[a].topics = [];
+      else kpState.taxonomy[a].topics[b].title = '';
+      renderKpTax();
+    };
+  });
+  kpEl('aiKpTaxMsg').textContent = `学科 ${new Set(kpState.taxonomy.map(t => t.subject)).size} 个 · 章节 ${kpState.taxonomy.length} 个 · 考点 ${kpState.taxonomy.reduce((n, t) => n + t.topics.length, 0)} 个`;
+}
+
+/* ---------- 收集审阅结果：勾选/改名/删除后真正要建的体系 ---------- */
+function kpCollectTaxonomy() {
+  const keep = kpState.keep || {};
+  const out = [];
+  kpState.taxonomy.forEach((ch, ci) => {
+    if (!keep['ch:' + ci]) return;
+    if (!keep['sub:' + ch.subject]) return;
+    const topics = [];
+    ch.topics.forEach((t, ti) => {
+      if (!keep['tp:' + ci + ':' + ti]) return;
+      if (!t.title.trim()) return;
+      topics.push({ title: t.title.trim(), kpId: t.kpId });
+    });
+    if (topics.length) out.push({ subject: ch.subject, chapter: ch.chapter, topics });
+  });
+  return out;
+}
+
+/* ---------- 开始：调 AI 或粘贴 ---------- */
+kpEl('aiKpRun').onclick = async () => {
+  const items = kpScopeItems();
+  if (!items.length) { kpEl('aiKpMsg').textContent = '这个范围里没有错题。'; return; }
+  kpState.items = items;
+  kpState.mode = kpMode();
+  if (!aiReady()) {
+    kpEl('aiKpMsg').textContent = '';
+    alert('还没有配置 AI。\n请在「设置 → AI 识题」里填好 Base URL、模型名与 API Key；或改用「复制提示词（免 Key）」。');
+    return;
+  }
+  kpEl('aiKpRun').disabled = true;
+  showAiBusy('AI 正在提考点体系，请稍候…');
+  try {
+    const text = await aiCall({
+      system: aiKpTaxonomyPrompt(),
+      ask: ['下面是错题（JSON）：', aiKpUserText(items), '', '下面是知识点库里已有的考点清单：', aiKpExistingText()].join('\n'),
+    });
+    const raw = parseAiJson(text);
+    hideAiBusy();
+    kpState.taxonomy = kpNormTaxonomy(raw);
+    if (!kpState.taxonomy.length) { kpEl('aiKpMsg').textContent = 'AI 没有给出可用的考点体系，可重试或改用手动输入。'; return; }
+    renderKpTax();
+    kpShowStep('aiKpTaxWrap');
+  } catch (e) {
+    hideAiBusy();
+    kpEl('aiKpMsg').textContent = (e && e.name === 'AbortError') ? '已取消。' : '整理失败：' + ((e && e.message) || e);
+  } finally { kpEl('aiKpRun').disabled = false; }
+};
+
+/* ---------- 免 Key：复制提示词 ---------- */
+kpEl('aiKpCopy').onclick = async () => {
+  const items = kpScopeItems();
+  if (!items.length) { kpEl('aiKpMsg').textContent = '这个范围里没有错题。'; return; }
+  kpState.items = items;
+  kpState.mode = kpMode();
+  const text = aiKpCopyText('taxonomy', items, []);
+  try { await navigator.clipboard.writeText(text); kpEl('aiKpMsg').textContent = '提示词已复制，去任意 AI 跑一遍再粘回来。'; }
+  catch (e) { kpEl('aiKpPaste').value = text; kpEl('aiKpMsg').textContent = '复制失败，提示词已填在下面的框里，请手动复制。'; }
+  kpEl('aiKpPasteHint').textContent = '把 AI 输出的 JSON 数组粘到下面（Step1 的体系 JSON）。';
+  kpEl('aiKpPaste').value = '';
+  kpShowStep('aiKpPasteWrap');
+};
+
+kpEl('aiKpPasteBack').onclick = () => kpShowStep('aiKpSetup');
+kpEl('aiKpPasteGo').onclick = () => {
+  const text = kpEl('aiKpPaste').value;
+  let raw;
+  try { raw = parseAiJson(text); } catch (e) { alert('解析失败：' + ((e && e.message) || e)); return; }
+  if (kpState.pasteStep === 'explain') {
+    // 讲解 JSON 直接进入挂载审阅的讲解区
+    const list = (Array.isArray(raw) ? raw : []).map(e => ({
+      kpKey: e && typeof e.kpKey === 'string' ? e.kpKey : null,
+      content: e && typeof e.content === 'string' ? e.content.trim() : '',
+    })).filter(e => e.kpKey && e.content);
+    kpState.explains = list;
+    kpShowStep('aiKpLinkWrap');
+    renderKpLink();
+    kpEl('aiKpLinkMsg2').textContent = `已解析 ${list.length} 条讲解。`;
+    return;
+  }
+  kpState.taxonomy = kpNormTaxonomy(raw);
+  if (!kpState.taxonomy.length) { alert('没解析出可用的考点体系。'); return; }
+  renderKpTax();
+  kpShowStep('aiKpTaxWrap');
+};
+
+/* ---------- 体系审阅：应用体系（建合集 + 条目），进入挂载 ---------- */
+kpEl('aiKpTaxBack').onclick = () => kpShowStep('aiKpSetup');
+kpEl('aiKpTaxApply').onclick = async () => {
+  const taxonomy = kpCollectTaxonomy();
+  if (!taxonomy.length) { alert('没有勾选任何要建的考点。'); return; }
+  const r = planKpTaxonomy(taxonomy, { cols: colStores.k, kps: stores.k.items });
+  kpState.taxonomy = taxonomy;
+  kpState.entries = r.entries;
+  kpState.keyMap = new Map(r.entries.map(e => [e.key, e.kpId]));
+  kpState.undo = { q: stores.q.items.slice(), k: stores.k.items.slice(), cols: colStores.k.slice() };
+  colStores.k = r.cols;
+  stores.k.items = r.kps;
+  await saveCols('k');
+  await saveStore(stores.k.key, stores.k.items);
+  render();
+  // 进入挂载：有 Key 调 AI，没 Key 走复制
+  if (!aiReady()) {
+    kpEl('aiKpLinkMsg').textContent = `已建 ${r.entries.filter(e => e.isNew).length} 个新考点、复用 ${r.entries.filter(e => !e.isNew).length} 个。未配置 AI：请复制提示词，再把 AI 输出的 JSON 粘回来。`;
+    renderKpLink();
+    kpShowStep('aiKpLinkWrap');
+    return;
+  }
+  kpEl('aiKpTaxApply').disabled = true;
+  showAiBusy('AI 正在把错题挂到考点上，请稍候…');
+  try {
+    const res = await aiKpPlanRun(kpState.items, r.entries, kpState.mode);
+    hideAiBusy();
+    kpState.rows = res.rows;
+    kpState.explains = res.explains;
+    renderKpLink();
+    kpEl('aiKpLinkMsg2').textContent = res.errors.join('；');
+    kpEl('aiKpLinkMsg').textContent = `考点 ${r.entries.length} 个（新建 ${r.entries.filter(e => e.isNew).length}）· 错题 ${kpState.items.length} 道。`;
+    kpShowStep('aiKpLinkWrap');
+  } catch (e) {
+    hideAiBusy();
+    kpEl('aiKpTaxMsg').textContent = (e && e.name === 'AbortError') ? '已取消。' : '挂载失败：' + ((e && e.message) || e);
+    kpEl('aiKpLinkMsg').textContent = '体系已建好，可在挂载环节重试或手动填。';
+    renderKpLink();
+    kpShowStep('aiKpLinkWrap');
+  } finally { kpEl('aiKpTaxApply').disabled = false; }
+};
+
+/* ---------- 步骤 3 渲染：逐题挂载 + 待补讲解 ---------- */
+function renderKpLink() {
+  const entries = kpState.entries || [];
+  const byQid = new Map(kpState.items.map(it => [it.id, it]));
+  const rows = kpState.rows || [];
+  kpState.rows = rows;
+  kpEl('aiKpLink').innerHTML = rows.length ? rows.map((row, i) => {
+    const it = byQid.get(row.qid) || {};
+    const chips = row.kpKeys.map(k => {
+      const e = entries.find(x => x.key === k);
+      return `<span class="aio-chip" data-kp-chip-i="${i}" data-kp-chip-k="${esc(k)}">${esc(e ? e.title : k)}<b>×</b></span>`;
+    }).join('');
+    return `<div class="aio-row">
+      <label class="aio-skip"><input type="checkbox" data-kp-skip="${i}"${row.skip ? ' checked' : ''}></label>
+      <div class="aio-stem">${renderMath(String(it.stem || '').slice(0, 160))}</div>
+      <div class="aio-fields">
+        <div class="aio-tags">${chips}
+          <select data-kp-add="${i}"><option value="">＋考点</option>${
+            entries.map(e => `<option value="${esc(e.key)}">${esc(e.path + ' / ' + e.title)}</option>`).join('')
+          }</select>
+        </div>
+        <textarea class="aio-know" data-kp-know="${i}" placeholder="考点 + 易错点（可留空）">${esc(row.knowledge || '')}</textarea>
+        <p class="setnote">现有挂载：${(it.kpIds || []).length} 个</p>
+      </div>
+    </div>`;
+  }).join('') : '<div class="col-empty">AI 没有给出挂载建议，可返回重试；或直接点「应用并保存」只建体系。</div>';
+
+  kpEl('aiKpLink').querySelectorAll('[data-kp-skip]').forEach(cb => {
+    cb.onchange = () => { rows[+cb.dataset.kpSkip].skip = cb.checked; };
+  });
+  kpEl('aiKpLink').querySelectorAll('[data-kp-chip-i]').forEach(el => {
+    el.onclick = () => {
+      const row = rows[+el.dataset.kpChipI];
+      row.kpKeys = row.kpKeys.filter(k => k !== el.dataset.kpChipK);
+      renderKpLink();
+    };
+  });
+  kpEl('aiKpLink').querySelectorAll('[data-kp-add]').forEach(sel => {
+    sel.onchange = () => {
+      const row = rows[+sel.dataset.kpAdd];
+      const k = sel.value;
+      if (!k) return;
+      if (!row.kpKeys.includes(k)) row.kpKeys.push(k);
+      renderKpLink();
+    };
+  });
+  kpEl('aiKpLink').querySelectorAll('[data-kp-know]').forEach(ta => {
+    ta.onchange = () => { rows[+ta.dataset.kpKnow].knowledge = ta.value; };
+  });
+
+  // 待补讲解：只列本次被挂到、且还没有讲解的考点
+  const usedKeys = new Set();
+  for (const row of rows) if (!row.skip) for (const k of row.kpKeys) usedKeys.add(k);
+  const need = entries.filter(e => usedKeys.has(e.key));
+  const ex = kpState.explains || [];
+  kpEl('aiKpExplain').innerHTML = need.length ? need.map((e, i) => {
+    const cur = ex.find(x => x.kpKey === e.key);
+    return `<div class="aio-row">
+      <div class="aio-stem">${esc(e.path + ' / ' + e.title)}<span class="kp-tax-badge${e.isNew ? ' new' : ''}">${e.isNew ? '新建' : '复用'}</span></div>
+      <div class="aio-fields">
+        <textarea class="aio-know kp-exp-ta" data-kp-exp="${esc(e.key)}" placeholder="讲解（定义 + 为什么成立 + 怎么用 + 易错点）">${esc(cur ? cur.content : '')}</textarea>
+      </div>
+    </div>`;
+  }).join('') : '<div class="col-empty">本次没有需要补讲解的考点。</div>';
+  kpEl('aiKpExplain').querySelectorAll('[data-kp-exp]').forEach(ta => {
+    ta.onchange = () => {
+      const key = ta.dataset.kpExp;
+      kpState.explains = (kpState.explains || []).filter(x => x.kpKey !== key);
+      if (ta.value.trim()) kpState.explains.push({ kpKey: key, content: ta.value });
+    };
+  });
+}
+
+kpEl('aiKpAll').onclick = () => { (kpState.rows || []).forEach(r => { r.skip = false; }); renderKpLink(); };
+kpEl('aiKpNone').onclick = () => { (kpState.rows || []).forEach(r => { r.skip = true; }); renderKpLink(); };
+
+/* ---------- 应用并保存 + 撤销 ---------- */
+kpEl('aiKpApply').onclick = async () => {
+  const st = kpState;
+  if (!st) return;
+  const rows = (st.rows || []).filter(r => !r.skip && r.kpKeys.length);
+  if (!rows.length && !(st.explains || []).length) { alert('没有选中任何可应用的挂载或讲解。'); return; }
+  const r1 = applyKpLinks(stores.q.items, rows, { keyMap: st.keyMap, mode: st.mode });
+  const r2 = applyKpExplain(stores.k.items, st.explains || [], { keyMap: st.keyMap, mode: st.mode });
+  stores.q.items = r1.items;
+  stores.k.items = r2.kps;
+  await saveStore(stores.q.key, stores.q.items);
+  await saveStore(stores.k.key, stores.k.items);
+  render();
+  refreshTagPicker();
+  kpEl('aiKpUndo').style.display = '';
+  kpEl('aiKpLinkMsg2').textContent = `已应用：错题 ${r1.changed} 道、考点讲解 ${r2.changed} 条。`;
+};
+
+function undoAiKp() {
+  const st = kpState;
+  if (!st || !st.undo) return;
+  stores.q.items = st.undo.q;
+  stores.k.items = st.undo.k;
+  colStores.k = st.undo.cols;
+  saveStore(stores.q.key, stores.q.items);
+  saveStore(stores.k.key, stores.k.items);
+  saveCols('k');
+  render();
+  refreshTagPicker();
+  kpEl('aiKpUndo').style.display = 'none';
+  kpEl('aiKpLinkMsg2').textContent = '已撤销。';
+  st.undo = null;
+}
+kpEl('aiKpUndo').onclick = () => undoAiKp();
+
+
 // 分类树建议 → 可编辑 → 一键建合集
 orgEl('aiOrgTree').onclick = async () => {
   if (!aiReady()) {
