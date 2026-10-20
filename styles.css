@@ -682,3 +682,15 @@ img.thumb.broken{opacity:.35;}
 .aio-tbl th{color:var(--muted); font-weight:600;}
 .aio-diagnose{margin-top:12px; padding:12px; border-radius:10px; background:var(--brand-soft); color:var(--text); font-size:13px; line-height:1.7; white-space:pre-wrap;}
 
+/* AI 整理知识点：体系审阅行 */
+.kp-tax-lv1,.kp-tax-lv2,.kp-tax-lv3{display:flex; align-items:center; gap:8px; padding:4px 2px;}
+.kp-tax-lv2{padding-left:22px;}
+.kp-tax-lv3{padding-left:44px;}
+.kp-tax-lv1 .kp-tax-name{font-weight:700;}
+.kp-tax-name{flex:1 1 auto; min-width:0;}
+.kp-tax-badge{font-size:11px; padding:1px 7px; border-radius:999px; border:1px solid var(--line); color:var(--muted); flex:0 0 auto;}
+.kp-tax-badge.new{color:var(--brand); border-color:var(--brand);}
+.kp-tax-del{border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:13px; padding:0 4px; flex:0 0 auto;}
+.kp-tax-del:hover{color:var(--danger, var(--brand));}
+.kp-exp-ta{width:100%; min-height:56px;}
+
