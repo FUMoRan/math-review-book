@@ -417,7 +417,7 @@
   /* 把审阅后的 AI 计划应用到错题数组（纯函数，不改动入参对象）。
      plan:  [{ id, tags?, collectionPath?, knowledge?, kpTitle?, skip? }]
      opts:  { cols, vocab, maxNewTags, now, matchKp }
-       matchKp: (title) => kpId | null   用于把「考点名」挂到知识点库条目上（缺省不处理）
+       matchKp: (title) => kpId | null   用于把「考点名」挂到知识点库条目上（缺省不处理；命中则并入 kpIds）
      返回:  { items, cols, changed } */
   function applyOrganizePlan(items, plan, opts) {
     const o = opts || {};
@@ -451,7 +451,10 @@
       }
       if (typeof p.kpTitle === 'string' && p.kpTitle.trim() && typeof o.matchKp === 'function') {
         const kpId = o.matchKp(p.kpTitle.trim());
-        if (kpId && next.kpId !== kpId) set('kpId', kpId);
+        if (kpId) {
+          const ids = [...new Set([...(next.kpIds || []), kpId])];
+          if (ids.length !== (next.kpIds || []).length) set('kpIds', ids);
+        }
       }
       if (dirty) { next = Object.assign({}, next, { updatedAt: now }); changed++; }
       return next;

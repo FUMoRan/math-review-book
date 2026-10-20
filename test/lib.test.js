@@ -1011,11 +1011,22 @@ test('applyOrganizePlan 跳过 skip 项，不改动原数组', () => {
   assert.deepEqual(r.items[0].tags, []);
 });
 
-test('applyOrganizePlan 按 matchKp 把考点挂到知识点条目上', () => {
-  const items = [normalizeQuestion({ id: 'q1', stem: 'a' })];
-  const r = applyOrganizePlan(items, [{ id: 'q1', kpTitle: '中值定理' }], { cols: [], matchKp: t => (t === '中值定理' ? 'k9' : null) });
-  assert.equal(r.items[0].kpId, 'k9');
-  assert.equal(r.changed, 1);
+test('applyOrganizePlan 按 matchKp 把考点合并进 kpIds', () => {
+  const items = [
+    normalizeQuestion({ id: 'q1', stem: 'a' }),
+    normalizeQuestion({ id: 'q2', stem: 'b', kpIds: ['k1'] }),
+  ];
+  const r = applyOrganizePlan(items, [
+    { id: 'q1', kpTitle: '中值定理' },
+    { id: 'q2', kpTitle: '中值定理' },
+  ], { cols: [], matchKp: t => (t === '中值定理' ? 'k9' : null) });
+  assert.deepEqual(r.items[0].kpIds, ['k9']);
+  assert.deepEqual(r.items[1].kpIds, ['k1', 'k9']);
+  assert.equal(r.changed, 2);
+  // 同一个考点重复命中不产生重复项
+  const r2 = applyOrganizePlan(items, [{ id: 'q2', kpTitle: '中值定理' }], { cols: [], matchKp: () => 'k1' });
+  assert.deepEqual(r2.items[1].kpIds, ['k1']);
+  assert.equal(r2.changed, 0);
 });
 
 /* ===================== 期3：相似聚类与分组统计 ===================== */
