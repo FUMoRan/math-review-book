@@ -548,7 +548,7 @@
 // 注册离线缓存，让托管后的页面可以「添加到主屏幕」并断网使用
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('./sw.js').catch(function () {});
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(function () {});
   });
 }
 </script>
