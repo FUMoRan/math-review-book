@@ -24,7 +24,7 @@ const {
   collectionPath, addCollection, renameCollection, canMoveCollection, moveCollection,
   deleteCollection, collectionCounts, sanitizeItemCollections,
   parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
-  clusterBySimilarity, groupStats,
+  clusterBySimilarity, groupStats, kpUsage,
   bareMathSegments,
 } = MQ;
 
@@ -708,11 +708,10 @@ function bindLazy(detailsEl, key, text, emptyLabel) {
   });
 }
 
-// 与「另一库」按标签交集的数量：错题视图看知识点，知识点视图看错题
+// 与「另一库」的关联数：只按 kpIds 算（错题↔知识点多对多），不再用标签交集
 function relatedCount(it) {
-  if (!it.tags.length) return 0;
-  const other = active === 'k' ? stores.q.items : stores.k.items;
-  return other.filter(o => o.tags.some(t => it.tags.includes(t))).length;
+  if (active === 'k') return kpUsage(stores.q.items).get(it.id) || 0;
+  return (it.kpIds || []).length;
 }
 
 // 统一的复习动作：切换状态并安排下次复习时间（SRS）
@@ -788,6 +787,14 @@ function makeCard(it) {
     if (confirm('移入回收站？30 天内可在「设置 → 回收站」恢复。')) {
       toTrash(active, it);
       stores[active].items = curItems().filter(x => x.id !== it.id);
+      // 删掉的是知识点 → 同时从各错题的 kpIds 摘掉它，避免悬空引用
+      if (active === 'k') {
+        stores.q.items = stores.q.items.map(q =>
+          (q.kpIds || []).includes(it.id)
+            ? Object.assign({}, q, { kpIds: q.kpIds.filter(x => x !== it.id), updatedAt: Date.now() })
+            : q);
+        saveStore(stores.q.key, stores.q.items);
+      }
       v.selected.delete(it.id);
       saveActive();
       refreshTagPicker();
@@ -3502,7 +3509,8 @@ orgEl('aiOrgApply').onclick = async () => {
   const picked = st.rows.filter(r => !r.skip);
   if (!picked.length) { alert('没有选中任何一条建议。'); return; }
   st.undo = stores.q.items.map(it => ({
-    id: it.id, tags: it.tags.slice(), collectionId: it.collectionId, knowledge: it.knowledge, kpId: it.kpId,
+    id: it.id, tags: it.tags.slice(), collectionId: it.collectionId,
+    knowledge: it.knowledge, kpIds: (it.kpIds || []).slice(),
   }));
   const matchKp = title => {
     const hit = stores.k.items.find(k => (k.title || '').trim() === title);
@@ -3525,7 +3533,10 @@ function undoAiOrg() {
   const byId = new Map(st.undo.map(x => [x.id, x]));
   stores.q.items = stores.q.items.map(it => {
     const u = byId.get(it.id);
-    return u ? Object.assign({}, it, { tags: u.tags.slice(), collectionId: u.collectionId, knowledge: u.knowledge, kpId: u.kpId }) : it;
+    return u ? Object.assign({}, it, {
+      tags: u.tags.slice(), collectionId: u.collectionId,
+      knowledge: u.knowledge, kpIds: u.kpIds.slice(),
+    }) : it;
   });
   saveStore(stores.q.key, stores.q.items);
   render();
