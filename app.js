@@ -2981,15 +2981,27 @@ function aiPromptText() {
 }
 
 /* ---------- AI 整理：提示词与分批调用 ----------
-   dims: { tags:bool, collection:bool, knowledge:bool } */
+   dims: { tags:bool, collection:bool, link:bool, knowledge:bool } */
 const AI_ORG_BATCH = 30;          // 每次请求最多处理的错题数
+
+// AI 给的 kpId 只保留知识点库里真实存在的，去重、最多 3 个
+function cleanKpIds(list) {
+  const valid = new Set(stores.k.items.map(k => k.id));
+  const out = [];
+  for (const x of (Array.isArray(list) ? list : [])) {
+    if (typeof x === 'string' && valid.has(x) && !out.includes(x)) out.push(x);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
 
 function aiOrgJsonRules(dims) {
   const fields = [];
   if (dims.tags) fields.push('"tags": 字符串数组，2~4 个短标签（章节名 / 知识点 / 题型，不要整句话）');
   if (dims.collection) fields.push('"collectionPath": 字符串，形如 "高等数学/极限"（最多两级，末级是考点名）');
+  if (dims.link) fields.push('"kpIds": 字符串数组，0~3 个，只能取自【知识点清单】里的 id，禁止编造');
   if (dims.knowledge) fields.push('"knowledge": 字符串，一句话写清「考点 + 易错点」，公式用 $...$');
-  return [
+  const lines = [
     '你是数学错题整理助手。下面会给你一个 JSON 数组，元素形如 {"id":"...","stem":"题目原文（可能含 $LaTeX$）"}。',
     '请为每一项给出整理建议，并**严格只输出一个 JSON 数组**，不要输出任何解释、标题或 ``` 围栏。',
     '每个元素形如：',
@@ -3002,7 +3014,17 @@ function aiOrgJsonRules(dims) {
     '2. 不要改动题目原文；',
     '3. 标签要短、要能复用，同一考点在不同题里必须用同一个词，不要输出同义写法；',
     '4. 若某项无法判断，对应字段给空数组或空字符串，不要瞎猜。',
-  ].join('\n');
+  ];
+  if (dims.link) {
+    lines.push('5. kpIds 只从【知识点清单】里挑最相关的，宁可少给也不要错给。');
+    lines.push('知识点清单（字段：id / title / path）：');
+    lines.push(JSON.stringify(stores.k.items.map(k => ({
+      id: k.id,
+      title: k.title || '',
+      path: k.collectionId ? collectionPath(colStores.k, k.collectionId).map(x => x.name).join('/') : '',
+    }))));
+  }
+  return lines.join('\n');
 }
 
 function aiOrgUserText(items) {
@@ -3205,6 +3227,7 @@ async function aiOrganizeRun(items, dims, onProgress) {
       const row = { id: c.id };
       if (dims.tags && Array.isArray(e.tags)) row.tags = e.tags.filter(t => typeof t === 'string' && t.trim());
       if (dims.collection && typeof e.collectionPath === 'string') row.collectionPath = e.collectionPath;
+      if (dims.link && Array.isArray(e.kpIds)) row.kpIds = cleanKpIds(e.kpIds);
       if (dims.knowledge && typeof e.knowledge === 'string') row.knowledge = e.knowledge;
       plan.push(row);
     }
@@ -3226,6 +3249,7 @@ function aiOrganizeParsePasted(text, items, dims) {
     const row = { id: e.id };
     if (dims.tags && Array.isArray(e.tags)) row.tags = e.tags.filter(t => typeof t === 'string' && t.trim());
     if (dims.collection && typeof e.collectionPath === 'string') row.collectionPath = e.collectionPath;
+    if (dims.link && Array.isArray(e.kpIds)) row.kpIds = cleanKpIds(e.kpIds);
     if (dims.knowledge && typeof e.knowledge === 'string') row.knowledge = e.knowledge;
     plan.push(row);
   }
@@ -3532,6 +3556,7 @@ function orgDims() {
   return {
     tags: orgEl('aiOrgDimTags').checked,
     collection: orgEl('aiOrgDimCol').checked,
+    link: orgEl('aiOrgDimLink').checked,
     knowledge: orgEl('aiOrgDimKp').checked,
   };
 }
@@ -3567,7 +3592,7 @@ orgModal.onclick = e => { if (e.target === orgModal) orgModal.classList.remove('
 // 开始整理：分批调用 → 进入审阅
 orgEl('aiOrgRun').onclick = async () => {
   const dims = orgDims();
-  if (!dims.tags && !dims.collection && !dims.knowledge) { orgEl('aiOrgMsg').textContent = '至少选一个整理维度。'; return; }
+  if (!dims.tags && !dims.collection && !dims.knowledge && !dims.link) { orgEl('aiOrgMsg').textContent = '至少选一个整理维度。'; return; }
   if (!aiReady()) {
     orgEl('aiOrgMsg').textContent = '';
     alert('还没有配置 AI。\n请在「设置 → AI 识题」里填好 Base URL、模型名与 API Key；或改用「复制提示词（免 Key）」。');
@@ -3596,17 +3621,26 @@ function renderAiOrgReview() {
   const box = orgEl('aiOrgReview');
   if (!st) { box.innerHTML = ''; return; }
   const byId = new Map(st.items.map(it => [it.id, it]));
-  const rows = st.plan.map(p => Object.assign({ skip: false }, p));
+  // 行只建一次：每次重渲染都从 plan 重建会把用户刚改的 chips 冲掉
+  const rows = st.rows && st.rows.length === st.plan.length
+    ? st.rows
+    : st.plan.map(p => Object.assign({ skip: false }, p));
   st.rows = rows;
+  const kpById = new Map(stores.k.items.map(k => [k.id, k]));
 
   box.innerHTML = rows.map((row, i) => {
     const it = byId.get(row.id) || {};
     const chips = (row.tags || []).map(t =>
       `<span class="aio-chip" data-chip-i="${i}" data-chip-t="${esc(t)}">${esc(t)}<b>×</b></span>`).join('');
+    const kpChips = (row.kpIds || []).map(id => {
+      const k = kpById.get(id);
+      return `<span class="aio-chip" data-kpchip-i="${i}" data-kpchip-id="${esc(id)}">${esc((k && k.title) || id)}<b>×</b></span>`;
+    }).join('');
     return `<div class="aio-row">
       <label class="aio-skip"><input type="checkbox" data-skip="${i}"${row.skip ? ' checked' : ''}></label>
       <div class="aio-stem">${renderMath(String(it.stem || '').slice(0, 160))}</div>
       <div class="aio-fields">
+        ${st.dims.link ? `<div class="aio-tags">${kpChips}<input class="aio-tagin" data-kpadd="${i}" list="aioKps" placeholder="＋知识点"></div>` : ''}
         ${st.dims.tags ? `<div class="aio-tags">${chips}<input class="aio-tagin" data-tagadd="${i}" placeholder="＋标签"></div>` : ''}
         ${st.dims.collection ? `<input class="aio-path" data-path="${i}" value="${esc(row.collectionPath || '')}" placeholder="如 高等数学/极限" list="aioCols">` : ''}
         ${st.dims.knowledge ? `<textarea class="aio-know" data-know="${i}" placeholder="考点 + 易错点">${esc(row.knowledge || '')}</textarea>` : ''}
@@ -3614,6 +3648,8 @@ function renderAiOrgReview() {
     </div>`;
   }).join('') + `<datalist id="aioCols">${
     flattenCollections(colStores.q).map(c => `<option value="${esc(collectionPath(colStores.q, c.id).map(x => x.name).join('/'))}"></option>`).join('')
+  }</datalist><datalist id="aioKps">${
+    stores.k.items.map(k => `<option value="${esc(k.title || '')}"></option>`).join('')
   }</datalist>`;
 
   box.querySelectorAll('[data-skip]').forEach(cb => { cb.onchange = () => { rows[+cb.dataset.skip].skip = cb.checked; }; });
@@ -3634,6 +3670,24 @@ function renderAiOrgReview() {
     };
   });
   box.querySelectorAll('[data-path]').forEach(inp => { inp.onchange = () => { rows[+inp.dataset.path].collectionPath = inp.value.trim(); }; });
+  box.querySelectorAll('[data-kpchip-i]').forEach(el => {
+    el.onclick = () => {
+      const row = rows[+el.dataset.kpchipI];
+      row.kpIds = (row.kpIds || []).filter(x => x !== el.dataset.kpchipId);
+      renderAiOrgReview();
+    };
+  });
+  box.querySelectorAll('[data-kpadd]').forEach(inp => {
+    inp.onchange = () => {
+      const row = rows[+inp.dataset.kpadd];
+      const v = normText(inp.value);
+      if (!v) return;
+      const hit = stores.k.items.find(k => normText(k.title) === v);
+      if (!hit) { inp.value = ''; return; }
+      if (!(row.kpIds || []).includes(hit.id) && (row.kpIds || []).length < 3) row.kpIds = [...(row.kpIds || []), hit.id];
+      renderAiOrgReview();
+    };
+  });
   box.querySelectorAll('[data-know]').forEach(ta => { ta.onchange = () => { rows[+ta.dataset.know].knowledge = ta.value; }; });
   orgEl('aiOrgReviewMsg').textContent = `共 ${rows.length} 条建议（AI 未返回的 ${Math.max(0, st.items.length - rows.length)} 道已跳过）。`;
 }
@@ -3651,11 +3705,7 @@ orgEl('aiOrgApply').onclick = async () => {
     id: it.id, tags: it.tags.slice(), collectionId: it.collectionId,
     knowledge: it.knowledge, kpIds: (it.kpIds || []).slice(),
   }));
-  const matchKp = title => {
-    const hit = stores.k.items.find(k => (k.title || '').trim() === title);
-    return hit ? hit.id : null;
-  };
-  const r = applyOrganizePlan(stores.q.items, picked, { cols: colStores.q, vocab: allTags(), matchKp });
+  const r = applyOrganizePlan(stores.q.items, picked, { cols: colStores.q, vocab: allTags() });
   stores.q.items = r.items;
   colStores.q = r.cols;
   await saveCols('q');
@@ -4185,7 +4235,7 @@ orgEl('aiOrgTreeCreate').onclick = async () => {
 // 免 Key 路径：复制提示词 → 粘回输出 → 审阅
 orgEl('aiOrgCopy').onclick = async () => {
   const dims = orgDims();
-  if (!dims.tags && !dims.collection && !dims.knowledge) { orgEl('aiOrgMsg').textContent = '至少选一个整理维度。'; return; }
+  if (!dims.tags && !dims.collection && !dims.knowledge && !dims.link) { orgEl('aiOrgMsg').textContent = '至少选一个整理维度。'; return; }
   const items = orgPickItems();
   if (!items.length) { orgEl('aiOrgMsg').textContent = '这个范围里没有错题。'; return; }
   const ok = await copyText(aiOrgPromptText(items, dims));

@@ -1013,20 +1013,20 @@ test('applyOrganizePlan 跳过 skip 项，不改动原数组', () => {
   assert.deepEqual(r.items[0].tags, []);
 });
 
-test('applyOrganizePlan 按 matchKp 把考点合并进 kpIds', () => {
+test('applyOrganizePlan 把 kpIds 合并进已有挂载（去重、忽略非字符串）', () => {
   const items = [
     normalizeQuestion({ id: 'q1', stem: 'a' }),
     normalizeQuestion({ id: 'q2', stem: 'b', kpIds: ['k1'] }),
   ];
   const r = applyOrganizePlan(items, [
-    { id: 'q1', kpTitle: '中值定理' },
-    { id: 'q2', kpTitle: '中值定理' },
-  ], { cols: [], matchKp: t => (t === '中值定理' ? 'k9' : null) });
+    { id: 'q1', kpIds: ['k9'] },
+    { id: 'q2', kpIds: ['k9'] },
+  ], { cols: [] });
   assert.deepEqual(r.items[0].kpIds, ['k9']);
   assert.deepEqual(r.items[1].kpIds, ['k1', 'k9']);
   assert.equal(r.changed, 2);
-  // 同一个考点重复命中不产生重复项
-  const r2 = applyOrganizePlan(items, [{ id: 'q2', kpTitle: '中值定理' }], { cols: [], matchKp: () => 'k1' });
+  // 重复给出同一个 id 不产生重复项，也不计改动
+  const r2 = applyOrganizePlan(items, [{ id: 'q2', kpIds: ['k1', 'k1', '', null, 3] }], { cols: [] });
   assert.deepEqual(r2.items[1].kpIds, ['k1']);
   assert.equal(r2.changed, 0);
 });
