@@ -654,22 +654,24 @@ const tabEls = [...document.querySelectorAll('.tab')];
 
 // 搜索文本缓存：按 id + updatedAt 命中，避免每次筛选重新拼接
 const hayCache = new Map();
-function hayOf(it) {
+function hayOf(it, kind) {
   const c = hayCache.get(it.id);
   if (c && c.u === it.updatedAt) return c.hay;
-  const hay = DEF[active].hay(it).toLowerCase();
+  const hay = DEF[kind || active].hay(it).toLowerCase();
   hayCache.set(it.id, { u: it.updatedAt, hay });
   return hay;
 }
 
-function currentFiltered() {
-  const v = cur();
+// kind 可指定库（q / k），缺省为当前标签页
+function currentFiltered(kind) {
+  const kd = kind || active;
+  const v = views[kd];
   const s = parseSearch(v.search);
   const now = Date.now();
   // 合集筛选：null = 未分类；其余 = 该合集及其子合集；COL_ALL = 不过滤
   const cf = v.collectionFilter;
-  const subIds = (cf && cf !== COL_ALL) ? collectionSubtreeIds(colStores[active] || [], cf) : null;
-  const out = curItems().filter(it => {
+  const subIds = (cf && cf !== COL_ALL) ? collectionSubtreeIds(colStores[kd] || [], cf) : null;
+  const out = stores[kd].items.filter(it => {
     if (cf !== COL_ALL) {
       if (cf == null) { if (it.collectionId) return false; }
       else if (!it.collectionId || !subIds.has(it.collectionId)) return false;
@@ -688,11 +690,11 @@ function currentFiltered() {
       if (!hit) return false;
     }
     if (s.tags.length && !s.tags.every(t => it.tags.includes(t))) return false;
-    if (s.text && !hayOf(it).includes(s.text)) return false;
+    if (s.text && !hayOf(it, kd).includes(s.text)) return false;
     return true;
   });
   // 按当前库的排序模式：自动=创建时间倒序（新增的排最前）；手动=order（新条目 order=null 排最前）
-  return sortItems(out, (settings.sortMode && settings.sortMode[active]) || 'auto');
+  return sortItems(out, (settings.sortMode && settings.sortMode[kd]) || 'auto');
 }
 
 function bindLazy(detailsEl, key, text, emptyLabel) {
@@ -2996,13 +2998,21 @@ function cleanKpIds(list) {
 }
 
 function aiOrgJsonRules(dims) {
+  const isKp = dims.target === 'k';
   const fields = [];
   if (dims.tags) fields.push('"tags": 字符串数组，2~4 个短标签（章节名 / 知识点 / 题型，不要整句话）');
-  if (dims.collection) fields.push('"collectionPath": 字符串，形如 "高等数学/极限"（最多两级，末级是考点名）');
+  if (dims.collection) {
+    fields.push(isKp
+      ? '"collectionPath": 字符串，形如 "高等数学/极限"（一级是学科、二级是章节，最多两级）'
+      : '"collectionPath": 字符串，形如 "高等数学/极限"（最多两级，末级是考点名）');
+  }
   if (dims.link) fields.push('"kpIds": 字符串数组，0~3 个，只能取自【知识点清单】里的 id，禁止编造');
   if (dims.knowledge) fields.push('"knowledge": 字符串，一句话写清「考点 + 易错点」，公式用 $...$');
+  const head = isKp
+    ? '你是数学知识点库整理助手。下面会给你一个 JSON 数组，元素形如 {"id":"...","title":"考点名","tags":[...]}。'
+    : '你是数学错题整理助手。下面会给你一个 JSON 数组，元素形如 {"id":"...","stem":"题目原文（可能含 $LaTeX$）"}。';
   const lines = [
-    '你是数学错题整理助手。下面会给你一个 JSON 数组，元素形如 {"id":"...","stem":"题目原文（可能含 $LaTeX$）"}。',
+    head,
     '请为每一项给出整理建议，并**严格只输出一个 JSON 数组**，不要输出任何解释、标题或 ``` 围栏。',
     '每个元素形如：',
     '{',
@@ -3011,10 +3021,19 @@ function aiOrgJsonRules(dims) {
     '}',
     '要求：',
     '1. 输出数组的元素个数、顺序与输入完全一致，id 必须原样照抄；',
-    '2. 不要改动题目原文；',
+    isKp ? '2. 不要改动考点名；' : '2. 不要改动题目原文；',
     '3. 标签要短、要能复用，同一考点在不同题里必须用同一个词，不要输出同义写法；',
     '4. 若某项无法判断，对应字段给空数组或空字符串，不要瞎猜。',
   ];
+  if (dims.collection) {
+    const cols = isKp
+      ? flattenCollections(colStores.k).map(c => collectionPath(colStores.k, c.id).map(x => x.name).join('/'))
+      : [];
+    if (cols.length) {
+      lines.push('可选合集路径（已存在的优先复用，尽量不要造同义新路径）：');
+      lines.push(JSON.stringify(cols));
+    }
+  }
   if (dims.link) {
     lines.push('5. kpIds 只从【知识点清单】里挑最相关的，宁可少给也不要错给。');
     lines.push('知识点清单（字段：id / title / path）：');
@@ -3027,17 +3046,22 @@ function aiOrgJsonRules(dims) {
   return lines.join('\n');
 }
 
-function aiOrgUserText(items) {
-  return JSON.stringify(items.map(it => ({
+function aiOrgUserText(items, target) {
+  const isKp = target === 'k';
+  return JSON.stringify((Array.isArray(items) ? items : []).map(it => isKp ? {
+    id: it.id,
+    title: String(it.title || '').replace(/\s+/g, ' ').slice(0, 120),
+    tags: it.tags || [],
+  } : {
     id: it.id,
     stem: String(it.stem || '').replace(/\s+/g, ' ').slice(0, 400),
-  })));
+  }));
 }
 
 // 分类树建议：只让 AI 输出叶子路径列表
 function aiTreePrompt() {
   return [
-    '你是数学课程分类专家。下面给你一批数学错题原文（JSON 数组）。',
+    '你是数学课程分类专家。下面给你一批数学内容（错题原文或考点名，JSON 数组）。',
     '请按中国考研数学 / 高中数学的知识体系，给出**一套通用的两层分类**（一级为学科大块，二级为考点）。',
     '严格只输出 JSON 对象：{"paths":["高等数学/极限","高等数学/中值定理","线性代数/行列式","概率论/随机变量"]}',
     '要求：',
@@ -3064,8 +3088,8 @@ function aiOrgPromptText(items, dims) {
   return [
     aiOrgJsonRules(dims),
     '',
-    '下面是需要整理的错题（JSON）：',
-    aiOrgUserText(items),
+    dims.target === 'k' ? '下面是需要整理的知识点（JSON）：' : '下面是需要整理的错题（JSON）：',
+    aiOrgUserText(items, dims.target),
     '',
     '请只输出那个 JSON 数组。',
   ].join('\n');
@@ -3212,7 +3236,7 @@ async function aiOrganizeRun(items, dims, onProgress) {
   for (let i = 0; i < total; i += AI_ORG_BATCH) {
     const chunk = list.slice(i, i + AI_ORG_BATCH);
     if (typeof onProgress === 'function') onProgress(Math.min(i + AI_ORG_BATCH, total), total);
-    const text = await aiCall({ system: aiOrgJsonRules(dims), ask: aiOrgUserText(chunk) });
+    const text = await aiCall({ system: aiOrgJsonRules(dims), ask: aiOrgUserText(chunk, dims.target) });
     const arr = parseAiJson(text);
     if (!Array.isArray(arr)) {
       errors.push(`第 ${i / AI_ORG_BATCH + 1} 批返回的不是 JSON 数组`);
@@ -3232,7 +3256,7 @@ async function aiOrganizeRun(items, dims, onProgress) {
       plan.push(row);
     }
   }
-  if (failed.length) errors.push(`${failed.length} 道题未被模型返回（可重试）`);
+  if (failed.length) errors.push(`${failed.length} 条未被模型返回（可重试）`);
   return { plan, failed, errors, ok: plan.length };
 }
 
@@ -3254,7 +3278,7 @@ function aiOrganizeParsePasted(text, items, dims) {
     plan.push(row);
   }
   for (const it of items) if (!seen.has(it.id)) failed.push(it.id);
-  return { plan, failed, errors: failed.length ? [`${failed.length} 道题未出现在粘贴内容里`] : [], ok: plan.length };
+  return { plan, failed, errors: failed.length ? [`${failed.length} 条未出现在粘贴内容里`] : [], ok: plan.length };
 }
 
 /* ---------- 剪贴板（复制提示词用，失败时回退到 execCommand） ---------- */
@@ -3553,19 +3577,44 @@ const orgModal = orgEl('aiOrgModal');
 let orgState = null;              // { items, dims, plan, rows, undo }
 
 function orgDims() {
+  const t = orgEl('aiOrgTarget').value;
   return {
+    target: t,
     tags: orgEl('aiOrgDimTags').checked,
     collection: orgEl('aiOrgDimCol').checked,
-    link: orgEl('aiOrgDimLink').checked,
-    knowledge: orgEl('aiOrgDimKp').checked,
+    // 「挂到知识点」「写考点讲解」只对错题有意义
+    link: t === 'q' && orgEl('aiOrgDimLink').checked,
+    knowledge: t === 'q' && orgEl('aiOrgDimKp').checked,
   };
 }
 function orgPickItems() {
+  const t = orgEl('aiOrgTarget').value;
   const scope = orgEl('aiOrgScope').value;
-  const all = stores.q.items;
-  if (scope === 'filtered') return currentFiltered();
-  if (scope === 'qualified') return all.filter(it => !it.collectionId || !it.tags.length || !it.knowledge);
+  const all = stores[t].items;
+  if (scope === 'filtered') return currentFiltered(t);
+  if (scope === 'qualified') {
+    return all.filter(it => t === 'k'
+      ? (!it.collectionId || !it.tags.length || !it.content)
+      : (!it.collectionId || !it.tags.length || !it.knowledge));
+  }
   return all.slice();
+}
+// 切换整理对象：范围文案、可用维度跟着变
+function syncOrgTargetUi() {
+  const t = orgEl('aiOrgTarget').value;
+  const isQ = t === 'q';
+  orgEl('aiOrgDimLink').disabled = !isQ;
+  orgEl('aiOrgDimKp').disabled = !isQ;
+  const sc = orgEl('aiOrgScope');
+  sc.options[0].textContent = isQ ? '全部错题' : '全部知识点';
+  sc.options[2].textContent = isQ ? '仅未分类或空白错题' : '仅未分类或缺讲解的知识点';
+  const tags = allTags();
+  orgEl('aiOrgVocabNote').textContent = tags.length
+    ? `已有标签 ${tags.length} 个，AI 会优先复用这些标签（避免同义标签泛滥）。`
+    : '目前还没有标签，AI 会新建一套。';
+  if (!isQ) {
+    orgEl('aiOrgVocabNote').textContent += ' 「挂到知识点」「写考点讲解」只对错题生效，已暂时停用。';
+  }
 }
 function orgShowStep(name) {
   ['aiOrgSetup', 'aiOrgPasteWrap', 'aiOrgTreeWrap', 'aiOrgReviewWrap'].forEach(id => {
@@ -3573,16 +3622,18 @@ function orgShowStep(name) {
   });
 }
 function openAiOrg() {
-  if (active !== 'q') { alert('AI 整理目前只针对错题库。'); return; }
-  if (!stores.q.items.length) { alert('错题库还是空的，先添加几道错题吧。'); return; }
+  if (active === 'p') { alert('AI 整理只针对错题库和知识点库。'); return; }
+  orgEl('aiOrgTarget').value = active === 'k' ? 'k' : 'q';
+  syncOrgTargetUi();
+  const t = orgEl('aiOrgTarget').value;
+  if (!stores[t].items.length) {
+    alert(t === 'q' ? '错题库还是空的，先添加几道错题吧。' : '知识点库还是空的，先建几个知识点吧。');
+    return;
+  }
   orgShowStep('aiOrgSetup');
   orgEl('aiOrgMsg').textContent = '';
   orgEl('aiOrgReview').innerHTML = '';
   orgEl('aiOrgUndo').style.display = 'none';
-  const tags = allTags();
-  orgEl('aiOrgVocabNote').textContent = tags.length
-    ? `已有标签 ${tags.length} 个，AI 会优先复用这些标签（避免同义标签泛滥）。`
-    : '目前还没有标签，AI 会新建一套。';
   orgModal.classList.add('open');
 }
 orgEl('aiOrgCancel').onclick = () => orgModal.classList.remove('open');
@@ -3599,7 +3650,7 @@ orgEl('aiOrgRun').onclick = async () => {
     return;
   }
   const items = orgPickItems();
-  if (!items.length) { orgEl('aiOrgMsg').textContent = '这个范围里没有错题。'; return; }
+  if (!items.length) { orgEl('aiOrgMsg').textContent = dims.target === 'k' ? '这个范围里没有知识点。' : '这个范围里没有错题。'; return; }
   orgEl('aiOrgRun').disabled = true;
   showAiBusy('AI 正在整理，请稍候…');
   try {
@@ -3627,6 +3678,8 @@ function renderAiOrgReview() {
     : st.plan.map(p => Object.assign({ skip: false }, p));
   st.rows = rows;
   const kpById = new Map(stores.k.items.map(k => [k.id, k]));
+  const isKp = st.dims.target === 'k';
+  const targetCols = colStores[st.dims.target] || [];
 
   box.innerHTML = rows.map((row, i) => {
     const it = byId.get(row.id) || {};
@@ -3638,7 +3691,7 @@ function renderAiOrgReview() {
     }).join('');
     return `<div class="aio-row">
       <label class="aio-skip"><input type="checkbox" data-skip="${i}"${row.skip ? ' checked' : ''}></label>
-      <div class="aio-stem">${renderMath(String(it.stem || '').slice(0, 160))}</div>
+      <div class="aio-stem">${renderMath(String((isKp ? it.title : it.stem) || '').slice(0, 160))}</div>
       <div class="aio-fields">
         ${st.dims.link ? `<div class="aio-tags">${kpChips}<input class="aio-tagin" data-kpadd="${i}" list="aioKps" placeholder="＋知识点"></div>` : ''}
         ${st.dims.tags ? `<div class="aio-tags">${chips}<input class="aio-tagin" data-tagadd="${i}" placeholder="＋标签"></div>` : ''}
@@ -3647,7 +3700,7 @@ function renderAiOrgReview() {
       </div>
     </div>`;
   }).join('') + `<datalist id="aioCols">${
-    flattenCollections(colStores.q).map(c => `<option value="${esc(collectionPath(colStores.q, c.id).map(x => x.name).join('/'))}"></option>`).join('')
+    flattenCollections(targetCols).map(c => `<option value="${esc(collectionPath(targetCols, c.id).map(x => x.name).join('/'))}"></option>`).join('')
   }</datalist><datalist id="aioKps">${
     stores.k.items.map(k => `<option value="${esc(k.title || '')}"></option>`).join('')
   }</datalist>`;
@@ -3701,15 +3754,16 @@ orgEl('aiOrgApply').onclick = async () => {
   if (!st) return;
   const picked = st.rows.filter(r => !r.skip);
   if (!picked.length) { alert('没有选中任何一条建议。'); return; }
-  st.undo = stores.q.items.map(it => ({
+  const t = st.dims.target;
+  st.undo = stores[t].items.map(it => ({
     id: it.id, tags: it.tags.slice(), collectionId: it.collectionId,
-    knowledge: it.knowledge, kpIds: (it.kpIds || []).slice(),
+    knowledge: it.knowledge, kpIds: (it.kpIds || []).slice(), content: it.content,
   }));
-  const r = applyOrganizePlan(stores.q.items, picked, { cols: colStores.q, vocab: allTags() });
-  stores.q.items = r.items;
-  colStores.q = r.cols;
-  await saveCols('q');
-  await saveStore(stores.q.key, stores.q.items);
+  const r = applyOrganizePlan(stores[t].items, picked, { cols: colStores[t], vocab: allTags() });
+  stores[t].items = r.items;
+  colStores[t] = r.cols;
+  await saveCols(t);
+  await saveStore(stores[t].key, stores[t].items);
   render();
   refreshTagPicker();
   orgEl('aiOrgUndo').style.display = '';
@@ -3719,15 +3773,16 @@ orgEl('aiOrgApply').onclick = async () => {
 function undoAiOrg() {
   const st = orgState;
   if (!st || !st.undo) return;
+  const t = st.dims.target;
   const byId = new Map(st.undo.map(x => [x.id, x]));
-  stores.q.items = stores.q.items.map(it => {
+  stores[t].items = stores[t].items.map(it => {
     const u = byId.get(it.id);
     return u ? Object.assign({}, it, {
       tags: u.tags.slice(), collectionId: u.collectionId,
-      knowledge: u.knowledge, kpIds: u.kpIds.slice(),
+      knowledge: u.knowledge, kpIds: u.kpIds.slice(), content: u.content,
     }) : it;
   });
-  saveStore(stores.q.key, stores.q.items);
+  saveStore(stores[t].key, stores[t].items);
   render();
   refreshTagPicker();
   orgEl('aiOrgMsg').textContent = '已撤销。';
@@ -4207,7 +4262,8 @@ orgEl('aiOrgTree').onclick = async () => {
   }
   showAiBusy('AI 正在建议分类体系…');
   try {
-    const text = await aiCall({ system: aiTreePrompt(), ask: aiOrgUserText(orgPickItems().slice(0, AI_ORG_BATCH)) });
+    const treeTarget = orgEl('aiOrgTarget').value;
+    const text = await aiCall({ system: aiTreePrompt(), ask: aiOrgUserText(orgPickItems().slice(0, AI_ORG_BATCH), treeTarget) });
     const o = parseAiJson(text);
     const paths = (o && Array.isArray(o.paths)) ? o.paths.filter(p => typeof p === 'string' && p.trim()) : [];
     hideAiBusy();
@@ -4223,10 +4279,11 @@ orgEl('aiOrgTreeBack').onclick = () => orgShowStep('aiOrgSetup');
 orgEl('aiOrgTreeCreate').onclick = async () => {
   const paths = orgEl('aiOrgTreeText').value.split('\n').map(s => s.trim()).filter(Boolean);
   if (!paths.length) { alert('没有可用的路径。'); return; }
-  let cols = colStores.q;
+  const treeKind = orgEl('aiOrgTarget').value;
+  let cols = colStores[treeKind];
   for (const p of paths) cols = resolveCollectionPath(cols, p, Date.now()).cols;
-  colStores.q = cols;
-  await saveCols('q');
+  colStores[treeKind] = cols;
+  await saveCols(treeKind);
   renderColTree();
   orgEl('aiOrgMsg').textContent = `已按 ${paths.length} 条路径建好合集。`;
   orgShowStep('aiOrgSetup');
@@ -4237,7 +4294,7 @@ orgEl('aiOrgCopy').onclick = async () => {
   const dims = orgDims();
   if (!dims.tags && !dims.collection && !dims.knowledge && !dims.link) { orgEl('aiOrgMsg').textContent = '至少选一个整理维度。'; return; }
   const items = orgPickItems();
-  if (!items.length) { orgEl('aiOrgMsg').textContent = '这个范围里没有错题。'; return; }
+  if (!items.length) { orgEl('aiOrgMsg').textContent = dims.target === 'k' ? '这个范围里没有知识点。' : '这个范围里没有错题。'; return; }
   const ok = await copyText(aiOrgPromptText(items, dims));
   if (!ok) { orgEl('aiOrgMsg').textContent = '复制失败，请手动复制。'; return; }
   orgState = { items, dims, plan: [], undo: null };
@@ -4256,6 +4313,7 @@ orgEl('aiOrgPasteGo').onclick = () => {
 };
 
 document.getElementById('aiOrgBtn').onclick = openAiOrg;
+orgEl('aiOrgTarget').onchange = syncOrgTargetUi;
 
 /* ===================== 整理工具（相似题 / 薄弱诊断） ===================== */
 const toolsModal = orgEl('aiToolsModal');

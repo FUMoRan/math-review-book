@@ -43,7 +43,7 @@
   <button id="importBtn2">导入</button>
   <button class="primary" id="addBtn">+ 新增错题</button>
   <button id="aiBtn" title="上传题目图片，让 AI 识别并按格式整理">📷 AI 识题</button>
-  <button id="aiOrgBtn" title="让 AI 批量给错题打标签 / 归档 / 写考点">🧠 AI 整理</button>
+  <button id="aiOrgBtn" title="让 AI 批量给错题或知识点打标签 / 归档（错题还能挂知识点、写考点）">🧠 AI 整理</button>
   <button id="colToggle" title="合集">☰ 合集</button>
   <button id="aiToolsBtn" title="相似题检测 / 薄弱诊断">🔍 整理工具</button>
   <button id="aiKpBtn" title="让 AI 从错题整理出知识点（考点体系 + 挂载）">🧠 整理知识点</button>
@@ -285,12 +285,17 @@
 <!-- AI 整理：范围/维度 → 提议 → 审阅 → 应用 -->
 <div class="modal" id="aiOrgModal">
   <div class="panel wide">
-    <h2 id="aiOrgTitle">AI 整理错题</h2>
-    <p class="hint" id="aiOrgHint">AI 只负责<b>提议</b>，下面会列出每一条建议让你核对，确认后才写入。使用时会联网，错题原文会发送到你配置的服务商。</p>
+    <h2 id="aiOrgTitle">AI 整理</h2>
+    <p class="hint" id="aiOrgHint">AI 只负责<b>提议</b>，下面会列出每一条建议让你核对，确认后才写入。使用时会联网，内容原文会发送到你配置的服务商。</p>
 
     <!-- 步骤 1：设置 -->
     <div id="aiOrgSetup">
       <div class="ai-org-fields">
+        <label class="ai-label" for="aiOrgTarget">整理对象</label>
+        <select id="aiOrgTarget">
+          <option value="q">错题库</option>
+          <option value="k">知识点库</option>
+        </select>
         <label class="ai-label" for="aiOrgScope">整理范围</label>
         <select id="aiOrgScope">
           <option value="all">全部错题</option>
