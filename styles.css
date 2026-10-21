@@ -31,6 +31,17 @@
   --card-pad:16px 18px;
   --stem-size:15px;
   --body-size:14px;
+  /* 层叠顺序：集中在这里排，新增层别再写裸数字（曾因弹层低于试卷页而点不到） */
+  --z-sticky:10;      /* 吸顶头部 */
+  --z-float:45;       /* 右下角悬浮按钮 */
+  --z-menu:30;        /* 下拉菜单 */
+  --z-drawer:60;      /* 侧边抽屉 / 遮罩 */
+  --z-view:65;        /* 全屏视图：试卷页 */
+  --z-view-edit:66;   /* 全屏视图：试卷编辑页 */
+  --z-cram:70;        /* 突击模式全屏 */
+  --z-modal:75;       /* 所有弹层：必须高于任何全屏视图 */
+  --z-lightbox:80;    /* 图片放大 */
+  --z-confirm:90;     /* 确认/警告 */
 }
 html[data-density="compact"]{ --gap:10px; --card-pad:11px 14px; --stem-size:14px; --body-size:13px; --radius:12px; }
 html[data-density="large"]{ --gap:18px; --card-pad:20px 22px; --stem-size:17px; --body-size:16px; --radius:16px; }
@@ -66,7 +77,7 @@ body{
   transition:background-color .2s ease, color .2s ease;
 }
 header{
-  position:sticky; top:0; z-index:10; background:var(--header-bg);
+  position:sticky; top:0; z-index:var(--z-sticky); background:var(--header-bg);
   backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
   padding:14px 20px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
 }
@@ -149,14 +160,15 @@ details[open] summary::before{transform:rotate(90deg);}
 details .body{margin-top:8px; font-size:var(--body-size); color:var(--text-2); overflow-wrap:anywhere;}
 .section-label{font-size:12px; color:var(--muted);}
 .badge-note{font-size:12px; color:var(--warn);}
+/* KaTeX 默认同时输出 MathML（给读屏）和 HTML 两份。MathML 是 1px 的隐藏层，
+   但会混进文字选择和复制结果（选中一段会复制出「111」这种重复文本）。
+   保留 MathML 给读屏用，只把它排除在选择/复制之外。 */
+.katex-mathml{user-select:none; -webkit-user-select:none;}
 .modal{
   position:fixed; inset:0; background:rgba(20,25,40,.45); display:none;
-  align-items:flex-start; justify-content:center; padding:40px 16px; overflow:auto; z-index:50;
+  align-items:flex-start; justify-content:center; padding:40px 16px; overflow:auto; z-index:var(--z-modal);
 }
 .modal.open{display:flex;}
-/* 试卷页内的弹层需盖在试卷页(#paperView, z-index:65) / 编辑页(#paperEdit, z-index:66) 之上 */
-#paperQModal{z-index:75;}
-#paperSolveModal{z-index:75;}
 .panel{
   background:var(--card); border-radius:16px; width:100%; max-width:700px; padding:22px;
   box-shadow:var(--shadow-lg);
@@ -188,7 +200,7 @@ pre.tpl{
 /* ---------- 标签多选 ---------- */
 .tagpick{position:relative;}
 .tagpick-menu{
-  display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:30;
+  display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:var(--z-menu);
   background:var(--card); border:1px solid var(--line); border-radius:12px; padding:8px;
   min-width:180px; max-height:280px; overflow:auto; box-shadow:0 12px 30px rgba(20,30,60,.15);
 }
@@ -249,7 +261,7 @@ button.danger:hover{background:var(--danger-bg); border-color:var(--danger); col
 button#dueBtn.on{border-color:var(--warn); color:var(--warn); background:transparent;}
 
 /* ---------- 设置抽屉 ---------- */
-.drawer{position:fixed; inset:0; background:rgba(20,25,40,.4); display:none; z-index:60;}
+.drawer{position:fixed; inset:0; background:rgba(20,25,40,.4); display:none; z-index:var(--z-drawer);}
 .drawer.open{display:block;}
 .drawer-panel{
   position:absolute; top:0; right:0; bottom:0; width:min(92vw, 380px);
@@ -295,7 +307,7 @@ button#starBtn.on{border-color:#f59f00; color:#f59f00; background:transparent;}
 
 /* ---------- 返回顶部 ---------- */
 .totop{
-  position:fixed; right:18px; bottom:20px; z-index:45;
+  position:fixed; right:18px; bottom:20px; z-index:var(--z-float);
   width:44px; height:44px; border-radius:50%; font-size:18px; padding:0;
   background:var(--card); box-shadow:0 6px 18px rgba(20,30,60,.18);
   display:none; align-items:center; justify-content:center;
@@ -303,7 +315,7 @@ button#starBtn.on{border-color:#f59f00; color:#f59f00; background:transparent;}
 .totop.show{display:flex;}
 
 /* ---------- 背题模式 ---------- */
-.cram{position:fixed; inset:0; z-index:70; background:var(--bg); display:none; flex-direction:column;}
+.cram{position:fixed; inset:0; z-index:var(--z-cram); background:var(--bg); display:none; flex-direction:column;}
 .cram.open{display:flex;}
 .cram-bar{
   display:flex; align-items:center; gap:10px; padding:12px 18px;
@@ -347,7 +359,7 @@ img.thumb.broken{opacity:.35;}
 #editImgs > label{display:block; font-size:13px; color:var(--muted); margin:12px 0 4px;}
 
 .lightbox{
-  position:fixed; inset:0; z-index:80; background:rgba(0,0,0,.86);
+  position:fixed; inset:0; z-index:var(--z-lightbox); background:rgba(0,0,0,.86);
   display:none; align-items:center; justify-content:center; padding:20px;
 }
 .lightbox.open{display:flex;}
@@ -413,7 +425,7 @@ img.thumb.broken{opacity:.35;}
 .setnote a{color:var(--brand);}
 
 .ai-busy{
-  position:fixed; inset:0; z-index:90; background:rgba(0,0,0,.45);
+  position:fixed; inset:0; z-index:var(--z-confirm); background:rgba(0,0,0,.45);
   display:none; align-items:center; justify-content:center; padding:20px;
 }
 .ai-busy.open{display:flex;}
@@ -449,7 +461,7 @@ img.thumb.broken{opacity:.35;}
 
 /* ---------- 全屏试卷页 ---------- */
 .paperview{
-  position:fixed; inset:0; z-index:65; background:var(--bg);
+  position:fixed; inset:0; z-index:var(--z-view); background:var(--bg);
   display:none; grid-template-columns:1fr;
   grid-template-rows:auto auto 1fr auto;
   grid-template-areas:"bar" "nav" "body" "foot";
@@ -532,7 +544,7 @@ img.thumb.broken{opacity:.35;}
 
 /* ---------- 试卷编辑页 ---------- */
 .paperedit{
-  position:fixed; inset:0; z-index:66; background:var(--bg);
+  position:fixed; inset:0; z-index:var(--z-view-edit); background:var(--bg);
   display:none; grid-template-rows:auto 1fr;
 }
 .paperedit.open{display:grid;}

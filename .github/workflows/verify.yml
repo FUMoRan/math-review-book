@@ -1,0 +1,16 @@
+name: verify
+
+# 纯静态项目，无构建：只做语法检查 + 单元测试，防止「改完忘了跑测试」。
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm run verify

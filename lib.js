@@ -321,6 +321,15 @@
     return { total: qs.length, right, wrong, unset, marked: right + wrong };
   }
 
+  /* 答案是否可见：判分模式恒可见；重做模式整卷显示，或该题被单独揭示过。
+     revealed 兼容 Set 与数组（界面用 Set，测试/持久化用数组）。 */
+  function answerVisible(mode, showAnswers, revealed, qid) {
+    if (mode === 'grade') return true;
+    if (showAnswers) return true;
+    if (revealed instanceof Set) return revealed.has(qid);
+    return Array.isArray(revealed) && revealed.includes(qid);
+  }
+
   /* ---------- 排序 ----------
      自动（auto）：创建时间倒序，新增的排最前，与现有行为一致。
      手动（manual）：order 升序；order===null 的（新加入、未参与拖拽）排最前，
@@ -435,6 +444,33 @@
       parentId = found.id;
     }
     return { cols: list, id };
+  }
+
+  /* AI 给的 kpId 只保留知识点库里真实存在的（validIds），去重，最多 max 个。
+     validIds 可传 Set 或数组；max 缺省 3。 */
+  function pickKpIds(list, validIds, max) {
+    const ok = validIds instanceof Set ? validIds : new Set(Array.isArray(validIds) ? validIds : []);
+    const cap = (typeof max === 'number' && max > 0) ? max : 3;
+    const out = [];
+    for (const x of (Array.isArray(list) ? list : [])) {
+      if (typeof x === 'string' && ok.has(x) && !out.includes(x)) out.push(x);
+      if (out.length >= cap) break;
+    }
+    return out;
+  }
+
+  /* 把 AI 整理返回的一条映射成「计划行」：只取用户勾选的维度，
+     未勾选的字段一律不写（applyOrganizePlan 据此不覆盖原值）。
+     在线请求与免 Key 粘贴两条路共用这一份映射，避免行为分叉。 */
+  function planRowOf(e, dims, validKpIds) {
+    if (!e || typeof e !== 'object') return null;
+    const d = dims || {};
+    const row = { id: e.id };
+    if (d.tags && Array.isArray(e.tags)) row.tags = e.tags.filter(t => typeof t === 'string' && t.trim());
+    if (d.collection && typeof e.collectionPath === 'string') row.collectionPath = e.collectionPath;
+    if (d.link && Array.isArray(e.kpIds)) row.kpIds = pickKpIds(e.kpIds, validKpIds);
+    if (d.knowledge && typeof e.knowledge === 'string') row.knowledge = e.knowledge;
+    return row;
   }
 
   /* 把审阅后的 AI 计划应用到错题数组（纯函数，不改动入参对象）。
@@ -1082,8 +1118,7 @@
     parseBlockGeneric, parseText, parsePaper,
     paperWrongToQuestion,
     cleanAiText, setPaperSteps,
-    nextUnmarked,
-    paperProgress,
+    nextUnmarked, paperProgress, answerVisible,
     sortItems,
     materializeOrder,
     reorderItems,
@@ -1092,7 +1127,7 @@
     canMoveCollection, moveCollection, deleteCollection,
     filterItemsByCollection, collectionCounts, sanitizeItemCollections,
     parseAiJson, normTag, mergeSuggestTags,
-    resolveCollectionPath, applyOrganizePlan,
+    resolveCollectionPath, applyOrganizePlan, pickKpIds, planRowOf,
     planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy,
     sampleEvenly, clampMaxTokens, MAX_TOKENS_DEF,
     clusterBySimilarity, groupStats,

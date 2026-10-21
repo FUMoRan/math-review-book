@@ -12,14 +12,14 @@ const {
   normalizeSrs, scheduleSrs, isDue, dueLabel,
   normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers, paperWrongToQuestion, nextUnmarked,
   cleanAiText, setPaperSteps,
-  paperProgress,
+  paperProgress, answerVisible,
   sortItems, materializeOrder, reorderItems,
   parseText, parsePaper, parseSearch,
   normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
   collectionPath, flattenCollections, addCollection, renameCollection,
   canMoveCollection, moveCollection, deleteCollection,
   filterItemsByCollection, collectionCounts, sanitizeItemCollections,
-  parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
+  parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan, pickKpIds, planRowOf,
   planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy, sampleEvenly,
   clampMaxTokens, MAX_TOKENS_DEF,
   clusterBySimilarity, groupStats,
@@ -1306,6 +1306,49 @@ test('clampMaxTokens 越界按边界夹住', () => {
   assert.equal(clampMaxTokens(100), 256);        // 低于下限
   assert.equal(clampMaxTokens(999999), 65536);   // 高于上限
   assert.equal(clampMaxTokens(-5), 4096);        // 负数视为非法
+});
+
+/* ===================== 试卷：答案显隐 ===================== */
+test('answerVisible 判分模式恒可见，重做模式按揭示状态', () => {
+  assert.equal(answerVisible('grade', false, new Set(), 'q1'), true);
+  assert.equal(answerVisible('redo', true, new Set(), 'q1'), true);
+  assert.equal(answerVisible('redo', false, new Set(['q1']), 'q1'), true);
+  assert.equal(answerVisible('redo', false, new Set(['q1']), 'q2'), false);
+  assert.equal(answerVisible('redo', false, new Set(), 'q1'), false);
+});
+
+test('answerVisible 兼容数组形式的已揭示列表', () => {
+  assert.equal(answerVisible('redo', false, ['q1', 'q3'], 'q3'), true);
+  assert.equal(answerVisible('redo', false, [], 'q1'), false);
+  assert.equal(answerVisible('redo', false, null, 'q1'), false);
+});
+
+/* ===================== AI 整理：维度映射 ===================== */
+test('pickKpIds 只保留库里存在的 id，去重并最多 3 个', () => {
+  const valid = new Set(['k1', 'k2', 'k3', 'k4']);
+  assert.deepEqual(pickKpIds(['k1', 'k1', 'k9', 'k2'], valid), ['k1', 'k2']);
+  assert.deepEqual(pickKpIds(['k1', 'k2', 'k3', 'k4'], valid), ['k1', 'k2', 'k3']);
+  assert.deepEqual(pickKpIds(['k9', 42, null], valid), []);
+  assert.deepEqual(pickKpIds(null, valid), []);
+  assert.deepEqual(pickKpIds(['k1'], ['k1', 'k2']), ['k1']);   // 数组形式的库
+});
+
+test('planRowOf 只映射勾选的维度，未勾选字段不出现', () => {
+  const e = { id: 'q1', tags: ['极限', '  '], collectionPath: '高等数学/极限', kpIds: ['k1', 'kx'], knowledge: '考点' };
+  const only = planRowOf(e, { tags: true }, ['k1']);
+  assert.deepEqual(only, { id: 'q1', tags: ['极限'] });       // 空白标签被过滤，其余维度不写
+  const all = planRowOf(e, { tags: true, collection: true, link: true, knowledge: true }, ['k1']);
+  assert.deepEqual(all, {
+    id: 'q1', tags: ['极限'], collectionPath: '高等数学/极限', kpIds: ['k1'], knowledge: '考点',
+  });
+});
+
+test('planRowOf 对非法入参与缺失字段安全', () => {
+  assert.equal(planRowOf(null, { tags: true }), null);
+  assert.equal(planRowOf('x', { tags: true }), null);
+  assert.deepEqual(planRowOf({ id: 'q1' }, { tags: true, link: true, knowledge: true }), { id: 'q1' });
+  // 模型把 collectionPath 写成数组时应丢弃，不能落成 "[object Object]"
+  assert.deepEqual(planRowOf({ id: 'q1', collectionPath: ['a'] }, { collection: true }), { id: 'q1' });
 });
 
 

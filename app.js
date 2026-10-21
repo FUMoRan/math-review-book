@@ -246,13 +246,13 @@ async function attachImages(item, files) {
 }
 
 const imgStrip = it => (it.images && it.images.length)
-  ? `<div class="imgs">${it.images.map(id => `<img class="thumb" data-img-id="${id}" alt="配图" loading="lazy">`).join('')}</div>`
+  ? `<div class="imgs">${it.images.map(id => `<img class="thumb" data-img-id="${esc(id)}" alt="配图" loading="lazy">`).join('')}</div>`
   : '';
 
 function renderThumbs(box, ids, onDelete) {
   if (!ids.length) { box.innerHTML = '<span class="section-label">还没有图片</span>'; return; }
   box.innerHTML = ids.map(id =>
-    `<div class="thumb-wrap"><img class="thumb" data-img-id="${id}" alt="配图"><button class="thumb-del" data-del="${id}" title="移除">×</button></div>`
+    `<div class="thumb-wrap"><img class="thumb" data-img-id="${esc(id)}" alt="配图"><button class="thumb-del" data-del="${esc(id)}" title="移除">×</button></div>`
   ).join('');
   hydrateImages(box);
   box.querySelectorAll('[data-del]').forEach(b => b.onclick = e => { e.stopPropagation(); onDelete(b.dataset.del); });
@@ -330,7 +330,7 @@ function renderTrash() {
     return `<div class="pvi">
       <div class="section-label" style="margin-bottom:6px">${isK ? '知识点' : '错题'} · 删除于 ${days > 0 ? days + ' 天前' : '今天'}</div>
       <div class="stem">${renderMath(title)}</div>
-      <div class="imgs">${(t.item.images || []).map(id => `<img class="thumb" data-img-id="${id}" alt="配图">`).join('')}</div>
+      <div class="imgs">${(t.item.images || []).map(id => `<img class="thumb" data-img-id="${esc(id)}" alt="配图">`).join('')}</div>
       <div class="row" style="margin-top:8px">
         <button data-restore="${i}">恢复</button>
         <button class="danger" data-purge="${i}">彻底删除</button>
@@ -616,20 +616,37 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// KaTeX 结果缓存：题库里同一公式会反复出现（如多条错题共用「$f'(x)=3x^2-3$」），
+// 每次重渲染都重算一遍是白费。按「模式 + 源串」做 FIFO 缓存，上限 400 条避免无限增长。
+const KATEX_CACHE_MAX = 400;
+const katexCache = new Map();
+function katexHTML(src, display) {
+  const key = (display ? 'D' : 'I') + src;
+  const hit = katexCache.get(key);
+  if (hit !== undefined) return hit;
+  let out;
+  try { out = katex.renderToString(src, { displayMode: !!display, throwOnError: false }); }
+  catch (e) { out = null; }        // 解析失败：交给调用方退回纯文本（不缓存失败结果）
+  if (out === null) return null;
+  if (katexCache.size >= KATEX_CACHE_MAX) katexCache.delete(katexCache.keys().next().value);
+  katexCache.set(key, out);
+  return out;
+}
+
 // 依次识别：$$...$$ / \[...\] 行间公式，$...$ / \(...\) 行内公式，
 // 以及没有任何定界符的裸 LaTeX（如部分 AI 直接输出 y'' = \frac{dp}{dx} …）。
 function renderMath(text) {
   if (!text) return '';
   const parts = text.split(/(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\$[^$\n]+?\$|\\\([\s\S]+?\\\))/g);
   return parts.map(p => {
-    let m;
+    let m, html;
     if ((m = p.match(/^\$\$([\s\S]+?)\$\$$/)) || (m = p.match(/^\\\[([\s\S]+?)\\\]$/))) {
-      try { return katex.renderToString(m[1], { displayMode: true, throwOnError: false }); }
-      catch (e) { return esc(p); }
+      html = katexHTML(m[1], true);
+      return html === null ? esc(p) : html;
     }
     if ((m = p.match(/^\$([^$]+?)\$$/)) || (m = p.match(/^\\\(([\s\S]+?)\\\)$/))) {
-      try { return katex.renderToString(m[1], { throwOnError: false }); }
-      catch (e) { return esc(p); }
+      html = katexHTML(m[1], false);
+      return html === null ? esc(p) : html;
     }
     return renderBareMath(p);
   }).join('');
@@ -639,8 +656,8 @@ function renderMath(text) {
 function renderBareMath(text) {
   return bareMathSegments(text).map(seg => {
     if (seg.t === 'text') return esc(seg.v).replace(/\n/g, '<br>');
-    try { return katex.renderToString(seg.v, { displayMode: !!seg.display, throwOnError: false }); }
-    catch (e) { return esc(seg.v); }
+    const html = katexHTML(seg.v, !!seg.display);
+    return html === null ? esc(seg.v) : html;
   }).join('');
 }
 
@@ -653,12 +670,15 @@ const addBtn = document.getElementById('addBtn');
 const randomBtn = document.getElementById('randomBtn');
 const tabEls = [...document.querySelectorAll('.tab')];
 
-// 搜索文本缓存：按 id + updatedAt 命中，避免每次筛选重新拼接
+// 搜索文本缓存：按 id + updatedAt 命中，避免每次筛选重新拼接。
+// 有上限：反复导入/删除后条目会累积成垃圾，涨到上限就整批清掉（重建很便宜）。
+const HAY_CACHE_MAX = 2000;
 const hayCache = new Map();
 function hayOf(it, kind) {
   const c = hayCache.get(it.id);
   if (c && c.u === it.updatedAt) return c.hay;
   const hay = DEF[kind || active].hay(it).toLowerCase();
+  if (hayCache.size >= HAY_CACHE_MAX) hayCache.clear();
   hayCache.set(it.id, { u: it.updatedAt, hay });
   return hay;
 }
@@ -970,7 +990,7 @@ function paperVisibleQuestions(p) {
 }
 // 答案是否对某题可见：判分模式始终可见；重做模式需整卷开或该题已揭示
 function paperAnswerVisible(q) {
-  return paperState.mode === 'grade' || paperState.showAnswers || paperState.revealed.has(q.id);
+  return MQ.answerVisible(paperState.mode, paperState.showAnswers, paperState.revealed, q.id);
 }
 // 更新某题三态（沿用 papers 数据结构，只改 wrong 字段）
 function setPaperQ(qid, patch) {
@@ -1035,28 +1055,32 @@ function renderPaperNav(p, qs) {
       <span class="badge-note">错 ${pr.wrong}</span>
     </div>
     <div class="paper-nav-grid">
-      ${qs.map(q => `<button class="paper-nav-sq ${q.wrong}${q.id === paperState.curId ? ' cur' : ''}" data-qid="${q.id}" title="第 ${q.no} 题">${q.no}</button>`).join('')}
+      ${qs.map(q => `<button class="paper-nav-sq ${q.wrong}${q.id === paperState.curId ? ' cur' : ''}" data-qid="${esc(q.id)}" title="第 ${q.no} 题">${q.no}</button>`).join('')}
     </div>`;
   nav.querySelectorAll('.paper-nav-sq').forEach(btn => {
     btn.onclick = () => goToPaperQuestion(btn.dataset.qid);
   });
 }
 
+// 题干 + 配图：整卷列表、专注模式、编辑页共用一份结构，避免三处各写一遍走形
+function paperStemHTML(q) {
+  return `<div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>${imgStrip(q)}`;
+}
+
 // 一览整卷：每题显眼的三态切换 + 答案（按模式显隐）
 function renderPaperList(p, qs, host) {
   if (!qs.length) { host.innerHTML = '<div class="empty">没有可显示的题。</div>'; return; }
   host.innerHTML = qs.map(q => `
-    <div class="paper-q" data-qid="${q.id}">
+    <div class="paper-q" data-qid="${esc(q.id)}">
       <div class="paper-q-head">
         <span class="section-label">第 ${q.no} 题</span>
         ${q.linkedQid ? '<span class="badge-note">已在错题本</span>' : ''}
       </div>
-      <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
-      ${imgStrip(q)}
+      ${paperStemHTML(q)}
       ${paperRenderAnswer(q)}
       ${paperRenderSteps(q)}
       <div class="paper-q-acts">
-        <div class="paper-tri" data-qid="${q.id}">
+        <div class="paper-tri" data-qid="${esc(q.id)}">
           <button data-wrong="right" class="${q.wrong === 'right' ? 'on right' : ''}">对</button>
           <button data-wrong="wrong" class="${q.wrong === 'wrong' ? 'on wrong' : ''}">错</button>
           <button data-wrong="unset" class="${q.wrong === 'unset' ? 'on unset' : ''}">未标</button>
@@ -1080,7 +1104,7 @@ function paperRenderAnswer(q) {
   if (paperAnswerVisible(q)) {
     return `<div class="paper-q-answer"><span class="section-label">答案</span><div class="body">${renderMath(q.answer)}</div></div>`;
   }
-  return `<button class="paper-reveal" data-reveal="${q.id}">👁 显示答案</button>`;
+  return `<button class="paper-reveal" data-reveal="${esc(q.id)}">👁 显示答案</button>`;
 }
 
 // 专注模式（一题一屏）：顶部进度条 + 题干/答案 + 大按钮「做对/做错」
@@ -1097,8 +1121,7 @@ function renderPaperFocus(p, qs, host) {
         <span class="spacer"></span>
         <span class="section-label">${idx + 1} / ${qs.length}</span>
       </div>
-      <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
-      ${imgStrip(q)}
+      ${paperStemHTML(q)}
       ${paperRenderAnswer(q)}
       ${paperRenderSteps(q)}
       <div class="paper-focus-acts">
@@ -1140,11 +1163,11 @@ function paperRenderSteps(q) {
   const solving = paperState.solving.has(q.id);
   const btn = solving
     ? '<span class="badge-note">AI 正在解题…</span>'
-    : `<button class="paper-solve" data-solve="${q.id}">${q.steps ? 'AI 重新解' : 'AI 解题'}</button>`;
+    : `<button class="paper-solve" data-solve="${esc(q.id)}">${q.steps ? 'AI 重新解' : 'AI 解题'}</button>`;
   if (!q.steps) return `<div class="paper-q-acts2">${btn}</div>`;
   const body = paperAnswerVisible(q)
     ? `<div class="paper-q-steps"><span class="section-label">解题步骤</span><div class="body">${renderMath(q.steps)}</div></div>`
-    : `<button class="paper-reveal" data-reveal-steps="${q.id}">👁 显示解题步骤</button>`;
+    : `<button class="paper-reveal" data-reveal-steps="${esc(q.id)}">👁 显示解题步骤</button>`;
   return `${body}<div class="paper-q-acts2">${btn}</div>`;
 }
 
@@ -1254,15 +1277,14 @@ function renderPaperEdit() {
     </div>
     <div class="paperedit-qs">
       ${p.questions.map(q => `
-        <div class="paperedit-q" data-qid="${q.id}">
+        <div class="paperedit-q" data-qid="${esc(q.id)}">
           <div class="paper-q-head">
             <span class="section-label">第 ${q.no} 题</span>
             <span class="spacer"></span>
-            <button class="link" data-act="editq" data-qid="${q.id}">编辑</button>
-            <button class="link" data-act="delq" data-qid="${q.id}">删除</button>
+            <button class="link" data-act="editq" data-qid="${esc(q.id)}">编辑</button>
+            <button class="link" data-act="delq" data-qid="${esc(q.id)}">删除</button>
           </div>
-          <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
-          ${imgStrip(q)}
+          ${paperStemHTML(q)}
           ${q.answer ? `<div class="body">${renderMath(q.answer)}</div>` : ''}
         </div>`).join('') || '<div class="empty">这张试卷还没有题目。</div>'}
     </div>`;
@@ -1294,8 +1316,38 @@ function renderPaperEdit() {
 document.getElementById('paperEditBack').onclick = closePaperEdit;
 
 function markPaperQuestion(qid, wrong) {
+  const p = curPaper();
+  if (!p) return;
   setPaperQ(qid, { wrong });
-  renderPaperView();
+  // 「仅看错题」下标记变化可能让该题从列表里消失，只能整块重算
+  if (paperState.wrongOnly) { renderPaperView(); return; }
+  paintPaperMark(p, qid, wrong);
+}
+
+// 只更新受影响的那道题（三态按钮）+ 题号导航/进度，
+// 不再整卷重建 —— 整块重渲染会重算全部 KaTeX，60 题要 80~100ms，点一次明显顿一下
+function paintPaperMark(p, qid, wrong) {
+  const row = paperQRowEl(qid);
+  if (row) {
+    row.querySelectorAll('.paper-tri button').forEach(b => {
+      b.className = b.dataset.wrong === wrong ? 'on ' + wrong : '';
+    });
+  }
+  const focus = document.getElementById('paperFocus');
+  if (focus && paperState.focus) {
+    focus.querySelectorAll('.paper-big').forEach(b => b.classList.toggle('on', b.dataset.wrong === wrong));
+  }
+  renderPaperNav(p, paperVisibleQuestions(p));   // 方块颜色 + 「已标 x / 错 y」数字
+}
+
+// 按题 id 取列表里那道题的 DOM（用遍历比较，避开把 id 拼进 CSS 选择器的转义问题）
+function paperQRowEl(qid) {
+  const host = document.getElementById('paperQs');
+  if (!host) return null;
+  for (const row of host.querySelectorAll('.paper-q')) {
+    if (row.dataset.qid === qid) return row;
+  }
+  return null;
 }
 
 // 点击题号方块 → 更新高亮并滚动定位（专注模式在 Task 6 处理）
@@ -1305,7 +1357,7 @@ function goToPaperQuestion(qid) {
   if (!p) return;
   if (paperState.focus) { renderPaperView(); return; }
   renderPaperNav(p, paperVisibleQuestions(p));
-  const el = document.getElementById('paperQs').querySelector(`.paper-q[data-qid="${qid}"]`);
+  const el = paperQRowEl(qid);
   if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
@@ -1332,7 +1384,7 @@ function jumpToNextUnmarked() {
   if (paperState.wrongOnly) paperState.wrongOnly = false;   // 目标题未标，先取消「仅看错题」以便可见
   paperState.curId = next.id;
   renderPaperView();
-  const el = document.getElementById('paperQs').querySelector(`.paper-q[data-qid="${next.id}"]`);
+  const el = paperQRowEl(next.id);
   if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
@@ -1535,7 +1587,10 @@ function render() {
       listEl.appendChild(g);
     }
   } else {
-    shown.forEach(it => listEl.appendChild(makeCard(it)));
+    // 先拼到 fragment 再一次性插入：逐个 append 到已在文档里的列表会触发 30 次增量布局
+    const frag = document.createDocumentFragment();
+    shown.forEach(it => frag.appendChild(makeCard(it)));
+    listEl.appendChild(frag);
   }
 
   if (pendingAnim) {
@@ -3120,17 +3175,6 @@ function aiPromptText() {
    dims: { tags:bool, collection:bool, link:bool, knowledge:bool } */
 const AI_ORG_BATCH = 30;          // 每次请求最多处理的错题数
 
-// AI 给的 kpId 只保留知识点库里真实存在的，去重、最多 3 个
-function cleanKpIds(list) {
-  const valid = new Set(stores.k.items.map(k => k.id));
-  const out = [];
-  for (const x of (Array.isArray(list) ? list : [])) {
-    if (typeof x === 'string' && valid.has(x) && !out.includes(x)) out.push(x);
-    if (out.length >= 3) break;
-  }
-  return out;
-}
-
 function aiOrgJsonRules(dims) {
   const isKp = dims.target === 'k';
   const fields = [];
@@ -3368,6 +3412,7 @@ async function aiOrganizeRun(items, dims, onProgress) {
   const list = Array.isArray(items) ? items : [];
   const plan = [], failed = [], errors = [];
   const total = list.length;
+  const validKpIds = new Set(stores.k.items.map(k => k.id));
   for (let i = 0; i < total; i += AI_ORG_BATCH) {
     const chunk = list.slice(i, i + AI_ORG_BATCH);
     if (typeof onProgress === 'function') onProgress(Math.min(i + AI_ORG_BATCH, total), total);
@@ -3383,12 +3428,7 @@ async function aiOrganizeRun(items, dims, onProgress) {
     for (const c of chunk) {
       const e = byId.get(c.id);
       if (!e) { failed.push(c.id); continue; }
-      const row = { id: c.id };
-      if (dims.tags && Array.isArray(e.tags)) row.tags = e.tags.filter(t => typeof t === 'string' && t.trim());
-      if (dims.collection && typeof e.collectionPath === 'string') row.collectionPath = e.collectionPath;
-      if (dims.link && Array.isArray(e.kpIds)) row.kpIds = cleanKpIds(e.kpIds);
-      if (dims.knowledge && typeof e.knowledge === 'string') row.knowledge = e.knowledge;
-      plan.push(row);
+      plan.push(MQ.planRowOf(Object.assign({}, e, { id: c.id }), dims, validKpIds));
     }
   }
   if (failed.length) errors.push(`${failed.length} 条未被模型返回（可重试）`);
@@ -3400,17 +3440,13 @@ function aiOrganizeParsePasted(text, items, dims) {
   const arr = parseAiJson(text);
   if (!Array.isArray(arr)) return { plan: [], failed: items.map(i => i.id), errors: ['粘贴内容不是 JSON 数组'], ok: 0 };
   const valid = new Set(items.map(i => i.id));
+  const validKpIds = new Set(stores.k.items.map(k => k.id));
   const plan = [], failed = [];
   const seen = new Set();
   for (const e of arr) {
     if (!e || typeof e.id !== 'string' || !valid.has(e.id) || seen.has(e.id)) continue;
     seen.add(e.id);
-    const row = { id: e.id };
-    if (dims.tags && Array.isArray(e.tags)) row.tags = e.tags.filter(t => typeof t === 'string' && t.trim());
-    if (dims.collection && typeof e.collectionPath === 'string') row.collectionPath = e.collectionPath;
-    if (dims.link && Array.isArray(e.kpIds)) row.kpIds = cleanKpIds(e.kpIds);
-    if (dims.knowledge && typeof e.knowledge === 'string') row.knowledge = e.knowledge;
-    plan.push(row);
+    plan.push(MQ.planRowOf(e, dims, validKpIds));
   }
   for (const it of items) if (!seen.has(it.id)) failed.push(it.id);
   return { plan, failed, errors: failed.length ? [`${failed.length} 条未出现在粘贴内容里`] : [], ok: plan.length };
