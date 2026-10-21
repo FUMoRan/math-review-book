@@ -154,8 +154,9 @@ details .body{margin-top:8px; font-size:var(--body-size); color:var(--text-2); o
   align-items:flex-start; justify-content:center; padding:40px 16px; overflow:auto; z-index:50;
 }
 .modal.open{display:flex;}
-/* 试卷编辑页内的单题编辑弹层需盖在编辑页(#paperEdit, z-index:66)之上 */
+/* 试卷页内的弹层需盖在试卷页(#paperView, z-index:65) / 编辑页(#paperEdit, z-index:66) 之上 */
 #paperQModal{z-index:75;}
+#paperSolveModal{z-index:75;}
 .panel{
   background:var(--card); border-radius:16px; width:100%; max-width:700px; padding:22px;
   box-shadow:var(--shadow-lg);
@@ -482,6 +483,12 @@ img.thumb.broken{opacity:.35;}
 .paperview-foot .primary{flex:1; min-width:160px;}
 .paper-q-answer{margin:8px 0; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--card-2);}
 .paper-q-answer .section-label{display:block; margin-bottom:4px;}
+/* AI 解题：步骤块与按钮 */
+.paper-q-steps{margin:8px 0; padding:10px 12px; border:1px solid var(--line); border-left:3px solid var(--brand); border-radius:10px; background:var(--card-2);}
+.paper-q-steps .section-label{display:block; margin-bottom:4px;}
+.paper-q-acts2{display:flex; align-items:center; gap:8px; margin:6px 0 2px;}
+.paper-solve{border:1px dashed var(--line); background:transparent; color:var(--brand); font-size:12px; padding:5px 10px; border-radius:8px; font-weight:600;}
+.paper-solve:hover{background:var(--card-2);}
 .paper-reveal{
   display:block; width:100%; margin:8px 0; padding:10px;
   border:1px dashed var(--line); border-radius:10px; background:var(--card-2);

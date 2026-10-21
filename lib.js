@@ -146,6 +146,7 @@
       tags: Array.isArray(p.tags) ? p.tags.filter(t => typeof t === 'string' && t.trim()) : [],
       images: Array.isArray(p.images) ? p.images.filter(s => typeof s === 'string' && s) : [],
       linkedQid: typeof p.linkedQid === 'string' && p.linkedQid ? p.linkedQid : null,
+      steps: typeof p.steps === 'string' ? p.steps : '',
     };
   }
 
@@ -269,6 +270,28 @@
         updatedAt: t,
         fromPaper: { paperId: paper.id, questionId: q.id },
       }));
+  }
+
+  /* ---------- AI 解题 ----------
+     模型返回的是讲解文本而非 JSON，只需去掉 ``` 围栏与首尾空白。 */
+  function cleanAiText(text) {
+    let s = String(text == null ? '' : text).trim();
+    const m = s.match(/^```[a-zA-Z]*\s*\n?([\s\S]*?)\n?```$/);
+    if (m) s = m[1].trim();
+    return s;
+  }
+
+  // 把某题的解题步骤写回题目数组（纯函数，不改原对象）
+  function setPaperSteps(questions, qid, steps) {
+    let changed = false;
+    const out = (Array.isArray(questions) ? questions : []).map(q => {
+      if (!q || q.id !== qid) return q;
+      const next = cleanAiText(steps);
+      if (next === q.steps) return q;
+      changed = true;
+      return Object.assign({}, q, { steps: next });
+    });
+    return { questions: out, changed };
   }
 
   /* 从 fromId 之后向后找第一个 wrong==='unset' 的题；到末尾回绕到开头；
@@ -1058,6 +1081,7 @@
     normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers,
     parseBlockGeneric, parseText, parsePaper,
     paperWrongToQuestion,
+    cleanAiText, setPaperSteps,
     nextUnmarked,
     paperProgress,
     sortItems,

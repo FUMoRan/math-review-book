@@ -11,6 +11,7 @@ const {
   normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
   normalizeSrs, scheduleSrs, isDue, dueLabel,
   normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers, paperWrongToQuestion, nextUnmarked,
+  cleanAiText, setPaperSteps,
   paperProgress,
   sortItems, materializeOrder, reorderItems,
   parseText, parsePaper, parseSearch,
@@ -206,6 +207,38 @@ test('normalizePaperQuestion 保留合法配图 id，过滤空值', () => {
   const q = normalizePaperQuestion({ stem: 'x', images: ['a', '', null, 0, 'b'] });
   assert.deepEqual(q.images, ['a', 'b']);
   assert.deepEqual(normalizePaperQuestion({}).images, []);
+});
+
+test('normalizePaperQuestion 保留解题步骤，非字符串归空', () => {
+  assert.equal(normalizePaperQuestion({ steps: '第 1 步' }).steps, '第 1 步');
+  assert.equal(normalizePaperQuestion({ steps: 123 }).steps, '');
+  assert.equal(normalizePaperQuestion({}).steps, '');
+});
+
+test('cleanAiText 去掉围栏与首尾空白', () => {
+  assert.equal(cleanAiText('  \n第 1 步  \n'), '第 1 步');
+  assert.equal(cleanAiText('```\n第 1 步\n```'), '第 1 步');
+  assert.equal(cleanAiText('```markdown\n第 1 步\n```'), '第 1 步');
+  assert.equal(cleanAiText('中间```不算'), '中间```不算');
+  assert.equal(cleanAiText(null), '');
+});
+
+test('setPaperSteps 只改对应题且不改原数组', () => {
+  const qs = [
+    { id: 'a', stem: 'x', steps: '' },
+    { id: 'b', stem: 'y', steps: '' },
+  ];
+  const r = setPaperSteps(qs, 'b', '```\n第 1 步\n```');
+  assert.equal(r.changed, true);
+  assert.equal(r.questions[0].steps, '');
+  assert.equal(r.questions[1].steps, '第 1 步');
+  // 原对象不被修改
+  assert.equal(qs[1].steps, '');
+  // 内容相同视为未变
+  assert.equal(setPaperSteps(r.questions, 'b', '第 1 步').changed, false);
+  // 未知 id 不产生改动
+  assert.equal(setPaperSteps(qs, 'zzz', 'x').changed, false);
+  assert.deepEqual(setPaperSteps(null, 'a', 'x').questions, []);
 });
 
 test('normalizePaper 补全试卷字段并逐题归一化', () => {

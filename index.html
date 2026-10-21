@@ -202,6 +202,26 @@
   <div class="paperview-foot" id="paperFoot"></div>
 </div>
 
+<!-- AI 解题免 Key 弹层：复制提示词 → 粘回输出 -->
+<div class="modal" id="paperSolveModal">
+  <div class="panel wide">
+    <h2 id="psTitle">AI 解题（免 Key）</h2>
+    <p class="hint">没有配置 AI Key 时：先复制下面的提示词到任意 AI，再把它的输出粘回来。</p>
+    <label class="section-label">提示词</label>
+    <textarea id="psPrompt" readonly></textarea>
+    <div class="row">
+      <button class="ghost" id="psCopy">复制提示词</button>
+      <span class="badge-note" id="psMsg"></span>
+    </div>
+    <label class="section-label">把 AI 的输出粘到这里</label>
+    <textarea id="psPaste" placeholder="粘贴解题步骤"></textarea>
+    <div class="row">
+      <button class="primary" id="psApply">写入本题</button>
+      <button class="ghost" id="psCancel">取消</button>
+    </div>
+  </div>
+</div>
+
 <!-- 试卷编辑页（从卡片「编辑」进入；做题/判分界面不提供改题能力） -->
 <div class="paperedit" id="paperEdit">
   <div class="paperedit-bar">

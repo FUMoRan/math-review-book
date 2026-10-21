@@ -18,6 +18,7 @@ const {
   parseText, parseSearch,
   normalizeQuestion, normalizeKp, scheduleSrs, isDue, dueLabel, DAY,
   normalizePaper, parsePaper, paperWrongToQuestion, mergeSeedPapers,
+  cleanAiText, setPaperSteps,
   nextUnmarked, paperProgress,
   sortItems, materializeOrder, reorderItems,
   settleCollections, collectionSubtreeIds, flattenCollections, collectionChildren,
@@ -874,6 +875,7 @@ const paperState = {
   showAnswers: false,   // 重做模式下整卷显示答案
   revealed: new Set(),  // 重做模式下逐题手动揭示过的题 id
   curId: null,          // 当前题 id（导航高亮 / 专注当前题）
+  solving: new Set(),   // 正在让 AI 解题的题 id
 };
 
 function paperOf(id) { return stores.p.items.find(p => p.id === id); }
@@ -933,6 +935,7 @@ function openPaper(id) {
   paperState.showAnswers = false;
   paperState.revealed = new Set();
   paperState.curId = null;
+  paperState.solving = new Set();
   renderPaperView();
   document.getElementById('paperView').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -1051,6 +1054,7 @@ function renderPaperList(p, qs, host) {
       <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
       ${imgStrip(q)}
       ${paperRenderAnswer(q)}
+      ${paperRenderSteps(q)}
       <div class="paper-q-acts">
         <div class="paper-tri" data-qid="${q.id}">
           <button data-wrong="right" class="${q.wrong === 'right' ? 'on right' : ''}">对</button>
@@ -1067,6 +1071,7 @@ function renderPaperList(p, qs, host) {
   host.querySelectorAll('.paper-reveal').forEach(b => {
     b.onclick = () => { paperState.revealed.add(b.dataset.reveal); renderPaperView(); };
   });
+  bindPaperSolve(host);
 }
 
 // 单题答案块：可见则渲染；重做模式未揭示则给「显示答案」按钮
@@ -1095,6 +1100,7 @@ function renderPaperFocus(p, qs, host) {
       <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
       ${imgStrip(q)}
       ${paperRenderAnswer(q)}
+      ${paperRenderSteps(q)}
       <div class="paper-focus-acts">
         <button class="paper-big right ${q.wrong === 'right' ? 'on' : ''}" data-wrong="right">做对</button>
         <button class="paper-big wrong ${q.wrong === 'wrong' ? 'on' : ''}" data-wrong="wrong">做错</button>
@@ -1106,7 +1112,119 @@ function renderPaperFocus(p, qs, host) {
   host.querySelectorAll('.paper-reveal').forEach(b => {
     b.onclick = () => { paperState.revealed.add(b.dataset.reveal); renderPaperView(); };
   });
+  bindPaperSolve(host);
 }
+
+/* ===================== AI 解题（逐题，结果存在题目里） ===================== */
+const PAPER_SOLVE_SYS = [
+  '你是数学解题老师。下面给你一道题的原文（可能含 $LaTeX$）。',
+  '请写出**关键步骤**，不要长篇推导：',
+  '1. 先一行写「答案：……」，只写最终结果；',
+  '2. 再分 3~6 步写关键步骤，每步一行，用「1. 」「2. 」编号，写清用到的方法与关键式子；',
+  '3. 最后一行写「易错：……」，一句话指出最容易错的地方。',
+  '公式用 $...$（行内）或 $$...$$（独立成行），不要输出 ``` 围栏，不要写与本题无关的内容。',
+].join('\n');
+
+function paperSolveAsk(q) {
+  return [
+    `题目（第 ${q.no} 题）：`,
+    q.stem || '（题干为空）',
+    '',
+    q.answer ? `参考答案（可能不完整）：${q.answer}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+// 解题步骤块：已有则显示（按答案显隐规则），否则给按钮
+function paperRenderSteps(q) {
+  const solving = paperState.solving.has(q.id);
+  const btn = solving
+    ? '<span class="badge-note">AI 正在解题…</span>'
+    : `<button class="paper-solve" data-solve="${q.id}">${q.steps ? 'AI 重新解' : 'AI 解题'}</button>`;
+  if (!q.steps) return `<div class="paper-q-acts2">${btn}</div>`;
+  const body = paperAnswerVisible(q)
+    ? `<div class="paper-q-steps"><span class="section-label">解题步骤</span><div class="body">${renderMath(q.steps)}</div></div>`
+    : `<button class="paper-reveal" data-reveal-steps="${q.id}">👁 显示解题步骤</button>`;
+  return `${body}<div class="paper-q-acts2">${btn}</div>`;
+}
+
+function bindPaperSolve(host) {
+  host.querySelectorAll('[data-solve]').forEach(b => {
+    b.onclick = () => solvePaperQuestion(b.dataset.solve);
+  });
+  host.querySelectorAll('[data-reveal-steps]').forEach(b => {
+    b.onclick = () => { paperState.revealed.add(b.dataset.revealSteps); renderPaperView(); };
+  });
+}
+
+// 收起/展示步骤也要受「显示答案」控制
+
+async function solvePaperQuestion(qid) {
+  const p = curPaper();
+  const q = p && p.questions.find(x => x.id === qid);
+  if (!q) return;
+  if (!String(q.stem || '').trim()) { paperToast('这道题没有题干，先补题干再解题。'); return; }
+  if (paperState.solving.has(qid)) return;
+  if (!aiReady()) { openPaperSolveNoKey(q); return; }
+  paperState.solving.add(qid);
+  renderPaperView();
+  showAiBusy(`AI 正在解第 ${q.no} 题…`);
+  try {
+    const text = await aiCall({ system: PAPER_SOLVE_SYS, ask: paperSolveAsk(q) });
+    const r = setPaperSteps(p.questions, qid, text);
+    if (r.changed) { p.questions = r.questions; p.updatedAt = Date.now(); await savePapers(); }
+    hideAiBusy();
+    paperState.solving.delete(qid);
+    renderPaperView();
+    if (!cleanAiText(text)) paperToast('AI 没有返回内容。');
+  } catch (e) {
+    hideAiBusy();
+    paperState.solving.delete(qid);
+    renderPaperView();
+    paperToast((e && e.name === 'AbortError') ? '已取消。' : '解题失败：' + ((e && e.message) || e));
+  }
+}
+
+/* ---------- 免 Key：复制提示词 → 粘回 ---------- */
+let solveNoKeyQ = null;
+function openPaperSolveNoKey(q) {
+  solveNoKeyQ = q;
+  const modal = document.getElementById('paperSolveModal');
+  document.getElementById('psTitle').textContent = `AI 解题（免 Key）· 第 ${q.no} 题`;
+  document.getElementById('psPrompt').value = [PAPER_SOLVE_SYS, '', paperSolveAsk(q)].join('\n');
+  document.getElementById('psPaste').value = '';
+  document.getElementById('psMsg').textContent = '';
+  modal.classList.add('open');
+}
+function closePaperSolveNoKey() {
+  document.getElementById('paperSolveModal').classList.remove('open');
+  solveNoKeyQ = null;
+}
+function bindPaperSolveNoKey() {
+  document.getElementById('psCopy').onclick = async () => {
+    const ok = await copyText(document.getElementById('psPrompt').value);
+    document.getElementById('psMsg').textContent = ok ? '已复制，去任意 AI 粘贴即可。' : '复制失败，请手动选中复制。';
+  };
+  document.getElementById('psCancel').onclick = closePaperSolveNoKey;
+  document.getElementById('psApply').onclick = async () => {
+    const q = solveNoKeyQ;
+    const p = curPaper();
+    if (!q || !p) return;
+    const text = cleanAiText(document.getElementById('psPaste').value);
+    if (!text) { document.getElementById('psMsg').textContent = '先粘贴 AI 的输出。'; return; }
+    const r = setPaperSteps(p.questions, q.id, text);
+    p.questions = r.questions;
+    p.updatedAt = Date.now();
+    await savePapers();
+    closePaperSolveNoKey();
+    renderPaperView();
+    paperToast(`已写入第 ${q.no} 题的解题步骤。`);
+  };
+  document.getElementById('paperSolveModal').onclick = e => {
+    if (e.target.id === 'paperSolveModal') closePaperSolveNoKey();
+  };
+}
+bindPaperSolveNoKey();
+
 
 /* ===================== 试卷编辑页（独立入口，可改题）===================== */
 const paperEditState = { paperId: null };
