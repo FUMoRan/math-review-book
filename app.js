@@ -24,6 +24,7 @@ const {
   collectionPath, addCollection, renameCollection, canMoveCollection, moveCollection,
   deleteCollection, collectionCounts, sanitizeItemCollections,
   parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
+  kpsMissingContent, fillKpContent,
   clusterBySimilarity, groupStats,
   bareMathSegments,
 } = MQ;
@@ -1708,6 +1709,14 @@ function syncHeader() {
     const dueN = curItems().filter(it => isDue(it)).length;
     db.textContent = dueN ? `🕒 待复习 ${dueN}` : '🕒 待复习';
   }
+  // 知识点库：在按钮上直接显示「缺讲解」的数量，便于发现
+  if (active === 'k') {
+    const ob = document.getElementById('aiOrgBtn');
+    if (ob) {
+      const n = kpsMissingContent(stores.k.items).length;
+      ob.textContent = n ? `🧠 补讲解 ${n}` : '🧠 补讲解';
+    }
+  }
 }
 
 function switchView(v) {
@@ -1723,6 +1732,13 @@ function switchView(v) {
     if (el) el.style.display = isPaper ? 'none' : '';
   });
   addBtn.textContent = isPaper ? '+ 新增试卷' : DEF[v].addLabel;
+  // 同一个按钮在两个库承担不同职责：错题=批量整理，知识点=补讲解
+  const orgBtn = document.getElementById('aiOrgBtn');
+  if (orgBtn) {
+    const isK = v === 'k';
+    orgBtn.textContent = isK ? '🧠 补讲解' : '🧠 AI 整理';
+    orgBtn.title = isK ? '让 AI 为缺少讲解的知识点补写讲解' : '让 AI 批量给错题打标签 / 归档 / 写考点';
+  }
   // 试卷视图不涉及合集，侧栏与入口一并隐藏
   if (colTreeEl) colTreeEl.style.display = isPaper ? 'none' : '';
   const colTgl = document.getElementById('colToggle');
@@ -3531,7 +3547,221 @@ orgEl('aiOrgPasteGo').onclick = () => {
   orgShowStep('aiOrgReviewWrap');
 };
 
-document.getElementById('aiOrgBtn').onclick = openAiOrg;
+/* ===================== AI 补讲解（知识点库） =====================
+   只扫描 content 为空的知识点，逐条生成、可审阅、可撤销；
+   写回时再次校验「仅补空」，不会覆盖用户已写的讲解。 */
+const kpFillModal = orgEl('kpFillModal');
+let kpFillState = null;          // { items, selected:Set, rows, undo }
+
+function aiKpExplainPrompt() {
+  return [
+    '你是数学知识点讲解助手。请只为给定的那一个知识点写讲解。',
+    '要求：',
+    '1. 只输出讲解正文，不要输出知识点名称、标题、前言、总结或任何解释；',
+    '2. 不要使用 Markdown：不要 **加粗**、# 标题、- 或 * 列表、| 表格；',
+    '3. 公式一律使用 LaTeX 且必须带定界符：行内公式用 $...$，独立公式用 $$...$$；矩阵、方程组、分段函数等会跨行的公式必须用 $$...$$，$...$ 不能跨行；',
+    '4. 绝不允许裸公式：出现 \\frac、\\sqrt、\\int、\\sum、\\lim、^、_、{ 这类数学写法时，必须包在 $...$ 或 $$...$$ 里；',
+    '5. 按这个顺序讲透：定义 → 为什么成立 / 几何或代数含义 → 适用条件 → 标准用法（含一个逐步示范）→ 易错点；',
+    '6. 每一步单独成行，行首用「第 1 步：」「第 2 步：」这样的前缀；',
+    '7. 只讲与这个知识点直接相关的内容，不要扩展成整章；信息不足时按最常见的数学含义讲解，不要反问。',
+  ].join('\n');
+}
+
+function aiKpExplainAsk(it) {
+  const tags = (it.tags || []).filter(Boolean);
+  return `知识点：${it.title || '（未命名）'}` +
+    (tags.length ? `\n标签：${tags.join('、')}` : '') +
+    '\n请按上述要求写讲解。';
+}
+
+// 清掉模型常见的包裹：代码围栏、【讲解】前缀、重复的标题行
+function kpFillClean(text, title) {
+  let s = String(text == null ? '' : text).trim();
+  s = s.replace(/^```[a-zA-Z]*\s*/, '').replace(/\s*```$/, '').trim();
+  s = s.replace(/^【讲解】\s*/, '').replace(/^(讲解|解析)\s*[:：]\s*/, '');
+  s = s.replace(/^知识点\s*[:：].*\n+/, '');
+  const t = String(title || '').trim();
+  if (t) {
+    const lines = s.split('\n');
+    if (lines[0] && lines[0].trim() === t) s = lines.slice(1).join('\n').trim();
+  }
+  return s;
+}
+
+function openKpFill() {
+  if (active !== 'k') return;
+  const missing = kpsMissingContent(stores.k.items);
+  if (!missing.length) { alert('所有知识点都已有讲解，没有需要补的。'); return; }
+  if (!aiReady()) {
+    alert('还没有配置 AI。\n请在「设置 → AI 识题」里填好 Base URL、模型名与 API Key 后再试。');
+    return;
+  }
+  kpFillState = { items: missing, selected: new Set(missing.map(it => it.id)), rows: [], undo: null };
+  renderKpFillPick();
+  orgEl('kpFillReviewWrap').style.display = 'none';
+  orgEl('kpFillSetup').style.display = '';
+  orgEl('kpFillUndo').style.display = 'none';
+  orgEl('kpFillReviewMsg').textContent = '';
+  kpFillModal.classList.add('open');
+}
+
+function renderKpFillPick() {
+  const st = kpFillState;
+  const box = orgEl('kpFillPick');
+  orgEl('kpFillCount').textContent = `共 ${st.items.length} 个知识点缺少讲解，默认全选；可只补其中一部分。`;
+  box.innerHTML = st.items.map((it, i) => {
+    const tags = (it.tags || []).filter(Boolean);
+    return `<div class="aio-row">
+      <label class="aio-skip"><input type="checkbox" data-kpick="${i}"${st.selected.has(it.id) ? ' checked' : ''}></label>
+      <div class="aio-stem">${esc(it.title || '（未命名）')}${tags.length ? ` <span class="aio-group-h">#${esc(tags.join(' #'))}</span>` : ''}</div>
+    </div>`;
+  }).join('');
+  box.querySelectorAll('[data-kpick]').forEach(cb => {
+    cb.onchange = () => {
+      const it = st.items[+cb.dataset.kpick];
+      if (!it) return;
+      cb.checked ? st.selected.add(it.id) : st.selected.delete(it.id);
+    };
+  });
+}
+
+function renderKpFillReview() {
+  const st = kpFillState;
+  const box = orgEl('kpFillReview');
+  box.innerHTML = st.rows.map((row, i) => `<div class="aio-row">
+    <label class="aio-skip"><input type="checkbox" data-krow="${i}"${row.skip ? ' checked' : ''}></label>
+    <div class="aio-stem">${esc(row.title || '（未命名）')}</div>
+    <div class="aio-fields"><textarea class="aio-know" rows="6" data-ktext="${i}">${esc(row.content)}</textarea></div>
+  </div>`).join('');
+  box.querySelectorAll('[data-krow]').forEach(cb => {
+    cb.onchange = () => { const row = st.rows[+cb.dataset.krow]; if (row) row.skip = cb.checked; };
+  });
+  box.querySelectorAll('[data-ktext]').forEach(ta => {
+    ta.onchange = () => { const row = st.rows[+ta.dataset.ktext]; if (row) row.content = ta.value; };
+  });
+}
+
+function kpFillSyncRows() {
+  const st = kpFillState;
+  if (!st) return;
+  orgEl('kpFillReview').querySelectorAll('[data-krow]').forEach(cb => {
+    const row = st.rows[+cb.dataset.krow];
+    if (row) row.skip = cb.checked;
+  });
+  orgEl('kpFillReview').querySelectorAll('[data-ktext]').forEach(ta => {
+    const row = st.rows[+ta.dataset.ktext];
+    if (row) row.content = ta.value;
+  });
+}
+
+orgEl('kpFillAll').onclick = () => {
+  if (!kpFillState) return;
+  kpFillState.items.forEach(it => kpFillState.selected.add(it.id));
+  renderKpFillPick();
+};
+orgEl('kpFillNone').onclick = () => {
+  if (!kpFillState) return;
+  kpFillState.selected.clear();
+  renderKpFillPick();
+};
+
+orgEl('kpFillRun').onclick = async () => {
+  const st = kpFillState;
+  if (!st) return;
+  const list = st.items.filter(it => st.selected.has(it.id));
+  if (!list.length) { alert('没有选中任何知识点。'); return; }
+  const btn = orgEl('kpFillRun');
+  btn.disabled = true;
+  showAiBusy(`AI 正在补讲解 0/${list.length}…`);
+  const rows = [], errors = [];
+  let canceled = false;
+  try {
+    for (let i = 0; i < list.length; i++) {
+      const it = list[i];
+      showAiBusy(`AI 正在补讲解 ${i + 1}/${list.length}…`);
+      try {
+        const text = await aiCall({ system: aiKpExplainPrompt(), ask: aiKpExplainAsk(it) });
+        const content = kpFillClean(text, it.title);
+        if (content) rows.push({ id: it.id, title: it.title, content, skip: false });
+        else errors.push(`${it.title || '未命名'}：模型没有返回内容`);
+      } catch (e) {
+        if (e && e.name === 'AbortError') { canceled = true; break; }
+        errors.push(`${it.title || '未命名'}：${(e && e.message) || e}`);
+      }
+    }
+  } finally {
+    hideAiBusy();
+    btn.disabled = false;
+  }
+  if (!rows.length) {
+    alert(canceled ? '已取消，没有生成任何讲解。' : ('补讲解失败：' + (errors.join('；') || '模型没有返回内容。')));
+    return;
+  }
+  st.rows = rows;
+  renderKpFillReview();
+  orgEl('kpFillReviewMsg').textContent =
+    `生成 ${rows.length} 条` +
+    (canceled ? '（已取消，保留已生成部分）' : '') +
+    (errors.length ? `；${errors.length} 条失败：${errors.slice(0, 3).join('；')}` : '') +
+    '。可逐条修改或跳过，确认后写入。';
+  orgEl('kpFillSetup').style.display = 'none';
+  orgEl('kpFillReviewWrap').style.display = '';
+};
+
+orgEl('kpFillApplyAll').onclick = () => {
+  if (!kpFillState) return;
+  kpFillState.rows.forEach(r => { r.skip = false; });
+  renderKpFillReview();
+};
+orgEl('kpFillApplyNone').onclick = () => {
+  if (!kpFillState) return;
+  kpFillState.rows.forEach(r => { r.skip = true; });
+  renderKpFillReview();
+};
+
+orgEl('kpFillApply').onclick = async () => {
+  const st = kpFillState;
+  if (!st) return;
+  kpFillSyncRows();
+  const plan = st.rows
+    .filter(r => !r.skip && String(r.content || '').trim())
+    .map(r => ({ id: r.id, content: r.content }));
+  if (!plan.length) { alert('没有选中任何讲解。'); return; }
+  const before = new Map(stores.k.items.map(it => [it.id, it.content]));
+  const r = fillKpContent(stores.k.items, plan);
+  if (!r.changed) { alert('这些知识点已经有讲解了，没有写入。'); return; }
+  st.undo = r.items
+    .filter(it => before.get(it.id) !== it.content)
+    .map(it => ({ id: it.id, content: before.get(it.id) || '' }));
+  stores.k.items = r.items;
+  saveStore(stores.k.key, stores.k.items);
+  render();
+  orgEl('kpFillUndo').style.display = '';
+  orgEl('kpFillReviewMsg').textContent = `已写入 ${r.changed} 条讲解。`;
+};
+
+orgEl('kpFillUndo').onclick = () => {
+  const st = kpFillState;
+  if (!st || !st.undo) return;
+  const byId = new Map(st.undo.map(x => [x.id, x.content]));
+  stores.k.items = stores.k.items.map(it =>
+    byId.has(it.id) ? Object.assign({}, it, { content: byId.get(it.id), updatedAt: Date.now() }) : it);
+  saveStore(stores.k.key, stores.k.items);
+  st.undo = null;
+  orgEl('kpFillUndo').style.display = 'none';
+  orgEl('kpFillReviewMsg').textContent = '已撤销上次写入。';
+  render();
+};
+
+function closeKpFill() { kpFillModal.classList.remove('open'); }
+orgEl('kpFillCancel').onclick = closeKpFill;
+orgEl('kpFillClose').onclick = closeKpFill;
+kpFillModal.onclick = e => { if (e.target === kpFillModal) closeKpFill(); };
+
+document.getElementById('aiOrgBtn').onclick = () => {
+  if (active === 'k') openKpFill();
+  else openAiOrg();
+};
 
 /* ===================== 整理工具（相似题 / 薄弱诊断） ===================== */
 const toolsModal = orgEl('aiToolsModal');

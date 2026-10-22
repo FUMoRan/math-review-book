@@ -350,6 +350,41 @@
   </div>
 </div>
 
+<!-- AI 补讲解：只处理知识点库中「讲解为空」的条目 -->
+<div class="modal" id="kpFillModal">
+  <div class="panel wide">
+    <h2>AI 补讲解</h2>
+    <p class="hint">只处理<b>讲解为空</b>的知识点，AI 只负责起草，确认后才写入，已有讲解不会被覆盖。使用时会联网，知识点名称与标签会发送到你配置的服务商。</p>
+
+    <!-- 步骤 1：选择要补的知识点 -->
+    <div id="kpFillSetup">
+      <p class="hint" id="kpFillCount"></p>
+      <div class="ai-org-table" id="kpFillPick"></div>
+      <div class="row">
+        <button class="primary" id="kpFillRun">开始生成</button>
+        <button class="ghost" id="kpFillAll">全选</button>
+        <button class="ghost" id="kpFillNone">全不选</button>
+        <span class="spacer"></span>
+        <button class="ghost" id="kpFillCancel">取消</button>
+      </div>
+    </div>
+
+    <!-- 步骤 2：审阅生成结果 -->
+    <div id="kpFillReviewWrap" style="display:none">
+      <p class="hint" id="kpFillReviewMsg"></p>
+      <div class="ai-org-table" id="kpFillReview"></div>
+      <div class="row">
+        <button class="primary" id="kpFillApply">应用并保存</button>
+        <button class="ghost" id="kpFillApplyAll">全选</button>
+        <button class="ghost" id="kpFillApplyNone">全不选</button>
+        <span class="spacer"></span>
+        <button class="ghost" id="kpFillUndo" style="display:none">撤销上次应用</button>
+        <button class="ghost" id="kpFillClose">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 整理工具：相似题检测 / 薄弱诊断 -->
 <div class="modal" id="aiToolsModal">
   <div class="panel wide">

@@ -457,6 +457,33 @@
     return { items: out, cols, changed };
   }
 
+  /* ---------- 知识点讲解补全（纯函数） ----------
+     只补 content 为空的条目，已有讲解一律不覆盖。
+     plan: [{ id, content }] → { items, changed } */
+  function kpsMissingContent(items) {
+    return (Array.isArray(items) ? items : [])
+      .filter(it => it && typeof it === 'object' && !String(it.content || '').trim());
+  }
+
+  function fillKpContent(items, plan, now) {
+    const t = now || Date.now();
+    const byId = new Map();
+    for (const p of (Array.isArray(plan) ? plan : [])) {
+      if (!p || typeof p.id !== 'string' || typeof p.content !== 'string') continue;
+      const content = p.content.trim();
+      if (content) byId.set(p.id, content);
+    }
+    let changed = 0;
+    const out = (Array.isArray(items) ? items : []).map(it => {
+      if (!it) return it;
+      const content = byId.get(it.id);
+      if (!content || String(it.content || '').trim()) return it;
+      changed++;
+      return Object.assign({}, it, { content, updatedAt: t });
+    });
+    return { items: out, changed };
+  }
+
   /* ---------- 期3：相似题聚类（纯本地，零 API 成本） ----------
      贪心聚类：按顺序取未归组的项作「种子」，把其后与种子相似度 >= threshold 的项并入同组；
      只有成员数 >= 2 的组会被返回。textOf 缺省取 stem。 */
@@ -838,6 +865,7 @@
     filterItemsByCollection, collectionCounts, sanitizeItemCollections,
     parseAiJson, normTag, mergeSuggestTags,
     resolveCollectionPath, applyOrganizePlan,
+    kpsMissingContent, fillKpContent,
     clusterBySimilarity, groupStats,
     parseSearch,
     bareMathSegments,

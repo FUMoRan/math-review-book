@@ -19,6 +19,7 @@ const {
   canMoveCollection, moveCollection, deleteCollection,
   filterItemsByCollection, collectionCounts, sanitizeItemCollections,
   parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
+  kpsMissingContent, fillKpContent,
   clusterBySimilarity, groupStats,
   bareMathSegments,
 } = MQ;
@@ -1008,6 +1009,53 @@ test('applyOrganizePlan 按 matchKp 把考点挂到知识点条目上', () => {
   const r = applyOrganizePlan(items, [{ id: 'q1', kpTitle: '中值定理' }], { cols: [], matchKp: t => (t === '中值定理' ? 'k9' : null) });
   assert.equal(r.items[0].kpId, 'k9');
   assert.equal(r.changed, 1);
+});
+
+/* ===================== 知识点讲解补全 ===================== */
+test('kpsMissingContent 只挑出讲解为空的知识点', () => {
+  const list = [
+    { id: 'a', title: '导数定义', content: '' },
+    { id: 'b', title: '中值定理', content: '已有讲解' },
+    { id: 'c', title: '极限', content: '   ' },
+    { id: 'd', title: '行列式' },
+    null,
+  ];
+  assert.deepEqual(kpsMissingContent(list).map(x => x.id), ['a', 'c', 'd']);
+  assert.deepEqual(kpsMissingContent(null), []);
+});
+
+test('fillKpContent 只补空讲解，已有内容不被覆盖', () => {
+  const now = 12345;
+  const list = [
+    normalizeKp({ id: 'a', title: '导数定义', content: '' }),
+    normalizeKp({ id: 'b', title: '中值定理', content: '原有讲解' }),
+    normalizeKp({ id: 'c', title: '极限' }),
+  ];
+  const r = fillKpContent(list, [
+    { id: 'a', content: '  第 1 步：定义 $f\'(x)$。  ' },
+    { id: 'b', content: 'AI 新讲解' },
+    { id: 'c', content: '第 1 步：极限的定义。' },
+  ], now);
+  assert.equal(r.changed, 2);
+  assert.equal(r.items[0].content, '第 1 步：定义 $f\'(x)$。');
+  assert.equal(r.items[0].updatedAt, now);
+  assert.equal(r.items[1].content, '原有讲解');
+  assert.equal(r.items[2].content, '第 1 步：极限的定义。');
+  // 纯函数：不改动入参
+  assert.equal(list[0].content, '');
+  assert.equal(list[0].updatedAt !== now, true);
+});
+
+test('fillKpContent 忽略未知 id、空内容与重复项', () => {
+  const list = [normalizeKp({ id: 'a', title: '极限' })];
+  const r = fillKpContent(list, [
+    { id: 'x', content: '无关内容' },
+    { id: 'a', content: '   ' },
+    { id: 'a', content: '第一份' },
+    { id: 'a', content: '第二份' },
+  ]);
+  assert.equal(r.changed, 1);
+  assert.equal(r.items[0].content, '第二份');
 });
 
 /* ===================== 期3：相似聚类与分组统计 ===================== */
