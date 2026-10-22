@@ -43,9 +43,10 @@
   <button id="importBtn2">导入</button>
   <button class="primary" id="addBtn">+ 新增错题</button>
   <button id="aiBtn" title="上传题目图片，让 AI 识别并按格式整理">📷 AI 识题</button>
-  <button id="aiOrgBtn" title="让 AI 批量给错题打标签 / 归档 / 写考点">🧠 AI 整理</button>
+  <button id="aiOrgBtn" title="让 AI 批量给错题或知识点打标签 / 归档（错题还能挂知识点、写考点）">🧠 AI 整理</button>
   <button id="colToggle" title="合集">☰ 合集</button>
   <button id="aiToolsBtn" title="相似题检测 / 薄弱诊断">🔍 整理工具</button>
+  <button id="aiKpBtn" title="让 AI 从错题整理出知识点（考点体系 + 挂载）">🧠 整理知识点</button>
   <button id="settingsBtn" title="设置" aria-label="设置">⚙️ 设置</button>
   <input type="file" id="fileInput" accept="application/json,.json" hidden>
   <input type="file" id="aiImgInput" accept="image/*" hidden>
@@ -201,6 +202,26 @@
   <div class="paperview-foot" id="paperFoot"></div>
 </div>
 
+<!-- AI 解题免 Key 弹层：复制提示词 → 粘回输出 -->
+<div class="modal" id="paperSolveModal">
+  <div class="panel wide">
+    <h2 id="psTitle">AI 解题（免 Key）</h2>
+    <p class="hint">没有配置 AI Key 时：先复制下面的提示词到任意 AI，再把它的输出粘回来。</p>
+    <label class="section-label">提示词</label>
+    <textarea id="psPrompt" readonly></textarea>
+    <div class="row">
+      <button class="ghost" id="psCopy">复制提示词</button>
+      <span class="badge-note" id="psMsg"></span>
+    </div>
+    <label class="section-label">把 AI 的输出粘到这里</label>
+    <textarea id="psPaste" placeholder="粘贴解题步骤"></textarea>
+    <div class="row">
+      <button class="primary" id="psApply">写入本题</button>
+      <button class="ghost" id="psCancel">取消</button>
+    </div>
+  </div>
+</div>
+
 <!-- 试卷编辑页（从卡片「编辑」进入；做题/判分界面不提供改题能力） -->
 <div class="paperedit" id="paperEdit">
   <div class="paperedit-bar">
@@ -284,12 +305,17 @@
 <!-- AI 整理：范围/维度 → 提议 → 审阅 → 应用 -->
 <div class="modal" id="aiOrgModal">
   <div class="panel wide">
-    <h2 id="aiOrgTitle">AI 整理错题</h2>
-    <p class="hint" id="aiOrgHint">AI 只负责<b>提议</b>，下面会列出每一条建议让你核对，确认后才写入。使用时会联网，错题原文会发送到你配置的服务商。</p>
+    <h2 id="aiOrgTitle">AI 整理</h2>
+    <p class="hint" id="aiOrgHint">AI 只负责<b>提议</b>，下面会列出每一条建议让你核对，确认后才写入。使用时会联网，内容原文会发送到你配置的服务商。</p>
 
     <!-- 步骤 1：设置 -->
     <div id="aiOrgSetup">
       <div class="ai-org-fields">
+        <label class="ai-label" for="aiOrgTarget">整理对象</label>
+        <select id="aiOrgTarget">
+          <option value="q">错题库</option>
+          <option value="k">知识点库</option>
+        </select>
         <label class="ai-label" for="aiOrgScope">整理范围</label>
         <select id="aiOrgScope">
           <option value="all">全部错题</option>
@@ -300,7 +326,8 @@
         <div>
           <label class="chkline"><input type="checkbox" id="aiOrgDimTags" checked> 打标签</label>
           <label class="chkline"><input type="checkbox" id="aiOrgDimCol" checked> 归入合集</label>
-          <label class="chkline"><input type="checkbox" id="aiOrgDimKp"> 给错题写考点摘要</label>
+          <label class="chkline"><input type="checkbox" id="aiOrgDimKp"> 写考点讲解</label>
+          <label class="chkline"><input type="checkbox" id="aiOrgDimLink"> 挂到知识点</label>
           <label class="chkline"><input type="checkbox" id="aiOrgDimSink"> 沉淀到知识库</label>
         </div>
         <p class="setnote">「沉淀到知识库」会额外生成完整讲解：同名知识点只补空讲解，不会覆盖已有内容；输出更长，耗时也更久。</p>
@@ -382,6 +409,85 @@
         <span class="spacer"></span>
         <button class="ghost" id="kpFillUndo" style="display:none">撤销上次应用</button>
         <button class="ghost" id="kpFillClose">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AI 整理知识点：考点体系 + 挂载 -->
+<div class="modal" id="aiKpModal">
+  <div class="panel wide">
+    <h2>AI 整理知识点</h2>
+    <p class="hint">AI 只负责<b>提议</b>，结果会列出来让你核对，确认后才写入。使用时会联网，错题原文会发送到你配置的服务商。</p>
+
+    <!-- 1 设置 -->
+    <div id="aiKpSetup">
+      <div class="ai-org-fields">
+        <label class="ai-label" for="aiKpScope">整理范围</label>
+        <select id="aiKpScope">
+          <option value="all">全部错题</option>
+          <option value="filtered">当前筛选结果</option>
+          <option value="unlinked">仅未挂知识点</option>
+        </select>
+        <label class="ai-label" for="aiKpMode">已有挂载</label>
+        <select id="aiKpMode">
+          <option value="append">只补不覆盖</option>
+          <option value="overwrite">覆盖</option>
+        </select>
+        <p class="setnote" id="aiKpNote"></p>
+      </div>
+      <div class="row">
+        <button class="primary" id="aiKpRun">① 让 AI 提考点体系</button>
+        <button class="ghost" id="aiKpCopy">复制提示词（免 Key）</button>
+        <span class="spacer"></span>
+        <button class="ghost" id="aiKpCancel">取消</button>
+        <span class="badge-note" id="aiKpMsg"></span>
+      </div>
+      <pre class="ai-raw" id="aiKpRaw" style="display:none"></pre>
+    </div>
+
+    <!-- 1b 粘贴 JSON -->
+    <div id="aiKpPasteWrap" style="display:none">
+      <p class="hint" id="aiKpPasteHint"></p>
+      <textarea id="aiKpPaste" placeholder="粘贴 AI 输出的 JSON 数组"></textarea>
+      <div class="row">
+        <button class="primary" id="aiKpPasteGo">解析并继续</button>
+        <button class="ghost" id="aiKpPasteBack">返回</button>
+      </div>
+    </div>
+
+    <!-- 2 体系审阅 -->
+    <div id="aiKpTaxWrap" style="display:none">
+      <p class="hint">核对要建立的考点体系（可改名、删行、取消勾选）。已存在的会标「复用」，不会重复新建。</p>
+      <div class="ai-org-table" id="aiKpTax"></div>
+      <div class="row">
+        <button class="primary" id="aiKpTaxApply">应用体系，继续挂载</button>
+        <span class="spacer"></span>
+        <button class="ghost" id="aiKpTaxBack">返回</button>
+        <span class="badge-note" id="aiKpTaxMsg"></span>
+      </div>
+    </div>
+
+    <!-- 3 挂载审阅 -->
+    <div id="aiKpLinkWrap" style="display:none">
+      <p class="hint" id="aiKpLinkMsg"></p>
+      <div class="ai-org-table" id="aiKpLink"></div>
+      <p class="hint">待补讲解的考点（这些考点本次被错题挂到，讲解会一并写入）：</p>
+      <div class="ai-org-table" id="aiKpExplain"></div>
+      <div class="row">
+        <button class="ghost" id="aiKpLinkCopy">复制挂载提示词</button>
+        <button class="ghost" id="aiKpLinkPaste">粘贴挂载结果</button>
+        <button class="ghost" id="aiKpExpCopy">复制讲解提示词</button>
+        <button class="ghost" id="aiKpExpPaste">粘贴讲解结果</button>
+      </div>
+      <div class="row">
+        <button class="primary" id="aiKpApply">应用并保存</button>
+        <button class="ghost" id="aiKpAll">全选</button>
+        <button class="ghost" id="aiKpNone">全不选</button>
+        <span class="spacer"></span>
+        <button class="ghost" id="aiKpUndo" style="display:none">撤销上次应用</button>
+        <button class="ghost" id="aiKpClose">关闭</button>
+        <span class="badge-note" id="aiKpLinkMsg2"></span>
       </div>
     </div>
   </div>
@@ -561,6 +667,10 @@
       <input id="aiModel" class="ai-input" autocomplete="off" spellcheck="false" placeholder="例如 gemini-2.5-flash">
       <p class="setnote" id="aiModelNote">各家模型名更新频繁，若报「模型不存在」，请到你控制台复制实际可用的模型名。</p>
 
+      <label class="ai-label" for="aiMaxTokens">单次输出上限（max tokens）</label>
+      <input id="aiMaxTokens" class="ai-input" type="number" min="256" max="65536" step="256" inputmode="numeric" placeholder="4096">
+      <p class="setnote">留空用 4096。这是单次回复的上限，不是每次都会用满；调大不会变慢，也不会多扣费。考点体系这类长 JSON 建议 8192；超过服务商允许值会直接报错，届时调回较小数字。</p>
+
       <label class="ai-label" for="aiKey">API Key</label>
       <input id="aiKey" class="ai-input" type="password" autocomplete="off" spellcheck="false" placeholder="只保存在本机浏览器">
 
@@ -585,7 +695,7 @@
 // 注册离线缓存，让托管后的页面可以「添加到主屏幕」并断网使用
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('./sw.js').catch(function () {});
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(function () {});
   });
 }
 </script>

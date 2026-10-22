@@ -1,0 +1,11 @@
+{
+  "name": "math-review-book",
+  "version": "1.0.0",
+  "private": true,
+  "description": "数学复习本：错题 / 知识点 / 试卷，本地存储、离线可用、可选 AI 辅助",
+  "scripts": {
+    "check": "node --check lib.js && node --check app.js && node --check sw.js",
+    "test": "node --test test/*.test.js",
+    "verify": "npm run check && npm test"
+  }
+}

@@ -88,6 +88,8 @@
   /* ---------- 归一化数据结构 ---------- */
   function normalizeQuestion(it) {
     const o = it && typeof it === 'object' ? it : {};
+    const rawKp = Array.isArray(o.kpIds) ? o.kpIds : (typeof o.kpId === 'string' && o.kpId ? [o.kpId] : []);
+    const kpIds = [...new Set(rawKp.filter(x => typeof x === 'string' && x))];
     return {
       id: o.id || uid(),
       stem: typeof o.stem === 'string' ? o.stem : '',
@@ -99,7 +101,7 @@
       star: !!o.star,
       images: Array.isArray(o.images) ? o.images.filter(s => typeof s === 'string' && s) : [],
       collectionId: typeof o.collectionId === 'string' && o.collectionId ? o.collectionId : null,
-      kpId: typeof o.kpId === 'string' && o.kpId ? o.kpId : null,
+      kpIds,
       srs: normalizeSrs(o.srs),
       order: Number.isFinite(o.order) ? o.order : null,
       createdAt: o.createdAt || Date.now(),
@@ -144,6 +146,7 @@
       tags: Array.isArray(p.tags) ? p.tags.filter(t => typeof t === 'string' && t.trim()) : [],
       images: Array.isArray(p.images) ? p.images.filter(s => typeof s === 'string' && s) : [],
       linkedQid: typeof p.linkedQid === 'string' && p.linkedQid ? p.linkedQid : null,
+      steps: typeof p.steps === 'string' ? p.steps : '',
     };
   }
 
@@ -269,6 +272,28 @@
       }));
   }
 
+  /* ---------- AI 解题 ----------
+     模型返回的是讲解文本而非 JSON，只需去掉 ``` 围栏与首尾空白。 */
+  function cleanAiText(text) {
+    let s = String(text == null ? '' : text).trim();
+    const m = s.match(/^```[a-zA-Z]*\s*\n?([\s\S]*?)\n?```$/);
+    if (m) s = m[1].trim();
+    return s;
+  }
+
+  // 把某题的解题步骤写回题目数组（纯函数，不改原对象）
+  function setPaperSteps(questions, qid, steps) {
+    let changed = false;
+    const out = (Array.isArray(questions) ? questions : []).map(q => {
+      if (!q || q.id !== qid) return q;
+      const next = cleanAiText(steps);
+      if (next === q.steps) return q;
+      changed = true;
+      return Object.assign({}, q, { steps: next });
+    });
+    return { questions: out, changed };
+  }
+
   /* 从 fromId 之后向后找第一个 wrong==='unset' 的题；到末尾回绕到开头；
      fromId 不存在时从开头找；全部已标则返回 null。 */
   function nextUnmarked(questions, fromId) {
@@ -294,6 +319,15 @@
       else unset++;
     }
     return { total: qs.length, right, wrong, unset, marked: right + wrong };
+  }
+
+  /* 答案是否可见：判分模式恒可见；重做模式整卷显示，或该题被单独揭示过。
+     revealed 兼容 Set 与数组（界面用 Set，测试/持久化用数组）。 */
+  function answerVisible(mode, showAnswers, revealed, qid) {
+    if (mode === 'grade') return true;
+    if (showAnswers) return true;
+    if (revealed instanceof Set) return revealed.has(qid);
+    return Array.isArray(revealed) && revealed.includes(qid);
   }
 
   /* ---------- 排序 ----------
@@ -412,10 +446,39 @@
     return { cols: list, id };
   }
 
+  /* AI 给的 kpId 只保留知识点库里真实存在的（validIds），去重，最多 max 个。
+     validIds 可传 Set 或数组；max 缺省 3。 */
+  function pickKpIds(list, validIds, max) {
+    const ok = validIds instanceof Set ? validIds : new Set(Array.isArray(validIds) ? validIds : []);
+    const cap = (typeof max === 'number' && max > 0) ? max : 3;
+    const out = [];
+    for (const x of (Array.isArray(list) ? list : [])) {
+      if (typeof x === 'string' && ok.has(x) && !out.includes(x)) out.push(x);
+      if (out.length >= cap) break;
+    }
+    return out;
+  }
+
+  /* 把 AI 整理返回的一条映射成「计划行」：只取用户勾选的维度，
+     未勾选的字段一律不写（applyOrganizePlan 据此不覆盖原值）。
+     在线请求与免 Key 粘贴两条路共用这一份映射，避免行为分叉。 */
+  function planRowOf(e, dims, validKpIds) {
+    if (!e || typeof e !== 'object') return null;
+    const d = dims || {};
+    const row = { id: e.id };
+    if (d.tags && Array.isArray(e.tags)) row.tags = e.tags.filter(t => typeof t === 'string' && t.trim());
+    if (d.collection && typeof e.collectionPath === 'string') row.collectionPath = e.collectionPath;
+    if (d.link && Array.isArray(e.kpIds)) row.kpIds = pickKpIds(e.kpIds, validKpIds);
+    if (d.knowledge && typeof e.knowledge === 'string') row.knowledge = e.knowledge;
+    if (d.sink && typeof e.kpTitle === 'string') row.kpTitle = e.kpTitle;
+    if (d.sink && typeof e.kpExplain === 'string') row.kpExplain = e.kpExplain;
+    return row;
+  }
+
   /* 把审阅后的 AI 计划应用到错题数组（纯函数，不改动入参对象）。
-     plan:  [{ id, tags?, collectionPath?, knowledge?, kpTitle?, skip? }]
-     opts:  { cols, vocab, maxNewTags, now, matchKp }
-       matchKp: (title) => kpId | null   用于把「考点名」挂到知识点库条目上（缺省不处理）
+     plan:  [{ id, tags?, collectionPath?, knowledge?, kpIds?, skip? }]
+     opts:  { cols, vocab, maxNewTags, now }
+       kpIds 直接并入错题的 kpIds（去重），调用方负责先过滤掉不存在的 id
      返回:  { items, cols, changed } */
   function applyOrganizePlan(items, plan, opts) {
     const o = opts || {};
@@ -447,9 +510,10 @@
       if (typeof p.knowledge === 'string' && p.knowledge.trim() && !next.knowledge) {
         set('knowledge', p.knowledge.trim());
       }
-      if (typeof p.kpTitle === 'string' && p.kpTitle.trim() && typeof o.matchKp === 'function') {
-        const kpId = o.matchKp(p.kpTitle.trim());
-        if (kpId && next.kpId !== kpId) set('kpId', kpId);
+      if (Array.isArray(p.kpIds) && p.kpIds.length) {
+        const add = p.kpIds.filter(x => typeof x === 'string' && x);
+        const ids = [...new Set([...(next.kpIds || []), ...add])];
+        if (ids.length !== (next.kpIds || []).length) set('kpIds', ids);
       }
       if (dirty) { next = Object.assign({}, next, { updatedAt: now }); changed++; }
       return next;
@@ -480,6 +544,108 @@
       if (!content || String(it.content || '').trim()) return it;
       changed++;
       return Object.assign({}, it, { content, updatedAt: t });
+    });
+    return { items: out, changed };
+  }
+
+  /* 把 AI 提出的三层考点体系落成「两级合集 + 考点条目」计划（纯函数，不改动入参）。
+     taxonomy: [{ subject, chapter, topics: [{ title, kpId }] }]
+     opts: { cols, kps, now }
+       cols —— 知识点库的合集数组；kps —— 知识点条目数组
+     返回: { cols, kps, entries }
+       entries: [{ key, kpId, title, collectionId, path, isNew }]
+         key —— 后续挂载环节用的标识：复用项就是它的 kpId，新建项是 'tmp1'、'tmp2'…
+         kpId —— 真实条目 id（新建项含本次生成的 id） */
+  function planKpTaxonomy(taxonomy, opts) {
+    const o = opts || {};
+    const now = o.now || Date.now();
+    // 合集名里的 / 会被当成路径分隔符，替换掉以免把考点名拆成层级
+    const clean = s => String(s == null ? '' : s).replace(/\//g, '·').trim();
+    let cols = Array.isArray(o.cols) ? o.cols.slice() : [];
+    let kps = Array.isArray(o.kps) ? o.kps.slice() : [];
+    const entries = [];
+    const seenKeys = new Set();
+    const hasId = new Set();
+    const byName = new Map();   // 归一化考点名 + '\u0001' + 章节合集 id → kpId
+    for (const k of kps) {
+      if (!k || !k.id) continue;
+      hasId.add(k.id);
+      if (k.collectionId && k.title) byName.set(normText(k.title) + '\u0001' + k.collectionId, k.id);
+    }
+    const pathOf = id => collectionPath(cols, id).map(x => x.name).join('/');
+    let tmp = 0;
+    for (const ch of (Array.isArray(taxonomy) ? taxonomy : [])) {
+      const subject = clean(ch && ch.subject), chapter = clean(ch && ch.chapter);
+      if (!subject || !chapter) continue;
+      const r = resolveCollectionPath(cols, subject + '/' + chapter, now);
+      cols = r.cols;
+      const colId = r.id;
+      for (const t of (Array.isArray(ch.topics) ? ch.topics : [])) {
+        const title = clean(t && t.title);
+        if (!title) continue;
+        const nk = normText(title) + '\u0001' + colId;
+        // 1) AI 指定且真实存在的 kpId → 复用（并用条目自身的章节，不搬家）
+        let kpId = (t && typeof t.kpId === 'string' && t.kpId) ? t.kpId : null;
+        if (kpId && !hasId.has(kpId)) kpId = null;
+        if (kpId && seenKeys.has(kpId)) continue;
+        // 2) 否则按「归一化名 + 同章节」命中已有条目 → 复用
+        if (!kpId && byName.has(nk)) kpId = byName.get(nk);
+        if (kpId) {
+          const cur = kps.find(k => k.id === kpId);
+          seenKeys.add(kpId);
+          byName.set(nk, kpId);
+          entries.push({
+            key: kpId, kpId, title: (cur && cur.title) || title,
+            collectionId: (cur && cur.collectionId) || colId,
+            path: pathOf((cur && cur.collectionId) || colId), isNew: false,
+          });
+          continue;
+        }
+        // 3) 新建
+        const np = normalizeKp({ title, collectionId: colId });
+        kps = kps.concat([np]);
+        hasId.add(np.id);
+        byName.set(nk, np.id);
+        const key = 'tmp' + (++tmp);
+        entries.push({ key, kpId: np.id, title, collectionId: colId, path: pathOf(colId), isNew: true });
+      }
+    }
+    return { cols, kps, entries };
+  }
+
+  /* 把审阅后的挂载计划应用到错题数组（纯函数，不改动入参）。
+     plan: [{ qid, kpKeys: [...], knowledge?, skip? }]
+     opts: { keyMap, mode, now }
+       keyMap —— key → 真实 kpId（通常由 planKpTaxonomy 的 entries 得到）；未知 key 丢弃
+       mode   —— 'append'（默认，只补不覆盖）| 'overwrite'（覆盖）
+     返回: { items, changed } */
+  function applyKpLinks(items, plan, opts) {
+    const o = opts || {};
+    const now = o.now || Date.now();
+    const map = o.keyMap instanceof Map ? o.keyMap : new Map(Object.entries(o.keyMap || {}));
+    const overwrite = o.mode === 'overwrite';
+    const decided = new Map();
+    for (const p of (Array.isArray(plan) ? plan : [])) {
+      if (p && typeof p.qid === 'string' && !p.skip) decided.set(p.qid, p);
+    }
+    let changed = 0;
+    const out = (Array.isArray(items) ? items : []).map(it => {
+      const p = it && decided.get(it.id);
+      if (!p) return it;
+      let next = it, dirty = false;
+      const set = (k, v) => { if (next[k] !== v) { next = Object.assign({}, next, { [k]: v }); dirty = true; } };
+      const ids = [];
+      for (const key of (Array.isArray(p.kpKeys) ? p.kpKeys : [])) {
+        const id = map.get(key);
+        if (id && !ids.includes(id)) ids.push(id);
+      }
+      const merged = overwrite ? ids : [...new Set([...(next.kpIds || []), ...ids])];
+      if (merged.join('\u0001') !== (next.kpIds || []).join('\u0001')) set('kpIds', merged);
+      if (typeof p.knowledge === 'string' && p.knowledge.trim() && (overwrite || !next.knowledge)) {
+        set('knowledge', p.knowledge.trim());
+      }
+      if (dirty) { next = Object.assign({}, next, { updatedAt: now }); changed++; }
+      return next;
     });
     return { items: out, changed };
   }
@@ -528,6 +694,132 @@
       links.push({ qid: row.id, kpId: kp.id });
     }
     return { kps: list, links, created, filled, changed };
+  }
+
+  /* 把 AI 写好的考点讲解写入知识点条目（纯函数，不改动入参）。
+     explains: [{ kpKey, content }]
+     opts: { keyMap, mode, now }   同 applyKpLinks
+     返回: { kps, changed } */
+  function applyKpExplain(kps, explains, opts) {
+    const o = opts || {};
+    const now = o.now || Date.now();
+    const map = o.keyMap instanceof Map ? o.keyMap : new Map(Object.entries(o.keyMap || {}));
+    const overwrite = o.mode === 'overwrite';
+    const byId = new Map();
+    for (const e of (Array.isArray(explains) ? explains : [])) {
+      const id = e && map.get(e.kpKey);
+      const text = e && typeof e.content === 'string' ? e.content.trim() : '';
+      if (id && text) byId.set(id, text);
+    }
+    let changed = 0;
+    const out = (Array.isArray(kps) ? kps : []).map(k => {
+      const text = k && byId.get(k.id);
+      if (!text) return k;
+      if (!overwrite && k.content) return k;
+      if (k.content === text) return k;
+      changed++;
+      return Object.assign({}, k, { content: text, updatedAt: now });
+    });
+    return { kps: out, changed };
+  }
+
+  /* 统计每个考点被多少错题挂到：返回 Map<kpId, 次数> */
+  function kpUsage(items) {
+    const m = new Map();
+    for (const it of (Array.isArray(items) ? items : [])) {
+      for (const id of ((it && it.kpIds) || [])) {
+        if (typeof id === 'string' && id) m.set(id, (m.get(id) || 0) + 1);
+      }
+    }
+    return m;
+  }
+
+  /* ---------- AI 单次输出上限 ----------
+     用户在设置里可自定义，空值或非法值回落到 4096；越界按边界夹住。
+     这是「上限」而非实际用量，调大不会增加耗时或扣费。 */
+  const MAX_TOKENS_DEF = 4096;
+  const MAX_TOKENS_MIN = 256;
+  const MAX_TOKENS_MAX = 65536;
+  function clampMaxTokens(v) {
+    const n = Math.floor(Number(v));
+    if (!Number.isFinite(n) || n <= 0) return MAX_TOKENS_DEF;
+    return Math.min(MAX_TOKENS_MAX, Math.max(MAX_TOKENS_MIN, n));
+  }
+
+  /* 把 AI / 粘贴回来的考点体系 JSON 归一成 [{ subject, chapter, topics: [{ title, kpId }] }]。
+     模型经常不按示例给，这里对常见变形做容错：
+       · 外层被对象包一层：{ subjects|data|items|result|taxonomy: [...] }
+       · 学科下再套一层：[{ subject, chapters: [{ name, topics }] }]
+       · 考点写成纯字符串，或键名用 name / 考点 / 名称
+       · kpId 写成 kp_id
+     两种情况都认不出来时返回 []，由上层提示用户重试。 */
+  function normalizeKpTaxonomy(raw) {
+    let arr = [];
+    if (Array.isArray(raw)) arr = raw;
+    else if (raw && typeof raw === 'object') {
+      for (const k of ['subjects', 'subject', 'chapters', 'data', 'items', 'list', 'result', 'taxonomy', '体系', '学科']) {
+        if (Array.isArray(raw[k])) { arr = raw[k]; break; }
+      }
+      if (!arr.length) {
+        const only = Object.values(raw).filter(Array.isArray);
+        if (only.length === 1) arr = only[0];
+      }
+    }
+    const pick = (o, keys) => {
+      if (!o || typeof o !== 'object') return '';
+      for (const k of keys) {
+        const v = o[k];
+        if (typeof v === 'string' && v.trim()) return v.trim();
+      }
+      return '';
+    };
+    const topicsOf = ch => {
+      for (const k of ['topics', 'points', 'items', '考点']) {
+        if (Array.isArray(ch[k])) return ch[k];
+      }
+      return [];
+    };
+    const toTopic = t => {
+      if (typeof t === 'string') return { title: t.trim(), kpId: null };
+      const title = pick(t, ['title', 'name', 'topic', '考点', '名称']);
+      const kpId = (t && typeof t.kpId === 'string' && t.kpId)
+        || (t && typeof t.kp_id === 'string' && t.kp_id) || null;
+      return { title, kpId };
+    };
+    const out = [];
+    const pushCh = (subject, chapter, topics) => {
+      const s = String(subject || '').trim(), c = String(chapter || '').trim();
+      if (!s || !c) return;
+      const list = (Array.isArray(topics) ? topics : []).map(toTopic).filter(t => t.title);
+      if (list.length) out.push({ subject: s, chapter: c, topics: list });
+    };
+    for (const el of arr) {
+      if (!el || typeof el !== 'object') continue;
+      if (Array.isArray(el.chapters)) {
+        const subject = pick(el, ['subject', 'name', '学科', '科目']);
+        for (const ch of el.chapters) {
+          if (!ch || typeof ch !== 'object') continue;
+          pushCh(subject, pick(ch, ['chapter', 'name', '章节', '章']), topicsOf(ch));
+        }
+        continue;
+      }
+      pushCh(pick(el, ['subject', '学科', '科目']), pick(el, ['chapter', '章节', '章']), topicsOf(el));
+    }
+    return out;
+  }
+
+  /* 均匀抽样：至多取 max 个，覆盖首尾、分布均匀。
+     用于「体系提议」这类只需要样本、却会被题量撑爆上下文的场景。
+     不足 max 个时返回全部（副本）。 */
+  function sampleEvenly(items, max) {
+    const arr = Array.isArray(items) ? items : [];
+    const n = Math.floor(max);
+    if (!Number.isFinite(n) || n <= 0) return [];
+    if (arr.length <= n) return arr.slice();
+    const step = arr.length / n;
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(arr[Math.floor(i * step)]);
+    return out;
   }
 
   /* ---------- 期3：相似题聚类（纯本地，零 API 成本） ----------
@@ -900,8 +1192,8 @@
     normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers,
     parseBlockGeneric, parseText, parsePaper,
     paperWrongToQuestion,
-    nextUnmarked,
-    paperProgress,
+    cleanAiText, setPaperSteps,
+    nextUnmarked, paperProgress, answerVisible,
     sortItems,
     materializeOrder,
     reorderItems,
@@ -910,7 +1202,9 @@
     canMoveCollection, moveCollection, deleteCollection,
     filterItemsByCollection, collectionCounts, sanitizeItemCollections,
     parseAiJson, normTag, mergeSuggestTags,
-    resolveCollectionPath, applyOrganizePlan,
+    resolveCollectionPath, applyOrganizePlan, pickKpIds, planRowOf,
+    planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy,
+    sampleEvenly, clampMaxTokens, MAX_TOKENS_DEF,
     kpsMissingContent, fillKpContent, applyKpSink,
     clusterBySimilarity, groupStats,
     parseSearch,

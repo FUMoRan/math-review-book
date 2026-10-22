@@ -11,14 +11,17 @@ const {
   normText, bigrams, simScore, simScoreFrom, makeGramProfile, simFromProfile,
   normalizeSrs, scheduleSrs, isDue, dueLabel,
   normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers, paperWrongToQuestion, nextUnmarked,
-  paperProgress,
+  cleanAiText, setPaperSteps,
+  paperProgress, answerVisible,
   sortItems, materializeOrder, reorderItems,
   parseText, parsePaper, parseSearch,
   normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
   collectionPath, flattenCollections, addCollection, renameCollection,
   canMoveCollection, moveCollection, deleteCollection,
   filterItemsByCollection, collectionCounts, sanitizeItemCollections,
-  parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
+  parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan, pickKpIds, planRowOf,
+  planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy, sampleEvenly,
+  clampMaxTokens, MAX_TOKENS_DEF,
   kpsMissingContent, fillKpContent, applyKpSink,
   clusterBySimilarity, groupStats,
   bareMathSegments,
@@ -205,6 +208,38 @@ test('normalizePaperQuestion 保留合法配图 id，过滤空值', () => {
   const q = normalizePaperQuestion({ stem: 'x', images: ['a', '', null, 0, 'b'] });
   assert.deepEqual(q.images, ['a', 'b']);
   assert.deepEqual(normalizePaperQuestion({}).images, []);
+});
+
+test('normalizePaperQuestion 保留解题步骤，非字符串归空', () => {
+  assert.equal(normalizePaperQuestion({ steps: '第 1 步' }).steps, '第 1 步');
+  assert.equal(normalizePaperQuestion({ steps: 123 }).steps, '');
+  assert.equal(normalizePaperQuestion({}).steps, '');
+});
+
+test('cleanAiText 去掉围栏与首尾空白', () => {
+  assert.equal(cleanAiText('  \n第 1 步  \n'), '第 1 步');
+  assert.equal(cleanAiText('```\n第 1 步\n```'), '第 1 步');
+  assert.equal(cleanAiText('```markdown\n第 1 步\n```'), '第 1 步');
+  assert.equal(cleanAiText('中间```不算'), '中间```不算');
+  assert.equal(cleanAiText(null), '');
+});
+
+test('setPaperSteps 只改对应题且不改原数组', () => {
+  const qs = [
+    { id: 'a', stem: 'x', steps: '' },
+    { id: 'b', stem: 'y', steps: '' },
+  ];
+  const r = setPaperSteps(qs, 'b', '```\n第 1 步\n```');
+  assert.equal(r.changed, true);
+  assert.equal(r.questions[0].steps, '');
+  assert.equal(r.questions[1].steps, '第 1 步');
+  // 原对象不被修改
+  assert.equal(qs[1].steps, '');
+  // 内容相同视为未变
+  assert.equal(setPaperSteps(r.questions, 'b', '第 1 步').changed, false);
+  // 未知 id 不产生改动
+  assert.equal(setPaperSteps(qs, 'zzz', 'x').changed, false);
+  assert.deepEqual(setPaperSteps(null, 'a', 'x').questions, []);
 });
 
 test('normalizePaper 补全试卷字段并逐题归一化', () => {
@@ -916,12 +951,20 @@ test('reorderItems 未知 id 只做重编号', () => {
   assert.deepEqual(out.map(i => [i.id, i.order]), [['a', 0], ['b', 1]]);
 });
 
-/* ===================== AI 整理：kpId ===================== */
-test('normalizeQuestion 保留 kpId，非法值归 null', () => {
-  assert.equal(normalizeQuestion({ kpId: 'k1' }).kpId, 'k1');
-  assert.equal(normalizeQuestion({ kpId: '' }).kpId, null);
-  assert.equal(normalizeQuestion({ kpId: 123 }).kpId, null);
-  assert.equal(normalizeQuestion({}).kpId, null);
+/* ===================== 错题 ↔ 知识点（多对多） ===================== */
+test('normalizeQuestion 把 kpIds 归一为去重后的字符串数组', () => {
+  assert.deepEqual(normalizeQuestion({ kpIds: ['k1', 'k2'] }).kpIds, ['k1', 'k2']);
+  assert.deepEqual(normalizeQuestion({ kpIds: ['k1', 'k1', '', 123, null] }).kpIds, ['k1']);
+  assert.deepEqual(normalizeQuestion({ kpIds: 'k1' }).kpIds, []);
+  assert.deepEqual(normalizeQuestion({}).kpIds, []);
+});
+
+test('normalizeQuestion 把旧的单值 kpId 迁移进 kpIds', () => {
+  assert.deepEqual(normalizeQuestion({ kpId: 'k1' }).kpIds, ['k1']);
+  assert.deepEqual(normalizeQuestion({ kpId: '' }).kpIds, []);
+  assert.deepEqual(normalizeQuestion({ kpId: 123 }).kpIds, []);
+  // 已有 kpIds 时以 kpIds 为准，忽略旧的 kpId
+  assert.deepEqual(normalizeQuestion({ kpId: 'old', kpIds: ['k2'] }).kpIds, ['k2']);
 });
 
 /* ===================== AI 整理：解析与标签合并 ===================== */
@@ -1004,11 +1047,22 @@ test('applyOrganizePlan 跳过 skip 项，不改动原数组', () => {
   assert.deepEqual(r.items[0].tags, []);
 });
 
-test('applyOrganizePlan 按 matchKp 把考点挂到知识点条目上', () => {
-  const items = [normalizeQuestion({ id: 'q1', stem: 'a' })];
-  const r = applyOrganizePlan(items, [{ id: 'q1', kpTitle: '中值定理' }], { cols: [], matchKp: t => (t === '中值定理' ? 'k9' : null) });
-  assert.equal(r.items[0].kpId, 'k9');
-  assert.equal(r.changed, 1);
+test('applyOrganizePlan 把 kpIds 合并进已有挂载（去重、忽略非字符串）', () => {
+  const items = [
+    normalizeQuestion({ id: 'q1', stem: 'a' }),
+    normalizeQuestion({ id: 'q2', stem: 'b', kpIds: ['k1'] }),
+  ];
+  const r = applyOrganizePlan(items, [
+    { id: 'q1', kpIds: ['k9'] },
+    { id: 'q2', kpIds: ['k9'] },
+  ], { cols: [] });
+  assert.deepEqual(r.items[0].kpIds, ['k9']);
+  assert.deepEqual(r.items[1].kpIds, ['k1', 'k9']);
+  assert.equal(r.changed, 2);
+  // 重复给出同一个 id 不产生重复项，也不计改动
+  const r2 = applyOrganizePlan(items, [{ id: 'q2', kpIds: ['k1', 'k1', '', null, 3] }], { cols: [] });
+  assert.deepEqual(r2.items[1].kpIds, ['k1']);
+  assert.equal(r2.changed, 0);
 });
 
 /* ===================== 知识点讲解补全 ===================== */
@@ -1140,4 +1194,263 @@ test('groupStats 按 key 计数并统计到期/状态', () => {
   assert.equal(gs[1].key, '单调性');
   assert.equal(gs[1].count, 1);
 });
+
+/* ===================== 知识点体系：计划与应用 ===================== */
+const TAX = [
+  { subject: '高等数学', chapter: '极限', topics: [{ title: '夹逼定理', kpId: null }, { title: '单调有界准则', kpId: null }, { title: '两个重要极限', kpId: null }] },
+  { subject: '高等数学', chapter: '中值定理', topics: [{ title: '罗尔定理', kpId: 'k9' }] },
+];
+
+test('planKpTaxonomy 建两级合集 + 考点条目，并给出 key 映射', () => {
+  const r = planKpTaxonomy(TAX, { cols: [], kps: [{ id: 'k9', title: '罗尔定理', content: '旧讲解', collectionId: 'z1' }], now: 1000 });
+  // 学科/章节都建成了合集
+  assert.deepEqual(r.cols.filter(c => c.parentId === null).map(c => c.name), ['高等数学']);
+  const chaps = r.cols.filter(c => c.parentId && c.parentId !== null).map(c => c.name);
+  assert.deepEqual(chaps.slice().sort(), ['中值定理', '极限'].sort());
+  // 4 个考点：3 新建 + 1 复用
+  assert.equal(r.entries.length, 4);
+  assert.equal(r.kps.length, 4);
+  const created = r.entries.filter(e => e.isNew);
+  assert.equal(created.length, 3);
+  assert.ok(created.every(e => /^tmp\d+$/.test(e.key)));
+  const reused = r.entries.find(e => e.title === '罗尔定理');
+  assert.equal(reused.key, 'k9');
+  assert.equal(reused.isNew, false);
+  // 复用项保留原有讲解，不被清空
+  assert.equal(r.kps.find(k => k.id === 'k9').content, '旧讲解');
+  // 新建条目 content 为空、带章节归属
+  assert.equal(r.kps.filter(k => k.content === '').length, 3);
+});
+
+test('planKpTaxonomy 幂等：同名 + 同章节命中已有条目则复用，不重复新建', () => {
+  const first = planKpTaxonomy(TAX, { cols: [], kps: [], now: 1000 });
+  const again = planKpTaxonomy(TAX, { cols: first.cols, kps: first.kps, now: 2000 });
+  assert.equal(again.kps.length, first.kps.length);          // 没有新增条目
+  assert.equal(again.cols.length, first.cols.length);        // 没有新增合集
+  assert.ok(again.entries.every(e => e.isNew === false));
+});
+
+test('planKpTaxonomy 丢弃 AI 编造的 kpId，并去掉合集名里的 /', () => {
+  const r = planKpTaxonomy(
+    [{ subject: '高数/极限', chapter: '夹逼', topics: [{ title: 'x', kpId: 'nope' }] }],
+    { cols: [], kps: [], now: 1000 });
+  assert.equal(r.entries[0].isNew, true);                    // 编造的 id 不生效，改为新建
+  assert.deepEqual(r.cols.map(c => c.name), ['高数·极限', '夹逼']);
+});
+
+test('applyKpLinks 只补不覆盖：并入现有 kpIds，已有 knowledge 不覆盖', () => {
+  const items = [
+    normalizeQuestion({ id: 'q1', stem: 'a' }),
+    normalizeQuestion({ id: 'q2', stem: 'b', kpIds: ['k1'], knowledge: '已写' }),
+  ];
+  const keyMap = new Map([['tmp1', 'kA'], ['k9', 'k9']]);
+  const r = applyKpLinks(items, [
+    { qid: 'q1', kpKeys: ['tmp1', 'k9', 'unknown'], knowledge: '新考点' },
+    { qid: 'q2', kpKeys: ['k9'], knowledge: '覆盖我' },
+  ], { keyMap, mode: 'append', now: 1000 });
+  assert.deepEqual(r.items[0].kpIds, ['kA', 'k9']);          // unknown 被丢弃
+  assert.equal(r.items[0].knowledge, '新考点');
+  assert.deepEqual(r.items[1].kpIds, ['k1', 'k9']);          // 并入而非替换
+  assert.equal(r.items[1].knowledge, '已写');                 // append 模式不覆盖
+  assert.equal(r.changed, 2);
+});
+
+test('applyKpLinks 覆盖模式：kpIds 全量替换，kpKeys 为空则清空', () => {
+  const items = [normalizeQuestion({ id: 'q1', stem: 'a', kpIds: ['k1', 'k2'], knowledge: '旧' })];
+  const keyMap = new Map([['tmp1', 'kA']]);
+  const r = applyKpLinks(items, [{ qid: 'q1', kpKeys: ['tmp1'], knowledge: '新' }], { keyMap, mode: 'overwrite' });
+  assert.deepEqual(r.items[0].kpIds, ['kA']);
+  assert.equal(r.items[0].knowledge, '新');
+  const r2 = applyKpLinks(items, [{ qid: 'q1', kpKeys: [] }], { keyMap, mode: 'overwrite' });
+  assert.deepEqual(r2.items[0].kpIds, []);
+});
+
+test('applyKpLinks 跳过 skip 与未知 qid，不改动原数组', () => {
+  const items = [normalizeQuestion({ id: 'q1', stem: 'a' })];
+  const snap = JSON.stringify(items);
+  const r = applyKpLinks(items, [{ qid: 'q1', kpKeys: ['k9'], skip: true }, { qid: 'zz', kpKeys: ['k9'] }], { keyMap: new Map([['k9', 'k9']]) });
+  assert.equal(r.changed, 0);
+  assert.deepEqual(r.items[0].kpIds, []);
+  assert.equal(JSON.stringify(items), snap);
+});
+
+test('applyKpExplain 只给 content 为空的考点写讲解', () => {
+  const kps = [
+    { id: 'k1', title: 'A', content: '', tags: [] },
+    { id: 'k2', title: 'B', content: '已有讲解', tags: [] },
+  ];
+  const r = applyKpExplain(kps, [{ kpKey: 'k1', content: '新讲解' }, { kpKey: 'k2', content: '想覆盖' }],
+    { keyMap: new Map([['k1', 'k1'], ['k2', 'k2']]), now: 1000 });
+  assert.equal(r.kps[0].content, '新讲解');
+  assert.equal(r.kps[1].content, '已有讲解');   // 非覆盖模式保留
+  assert.equal(r.changed, 1);
+  assert.equal(kps[0].content, '');            // 不改动入参
+});
+
+test('applyKpExplain 覆盖模式可改写已有讲解，空内容与未知 key 忽略', () => {
+  const kps = [{ id: 'k2', title: 'B', content: '旧', tags: [] }];
+  const r = applyKpExplain(kps, [{ kpKey: 'k2', content: '新' }, { kpKey: 'zz', content: 'x' }, { kpKey: 'k2', content: '   ' }],
+    { keyMap: new Map([['k2', 'k2']]), mode: 'overwrite' });
+  assert.equal(r.kps[0].content, '新');
+  assert.equal(r.changed, 1);
+});
+
+test('kpUsage 统计每个考点被多少错题挂到', () => {
+  const u = kpUsage([
+    { kpIds: ['k1', 'k2'] },
+    { kpIds: ['k1'] },
+    { kpIds: [] },
+    { },
+  ]);
+  assert.equal(u.get('k1'), 2);
+  assert.equal(u.get('k2'), 1);
+  assert.equal(u.get('k9'), undefined);
+  assert.equal(u.size, 2);
+});
+
+/* ===================== 考点体系 JSON 的容错归一 ===================== */
+test('normalizeKpTaxonomy 认标准结构，并把非法项过滤掉', () => {
+  const out = normalizeKpTaxonomy([
+    { subject: '高等数学', chapter: '极限', topics: [{ title: '夹逼定理', kpId: null }] },
+    { subject: '', chapter: '空学科', topics: [{ title: 'x' }] },
+    { subject: '高等数学', chapter: '空考点', topics: [] },
+    null,
+  ]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].subject, '高等数学');
+  assert.equal(out[0].chapter, '极限');
+  assert.deepEqual(out[0].topics, [{ title: '夹逼定理', kpId: null }]);
+});
+
+test('normalizeKpTaxonomy 兼容被对象包一层、学科下再套 chapters', () => {
+  const wrapped = normalizeKpTaxonomy({
+    subjects: [
+      { subject: '线性代数', chapters: [
+        { name: '行列式', topics: [{ name: '范德蒙德行列式' }, '按行展开'] },
+      ] },
+    ],
+  });
+  assert.equal(wrapped.length, 1);
+  assert.equal(wrapped[0].chapter, '行列式');
+  assert.deepEqual(wrapped[0].topics.map(t => t.title), ['范德蒙德行列式', '按行展开']);
+  assert.equal(wrapped[0].topics[0].kpId, null);
+
+  // 只含一个数组字段的对象也能认出来
+  const only = normalizeKpTaxonomy({ result: [{ subject: '概率论', chapter: '分布', topics: ['正态分布'] }] });
+  assert.equal(only.length, 1);
+  assert.equal(only[0].topics[0].title, '正态分布');
+});
+
+test('normalizeKpTaxonomy 兼容中文字段名与 kp_id，并保留复用 id', () => {
+  const out = normalizeKpTaxonomy([
+    { 学科: '高等数学', 章节: '中值定理', 考点: [{ 名称: '罗尔定理', kp_id: 'k9' }] },
+  ]);
+  assert.equal(out.length, 1);
+  assert.deepEqual(out[0], { subject: '高等数学', chapter: '中值定理', topics: [{ title: '罗尔定理', kpId: 'k9' }] });
+});
+
+test('normalizeKpTaxonomy 对 null / 字符串 / 空对象返回空数组', () => {
+  assert.deepEqual(normalizeKpTaxonomy(null), []);
+  assert.deepEqual(normalizeKpTaxonomy('not json'), []);
+  assert.deepEqual(normalizeKpTaxonomy({}), []);
+  assert.deepEqual(normalizeKpTaxonomy([{ foo: 1 }]), []);
+});
+
+/* ===================== 均匀抽样（大题量下体系步的输入上限） ===================== */
+test('sampleEvenly 超限时均匀取 max 个，覆盖首尾且不重不漏', () => {
+  const items = Array.from({ length: 400 }, (_, i) => i);
+  const out = sampleEvenly(items, 80);
+  assert.equal(out.length, 80);
+  assert.equal(out[0], 0);            // 首
+  assert.equal(out[79], 395);         // 末（400/80=5，索引 79*5=395）
+  assert.equal(new Set(out).size, 80); // 无重复
+  for (let i = 1; i < out.length; i++) assert.ok(out[i] > out[i - 1]);
+  // 分布均匀：相邻取样间隔只可能是 5
+  for (let i = 1; i < out.length; i++) assert.equal(out[i] - out[i - 1], 5);
+});
+
+test('sampleEvenly 不足上限时原样返回，且不改动入参', () => {
+  const items = [{ id: 'a' }, { id: 'b' }];
+  const out = sampleEvenly(items, 80);
+  assert.deepEqual(out, items);
+  assert.notEqual(out, items);        // 副本
+  assert.deepEqual(sampleEvenly(items, 2), items);
+});
+
+test('sampleEvenly 对非法上限返回空数组', () => {
+  assert.deepEqual(sampleEvenly([1, 2, 3], 0), []);
+  assert.deepEqual(sampleEvenly([1, 2, 3], -1), []);
+  assert.deepEqual(sampleEvenly([1, 2, 3], NaN), []);
+  assert.deepEqual(sampleEvenly(null, 10), []);
+});
+
+/* ===================== 用户自定义的输出上限 ===================== */
+test('clampMaxTokens 空值与非法值回落到 4096', () => {
+  assert.equal(MAX_TOKENS_DEF, 4096);
+  assert.equal(clampMaxTokens(''), 4096);
+  assert.equal(clampMaxTokens(undefined), 4096);
+  assert.equal(clampMaxTokens(null), 4096);
+  assert.equal(clampMaxTokens(0), 4096);
+  assert.equal(clampMaxTokens('abc'), 4096);
+  assert.equal(clampMaxTokens(NaN), 4096);
+});
+
+test('clampMaxTokens 保留合法值并取整', () => {
+  assert.equal(clampMaxTokens(8192), 8192);
+  assert.equal(clampMaxTokens('8192'), 8192);
+  assert.equal(clampMaxTokens('16384'), 16384);
+  assert.equal(clampMaxTokens(8000.9), 8000);
+});
+
+test('clampMaxTokens 越界按边界夹住', () => {
+  assert.equal(clampMaxTokens(100), 256);        // 低于下限
+  assert.equal(clampMaxTokens(999999), 65536);   // 高于上限
+  assert.equal(clampMaxTokens(-5), 4096);        // 负数视为非法
+});
+
+/* ===================== 试卷：答案显隐 ===================== */
+test('answerVisible 判分模式恒可见，重做模式按揭示状态', () => {
+  assert.equal(answerVisible('grade', false, new Set(), 'q1'), true);
+  assert.equal(answerVisible('redo', true, new Set(), 'q1'), true);
+  assert.equal(answerVisible('redo', false, new Set(['q1']), 'q1'), true);
+  assert.equal(answerVisible('redo', false, new Set(['q1']), 'q2'), false);
+  assert.equal(answerVisible('redo', false, new Set(), 'q1'), false);
+});
+
+test('answerVisible 兼容数组形式的已揭示列表', () => {
+  assert.equal(answerVisible('redo', false, ['q1', 'q3'], 'q3'), true);
+  assert.equal(answerVisible('redo', false, [], 'q1'), false);
+  assert.equal(answerVisible('redo', false, null, 'q1'), false);
+});
+
+/* ===================== AI 整理：维度映射 ===================== */
+test('pickKpIds 只保留库里存在的 id，去重并最多 3 个', () => {
+  const valid = new Set(['k1', 'k2', 'k3', 'k4']);
+  assert.deepEqual(pickKpIds(['k1', 'k1', 'k9', 'k2'], valid), ['k1', 'k2']);
+  assert.deepEqual(pickKpIds(['k1', 'k2', 'k3', 'k4'], valid), ['k1', 'k2', 'k3']);
+  assert.deepEqual(pickKpIds(['k9', 42, null], valid), []);
+  assert.deepEqual(pickKpIds(null, valid), []);
+  assert.deepEqual(pickKpIds(['k1'], ['k1', 'k2']), ['k1']);   // 数组形式的库
+});
+
+test('planRowOf 只映射勾选的维度，未勾选字段不出现', () => {
+  const e = { id: 'q1', tags: ['极限', '  '], collectionPath: '高等数学/极限', kpIds: ['k1', 'kx'], knowledge: '考点' };
+  const only = planRowOf(e, { tags: true }, ['k1']);
+  assert.deepEqual(only, { id: 'q1', tags: ['极限'] });       // 空白标签被过滤，其余维度不写
+  const all = planRowOf(e, { tags: true, collection: true, link: true, knowledge: true }, ['k1']);
+  assert.deepEqual(all, {
+    id: 'q1', tags: ['极限'], collectionPath: '高等数学/极限', kpIds: ['k1'], knowledge: '考点',
+  });
+});
+
+test('planRowOf 对非法入参与缺失字段安全', () => {
+  assert.equal(planRowOf(null, { tags: true }), null);
+  assert.equal(planRowOf('x', { tags: true }), null);
+  assert.deepEqual(planRowOf({ id: 'q1' }, { tags: true, link: true, knowledge: true }), { id: 'q1' });
+  // 模型把 collectionPath 写成数组时应丢弃，不能落成 "[object Object]"
+  assert.deepEqual(planRowOf({ id: 'q1', collectionPath: ['a'] }, { collection: true }), { id: 'q1' });
+});
+
+
+
 

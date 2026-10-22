@@ -18,12 +18,14 @@ const {
   parseText, parseSearch,
   normalizeQuestion, normalizeKp, scheduleSrs, isDue, dueLabel, DAY,
   normalizePaper, parsePaper, paperWrongToQuestion, mergeSeedPapers,
+  cleanAiText, setPaperSteps,
   nextUnmarked, paperProgress,
   sortItems, materializeOrder, reorderItems,
   settleCollections, collectionSubtreeIds, flattenCollections, collectionChildren,
   collectionPath, addCollection, renameCollection, canMoveCollection, moveCollection,
   deleteCollection, collectionCounts, sanitizeItemCollections,
   parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
+  planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy, sampleEvenly, clampMaxTokens,
   kpsMissingContent, fillKpContent, applyKpSink,
   clusterBySimilarity, groupStats,
   bareMathSegments,
@@ -31,7 +33,7 @@ const {
 
 /* ===================== 设置（偏好，与数据分开存） ===================== */
 const K_SET = 'mq_settings';
-const SET_DEF = { cols: 'auto', theme: 'system', density: 'comfortable', anim: 'on', rail: 'off', sortMode: { q: 'auto', k: 'auto' } };
+const SET_DEF = { cols: 'auto', theme: 'system', density: 'comfortable', anim: 'on', rail: 'off', sortMode: { q: 'auto', k: 'auto' }, colCollapsed: { q: [], k: [] } };
 
 function readSettings() {
   try {
@@ -42,6 +44,12 @@ function readSettings() {
 const settings = Object.assign({}, SET_DEF, readSettings());
 // sortMode 是嵌套对象，浅合并会整体覆盖，这里单独补全两库默认值
 settings.sortMode = Object.assign({ q: 'auto', k: 'auto' }, settings.sortMode);
+// 合集折叠状态同为嵌套对象，按库分开校验为字符串数组
+const ccRaw = settings.colCollapsed && typeof settings.colCollapsed === 'object' ? settings.colCollapsed : {};
+settings.colCollapsed = {
+  q: Array.isArray(ccRaw.q) ? ccRaw.q.filter(x => typeof x === 'string') : [],
+  k: Array.isArray(ccRaw.k) ? ccRaw.k.filter(x => typeof x === 'string') : [],
+};
 
 function saveSettings() {
   try { localStorage.setItem(K_SET, JSON.stringify(settings)); } catch (e) {}
@@ -239,13 +247,13 @@ async function attachImages(item, files) {
 }
 
 const imgStrip = it => (it.images && it.images.length)
-  ? `<div class="imgs">${it.images.map(id => `<img class="thumb" data-img-id="${id}" alt="配图" loading="lazy">`).join('')}</div>`
+  ? `<div class="imgs">${it.images.map(id => `<img class="thumb" data-img-id="${esc(id)}" alt="配图" loading="lazy">`).join('')}</div>`
   : '';
 
 function renderThumbs(box, ids, onDelete) {
   if (!ids.length) { box.innerHTML = '<span class="section-label">还没有图片</span>'; return; }
   box.innerHTML = ids.map(id =>
-    `<div class="thumb-wrap"><img class="thumb" data-img-id="${id}" alt="配图"><button class="thumb-del" data-del="${id}" title="移除">×</button></div>`
+    `<div class="thumb-wrap"><img class="thumb" data-img-id="${esc(id)}" alt="配图"><button class="thumb-del" data-del="${esc(id)}" title="移除">×</button></div>`
   ).join('');
   hydrateImages(box);
   box.querySelectorAll('[data-del]').forEach(b => b.onclick = e => { e.stopPropagation(); onDelete(b.dataset.del); });
@@ -323,7 +331,7 @@ function renderTrash() {
     return `<div class="pvi">
       <div class="section-label" style="margin-bottom:6px">${isK ? '知识点' : '错题'} · 删除于 ${days > 0 ? days + ' 天前' : '今天'}</div>
       <div class="stem">${renderMath(title)}</div>
-      <div class="imgs">${(t.item.images || []).map(id => `<img class="thumb" data-img-id="${id}" alt="配图">`).join('')}</div>
+      <div class="imgs">${(t.item.images || []).map(id => `<img class="thumb" data-img-id="${esc(id)}" alt="配图">`).join('')}</div>
       <div class="row" style="margin-top:8px">
         <button data-restore="${i}">恢复</button>
         <button class="danger" data-purge="${i}">彻底删除</button>
@@ -609,20 +617,37 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// KaTeX 结果缓存：题库里同一公式会反复出现（如多条错题共用「$f'(x)=3x^2-3$」），
+// 每次重渲染都重算一遍是白费。按「模式 + 源串」做 FIFO 缓存，上限 400 条避免无限增长。
+const KATEX_CACHE_MAX = 400;
+const katexCache = new Map();
+function katexHTML(src, display) {
+  const key = (display ? 'D' : 'I') + src;
+  const hit = katexCache.get(key);
+  if (hit !== undefined) return hit;
+  let out;
+  try { out = katex.renderToString(src, { displayMode: !!display, throwOnError: false }); }
+  catch (e) { out = null; }        // 解析失败：交给调用方退回纯文本（不缓存失败结果）
+  if (out === null) return null;
+  if (katexCache.size >= KATEX_CACHE_MAX) katexCache.delete(katexCache.keys().next().value);
+  katexCache.set(key, out);
+  return out;
+}
+
 // 依次识别：$$...$$ / \[...\] 行间公式，$...$ / \(...\) 行内公式，
 // 以及没有任何定界符的裸 LaTeX（如部分 AI 直接输出 y'' = \frac{dp}{dx} …）。
 function renderMath(text) {
   if (!text) return '';
   const parts = text.split(/(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\$[^$\n]+?\$|\\\([\s\S]+?\\\))/g);
   return parts.map(p => {
-    let m;
+    let m, html;
     if ((m = p.match(/^\$\$([\s\S]+?)\$\$$/)) || (m = p.match(/^\\\[([\s\S]+?)\\\]$/))) {
-      try { return katex.renderToString(m[1], { displayMode: true, throwOnError: false }); }
-      catch (e) { return esc(p); }
+      html = katexHTML(m[1], true);
+      return html === null ? esc(p) : html;
     }
     if ((m = p.match(/^\$([^$]+?)\$$/)) || (m = p.match(/^\\\(([\s\S]+?)\\\)$/))) {
-      try { return katex.renderToString(m[1], { throwOnError: false }); }
-      catch (e) { return esc(p); }
+      html = katexHTML(m[1], false);
+      return html === null ? esc(p) : html;
     }
     return renderBareMath(p);
   }).join('');
@@ -632,8 +657,8 @@ function renderMath(text) {
 function renderBareMath(text) {
   return bareMathSegments(text).map(seg => {
     if (seg.t === 'text') return esc(seg.v).replace(/\n/g, '<br>');
-    try { return katex.renderToString(seg.v, { displayMode: !!seg.display, throwOnError: false }); }
-    catch (e) { return esc(seg.v); }
+    const html = katexHTML(seg.v, !!seg.display);
+    return html === null ? esc(seg.v) : html;
   }).join('');
 }
 
@@ -646,24 +671,29 @@ const addBtn = document.getElementById('addBtn');
 const randomBtn = document.getElementById('randomBtn');
 const tabEls = [...document.querySelectorAll('.tab')];
 
-// 搜索文本缓存：按 id + updatedAt 命中，避免每次筛选重新拼接
+// 搜索文本缓存：按 id + updatedAt 命中，避免每次筛选重新拼接。
+// 有上限：反复导入/删除后条目会累积成垃圾，涨到上限就整批清掉（重建很便宜）。
+const HAY_CACHE_MAX = 2000;
 const hayCache = new Map();
-function hayOf(it) {
+function hayOf(it, kind) {
   const c = hayCache.get(it.id);
   if (c && c.u === it.updatedAt) return c.hay;
-  const hay = DEF[active].hay(it).toLowerCase();
+  const hay = DEF[kind || active].hay(it).toLowerCase();
+  if (hayCache.size >= HAY_CACHE_MAX) hayCache.clear();
   hayCache.set(it.id, { u: it.updatedAt, hay });
   return hay;
 }
 
-function currentFiltered() {
-  const v = cur();
+// kind 可指定库（q / k），缺省为当前标签页
+function currentFiltered(kind) {
+  const kd = kind || active;
+  const v = views[kd];
   const s = parseSearch(v.search);
   const now = Date.now();
   // 合集筛选：null = 未分类；其余 = 该合集及其子合集；COL_ALL = 不过滤
   const cf = v.collectionFilter;
-  const subIds = (cf && cf !== COL_ALL) ? collectionSubtreeIds(colStores[active] || [], cf) : null;
-  const out = curItems().filter(it => {
+  const subIds = (cf && cf !== COL_ALL) ? collectionSubtreeIds(colStores[kd] || [], cf) : null;
+  const out = stores[kd].items.filter(it => {
     if (cf !== COL_ALL) {
       if (cf == null) { if (it.collectionId) return false; }
       else if (!it.collectionId || !subIds.has(it.collectionId)) return false;
@@ -682,11 +712,11 @@ function currentFiltered() {
       if (!hit) return false;
     }
     if (s.tags.length && !s.tags.every(t => it.tags.includes(t))) return false;
-    if (s.text && !hayOf(it).includes(s.text)) return false;
+    if (s.text && !hayOf(it, kd).includes(s.text)) return false;
     return true;
   });
   // 按当前库的排序模式：自动=创建时间倒序（新增的排最前）；手动=order（新条目 order=null 排最前）
-  return sortItems(out, (settings.sortMode && settings.sortMode[active]) || 'auto');
+  return sortItems(out, (settings.sortMode && settings.sortMode[kd]) || 'auto');
 }
 
 function bindLazy(detailsEl, key, text, emptyLabel) {
@@ -703,11 +733,10 @@ function bindLazy(detailsEl, key, text, emptyLabel) {
   });
 }
 
-// 与「另一库」按标签交集的数量：错题视图看知识点，知识点视图看错题
+// 与「另一库」的关联数：只按 kpIds 算（错题↔知识点多对多），不再用标签交集
 function relatedCount(it) {
-  if (!it.tags.length) return 0;
-  const other = active === 'k' ? stores.q.items : stores.k.items;
-  return other.filter(o => o.tags.some(t => it.tags.includes(t))).length;
+  if (active === 'k') return kpUsage(stores.q.items).get(it.id) || 0;
+  return (it.kpIds || []).length;
 }
 
 // 统一的复习动作：切换状态并安排下次复习时间（SRS）
@@ -783,6 +812,14 @@ function makeCard(it) {
     if (confirm('移入回收站？30 天内可在「设置 → 回收站」恢复。')) {
       toTrash(active, it);
       stores[active].items = curItems().filter(x => x.id !== it.id);
+      // 删掉的是知识点 → 同时从各错题的 kpIds 摘掉它，避免悬空引用
+      if (active === 'k') {
+        stores.q.items = stores.q.items.map(q =>
+          (q.kpIds || []).includes(it.id)
+            ? Object.assign({}, q, { kpIds: q.kpIds.filter(x => x !== it.id), updatedAt: Date.now() })
+            : q);
+        saveStore(stores.q.key, stores.q.items);
+      }
       v.selected.delete(it.id);
       saveActive();
       refreshTagPicker();
@@ -859,6 +896,7 @@ const paperState = {
   showAnswers: false,   // 重做模式下整卷显示答案
   revealed: new Set(),  // 重做模式下逐题手动揭示过的题 id
   curId: null,          // 当前题 id（导航高亮 / 专注当前题）
+  solving: new Set(),   // 正在让 AI 解题的题 id
 };
 
 function paperOf(id) { return stores.p.items.find(p => p.id === id); }
@@ -918,6 +956,7 @@ function openPaper(id) {
   paperState.showAnswers = false;
   paperState.revealed = new Set();
   paperState.curId = null;
+  paperState.solving = new Set();
   renderPaperView();
   document.getElementById('paperView').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -952,7 +991,7 @@ function paperVisibleQuestions(p) {
 }
 // 答案是否对某题可见：判分模式始终可见；重做模式需整卷开或该题已揭示
 function paperAnswerVisible(q) {
-  return paperState.mode === 'grade' || paperState.showAnswers || paperState.revealed.has(q.id);
+  return MQ.answerVisible(paperState.mode, paperState.showAnswers, paperState.revealed, q.id);
 }
 // 更新某题三态（沿用 papers 数据结构，只改 wrong 字段）
 function setPaperQ(qid, patch) {
@@ -1017,27 +1056,32 @@ function renderPaperNav(p, qs) {
       <span class="badge-note">错 ${pr.wrong}</span>
     </div>
     <div class="paper-nav-grid">
-      ${qs.map(q => `<button class="paper-nav-sq ${q.wrong}${q.id === paperState.curId ? ' cur' : ''}" data-qid="${q.id}" title="第 ${q.no} 题">${q.no}</button>`).join('')}
+      ${qs.map(q => `<button class="paper-nav-sq ${q.wrong}${q.id === paperState.curId ? ' cur' : ''}" data-qid="${esc(q.id)}" title="第 ${q.no} 题">${q.no}</button>`).join('')}
     </div>`;
   nav.querySelectorAll('.paper-nav-sq').forEach(btn => {
     btn.onclick = () => goToPaperQuestion(btn.dataset.qid);
   });
 }
 
+// 题干 + 配图：整卷列表、专注模式、编辑页共用一份结构，避免三处各写一遍走形
+function paperStemHTML(q) {
+  return `<div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>${imgStrip(q)}`;
+}
+
 // 一览整卷：每题显眼的三态切换 + 答案（按模式显隐）
 function renderPaperList(p, qs, host) {
   if (!qs.length) { host.innerHTML = '<div class="empty">没有可显示的题。</div>'; return; }
   host.innerHTML = qs.map(q => `
-    <div class="paper-q" data-qid="${q.id}">
+    <div class="paper-q" data-qid="${esc(q.id)}">
       <div class="paper-q-head">
         <span class="section-label">第 ${q.no} 题</span>
         ${q.linkedQid ? '<span class="badge-note">已在错题本</span>' : ''}
       </div>
-      <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
-      ${imgStrip(q)}
+      ${paperStemHTML(q)}
       ${paperRenderAnswer(q)}
+      ${paperRenderSteps(q)}
       <div class="paper-q-acts">
-        <div class="paper-tri" data-qid="${q.id}">
+        <div class="paper-tri" data-qid="${esc(q.id)}">
           <button data-wrong="right" class="${q.wrong === 'right' ? 'on right' : ''}">对</button>
           <button data-wrong="wrong" class="${q.wrong === 'wrong' ? 'on wrong' : ''}">错</button>
           <button data-wrong="unset" class="${q.wrong === 'unset' ? 'on unset' : ''}">未标</button>
@@ -1052,6 +1096,7 @@ function renderPaperList(p, qs, host) {
   host.querySelectorAll('.paper-reveal').forEach(b => {
     b.onclick = () => { paperState.revealed.add(b.dataset.reveal); renderPaperView(); };
   });
+  bindPaperSolve(host);
 }
 
 // 单题答案块：可见则渲染；重做模式未揭示则给「显示答案」按钮
@@ -1060,7 +1105,7 @@ function paperRenderAnswer(q) {
   if (paperAnswerVisible(q)) {
     return `<div class="paper-q-answer"><span class="section-label">答案</span><div class="body">${renderMath(q.answer)}</div></div>`;
   }
-  return `<button class="paper-reveal" data-reveal="${q.id}">👁 显示答案</button>`;
+  return `<button class="paper-reveal" data-reveal="${esc(q.id)}">👁 显示答案</button>`;
 }
 
 // 专注模式（一题一屏）：顶部进度条 + 题干/答案 + 大按钮「做对/做错」
@@ -1077,9 +1122,9 @@ function renderPaperFocus(p, qs, host) {
         <span class="spacer"></span>
         <span class="section-label">${idx + 1} / ${qs.length}</span>
       </div>
-      <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
-      ${imgStrip(q)}
+      ${paperStemHTML(q)}
       ${paperRenderAnswer(q)}
+      ${paperRenderSteps(q)}
       <div class="paper-focus-acts">
         <button class="paper-big right ${q.wrong === 'right' ? 'on' : ''}" data-wrong="right">做对</button>
         <button class="paper-big wrong ${q.wrong === 'wrong' ? 'on' : ''}" data-wrong="wrong">做错</button>
@@ -1091,7 +1136,120 @@ function renderPaperFocus(p, qs, host) {
   host.querySelectorAll('.paper-reveal').forEach(b => {
     b.onclick = () => { paperState.revealed.add(b.dataset.reveal); renderPaperView(); };
   });
+  bindPaperSolve(host);
 }
+
+/* ===================== AI 解题（逐题，结果存在题目里） ===================== */
+const PAPER_SOLVE_SYS = [
+  '你是数学解题老师。下面给你一道题的原文（可能含 $LaTeX$）。',
+  '请写出**关键步骤**，不要长篇推导，但要让人能照着走完：',
+  '1. 先一行写「答案：……」，只写最终结果；',
+  '2. 再分 3~6 步写关键步骤，每步一行，用「1. 」「2. 」编号，写清这一步在做什么、依据什么、得到什么；',
+  '3. 最后一行写「易错：……」，一句话指出最容易错的地方。',
+  ...aiLatexRules(),
+  '不要输出 ``` 围栏，不要用 Markdown 加粗或标题，不要写与本题无关的内容。',
+].join('\n');
+
+function paperSolveAsk(q) {
+  return [
+    `题目（第 ${q.no} 题）：`,
+    q.stem || '（题干为空）',
+    '',
+    q.answer ? `参考答案（可能不完整）：${q.answer}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+// 解题步骤块：已有则显示（按答案显隐规则），否则给按钮
+function paperRenderSteps(q) {
+  const solving = paperState.solving.has(q.id);
+  const btn = solving
+    ? '<span class="badge-note">AI 正在解题…</span>'
+    : `<button class="paper-solve" data-solve="${esc(q.id)}">${q.steps ? 'AI 重新解' : 'AI 解题'}</button>`;
+  if (!q.steps) return `<div class="paper-q-acts2">${btn}</div>`;
+  const body = paperAnswerVisible(q)
+    ? `<div class="paper-q-steps"><span class="section-label">解题步骤</span><div class="body">${renderMath(q.steps)}</div></div>`
+    : `<button class="paper-reveal" data-reveal-steps="${esc(q.id)}">👁 显示解题步骤</button>`;
+  return `${body}<div class="paper-q-acts2">${btn}</div>`;
+}
+
+function bindPaperSolve(host) {
+  host.querySelectorAll('[data-solve]').forEach(b => {
+    b.onclick = () => solvePaperQuestion(b.dataset.solve);
+  });
+  host.querySelectorAll('[data-reveal-steps]').forEach(b => {
+    b.onclick = () => { paperState.revealed.add(b.dataset.revealSteps); renderPaperView(); };
+  });
+}
+
+// 收起/展示步骤也要受「显示答案」控制
+
+async function solvePaperQuestion(qid) {
+  const p = curPaper();
+  const q = p && p.questions.find(x => x.id === qid);
+  if (!q) return;
+  if (!String(q.stem || '').trim()) { paperToast('这道题没有题干，先补题干再解题。'); return; }
+  if (paperState.solving.has(qid)) return;
+  if (!aiReady()) { openPaperSolveNoKey(q); return; }
+  paperState.solving.add(qid);
+  renderPaperView();
+  showAiBusy(`AI 正在解第 ${q.no} 题…`);
+  try {
+    const text = await aiCall({ system: PAPER_SOLVE_SYS, ask: paperSolveAsk(q) });
+    const r = setPaperSteps(p.questions, qid, text);
+    if (r.changed) { p.questions = r.questions; p.updatedAt = Date.now(); await savePapers(); }
+    hideAiBusy();
+    paperState.solving.delete(qid);
+    renderPaperView();
+    if (!cleanAiText(text)) paperToast('AI 没有返回内容。');
+  } catch (e) {
+    hideAiBusy();
+    paperState.solving.delete(qid);
+    renderPaperView();
+    paperToast((e && e.name === 'AbortError') ? '已取消。' : '解题失败：' + ((e && e.message) || e));
+  }
+}
+
+/* ---------- 免 Key：复制提示词 → 粘回 ---------- */
+let solveNoKeyQ = null;
+function openPaperSolveNoKey(q) {
+  solveNoKeyQ = q;
+  const modal = document.getElementById('paperSolveModal');
+  document.getElementById('psTitle').textContent = `AI 解题（免 Key）· 第 ${q.no} 题`;
+  document.getElementById('psPrompt').value = [PAPER_SOLVE_SYS, '', paperSolveAsk(q)].join('\n');
+  document.getElementById('psPaste').value = '';
+  document.getElementById('psMsg').textContent = '';
+  modal.classList.add('open');
+}
+function closePaperSolveNoKey() {
+  document.getElementById('paperSolveModal').classList.remove('open');
+  solveNoKeyQ = null;
+}
+function bindPaperSolveNoKey() {
+  document.getElementById('psCopy').onclick = async () => {
+    const ok = await copyText(document.getElementById('psPrompt').value);
+    document.getElementById('psMsg').textContent = ok ? '已复制，去任意 AI 粘贴即可。' : '复制失败，请手动选中复制。';
+  };
+  document.getElementById('psCancel').onclick = closePaperSolveNoKey;
+  document.getElementById('psApply').onclick = async () => {
+    const q = solveNoKeyQ;
+    const p = curPaper();
+    if (!q || !p) return;
+    const text = cleanAiText(document.getElementById('psPaste').value);
+    if (!text) { document.getElementById('psMsg').textContent = '先粘贴 AI 的输出。'; return; }
+    const r = setPaperSteps(p.questions, q.id, text);
+    p.questions = r.questions;
+    p.updatedAt = Date.now();
+    await savePapers();
+    closePaperSolveNoKey();
+    renderPaperView();
+    paperToast(`已写入第 ${q.no} 题的解题步骤。`);
+  };
+  document.getElementById('paperSolveModal').onclick = e => {
+    if (e.target.id === 'paperSolveModal') closePaperSolveNoKey();
+  };
+}
+bindPaperSolveNoKey();
+
 
 /* ===================== 试卷编辑页（独立入口，可改题）===================== */
 const paperEditState = { paperId: null };
@@ -1120,15 +1278,14 @@ function renderPaperEdit() {
     </div>
     <div class="paperedit-qs">
       ${p.questions.map(q => `
-        <div class="paperedit-q" data-qid="${q.id}">
+        <div class="paperedit-q" data-qid="${esc(q.id)}">
           <div class="paper-q-head">
             <span class="section-label">第 ${q.no} 题</span>
             <span class="spacer"></span>
-            <button class="link" data-act="editq" data-qid="${q.id}">编辑</button>
-            <button class="link" data-act="delq" data-qid="${q.id}">删除</button>
+            <button class="link" data-act="editq" data-qid="${esc(q.id)}">编辑</button>
+            <button class="link" data-act="delq" data-qid="${esc(q.id)}">删除</button>
           </div>
-          <div class="paper-q-stem">${renderMath(q.stem) || '（无题干）'}</div>
-          ${imgStrip(q)}
+          ${paperStemHTML(q)}
           ${q.answer ? `<div class="body">${renderMath(q.answer)}</div>` : ''}
         </div>`).join('') || '<div class="empty">这张试卷还没有题目。</div>'}
     </div>`;
@@ -1160,8 +1317,38 @@ function renderPaperEdit() {
 document.getElementById('paperEditBack').onclick = closePaperEdit;
 
 function markPaperQuestion(qid, wrong) {
+  const p = curPaper();
+  if (!p) return;
   setPaperQ(qid, { wrong });
-  renderPaperView();
+  // 「仅看错题」下标记变化可能让该题从列表里消失，只能整块重算
+  if (paperState.wrongOnly) { renderPaperView(); return; }
+  paintPaperMark(p, qid, wrong);
+}
+
+// 只更新受影响的那道题（三态按钮）+ 题号导航/进度，
+// 不再整卷重建 —— 整块重渲染会重算全部 KaTeX，60 题要 80~100ms，点一次明显顿一下
+function paintPaperMark(p, qid, wrong) {
+  const row = paperQRowEl(qid);
+  if (row) {
+    row.querySelectorAll('.paper-tri button').forEach(b => {
+      b.className = b.dataset.wrong === wrong ? 'on ' + wrong : '';
+    });
+  }
+  const focus = document.getElementById('paperFocus');
+  if (focus && paperState.focus) {
+    focus.querySelectorAll('.paper-big').forEach(b => b.classList.toggle('on', b.dataset.wrong === wrong));
+  }
+  renderPaperNav(p, paperVisibleQuestions(p));   // 方块颜色 + 「已标 x / 错 y」数字
+}
+
+// 按题 id 取列表里那道题的 DOM（用遍历比较，避开把 id 拼进 CSS 选择器的转义问题）
+function paperQRowEl(qid) {
+  const host = document.getElementById('paperQs');
+  if (!host) return null;
+  for (const row of host.querySelectorAll('.paper-q')) {
+    if (row.dataset.qid === qid) return row;
+  }
+  return null;
 }
 
 // 点击题号方块 → 更新高亮并滚动定位（专注模式在 Task 6 处理）
@@ -1171,7 +1358,7 @@ function goToPaperQuestion(qid) {
   if (!p) return;
   if (paperState.focus) { renderPaperView(); return; }
   renderPaperNav(p, paperVisibleQuestions(p));
-  const el = document.getElementById('paperQs').querySelector(`.paper-q[data-qid="${qid}"]`);
+  const el = paperQRowEl(qid);
   if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
@@ -1198,7 +1385,7 @@ function jumpToNextUnmarked() {
   if (paperState.wrongOnly) paperState.wrongOnly = false;   // 目标题未标，先取消「仅看错题」以便可见
   paperState.curId = next.id;
   renderPaperView();
-  const el = document.getElementById('paperQs').querySelector(`.paper-q[data-qid="${next.id}"]`);
+  const el = paperQRowEl(next.id);
   if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
@@ -1401,7 +1588,10 @@ function render() {
       listEl.appendChild(g);
     }
   } else {
-    shown.forEach(it => listEl.appendChild(makeCard(it)));
+    // 先拼到 fragment 再一次性插入：逐个 append 到已在文档里的列表会触发 30 次增量布局
+    const frag = document.createDocumentFragment();
+    shown.forEach(it => frag.appendChild(makeCard(it)));
+    listEl.appendChild(frag);
   }
 
   if (pendingAnim) {
@@ -1454,7 +1644,37 @@ function refreshTagPicker() {
 /* ===================== 合集（文件夹式，每库一棵可嵌套的树） ===================== */
 const colTreeEl = document.getElementById('colTree');
 const colBackdrop = document.getElementById('colBackdrop');
-const colCollapsed = new Set();   // 被折叠的合集 id（默认展开）
+// 折叠状态：按库（错题 / 知识点）分开维护，持久化到 settings.colCollapsed；默认展开
+const colCollapsedSets = {
+  q: new Set(settings.colCollapsed.q),
+  k: new Set(settings.colCollapsed.k),
+};
+const colCollapsedSet = () => colCollapsedSets[active === 'k' ? 'k' : 'q'];
+const isColCollapsed = id => colCollapsedSet().has(id);
+function setColCollapsed(id, collapsed) {
+  const s = colCollapsedSet();
+  if (collapsed) s.add(id); else s.delete(id);
+  persistColCollapsed();
+}
+function persistColCollapsed() {
+  settings.colCollapsed = { q: [...colCollapsedSets.q], k: [...colCollapsedSets.k] };
+  saveSettings();
+}
+// 合集被删除后清掉其折叠标记，避免残留失效 id
+function forgetCollapsed(ids) {
+  let changed = false;
+  for (const kind of ['q', 'k']) for (const id of ids) if (colCollapsedSets[kind].delete(id)) changed = true;
+  if (changed) persistColCollapsed();
+}
+// 启动时把指向已不存在合集的折叠标记清掉（如导入/别处删过）
+function pruneCollapsed() {
+  let changed = false;
+  for (const kind of ['q', 'k']) {
+    const valid = new Set(colList(kind).map(c => c.id));
+    for (const id of [...colCollapsedSets[kind]]) if (!valid.has(id)) { colCollapsedSets[kind].delete(id); changed = true; }
+  }
+  if (changed) persistColCollapsed();
+}
 
 const colKind = () => active === 'k' ? 'k' : 'q';
 
@@ -1491,7 +1711,7 @@ function addCollectionQuick(kind, parentId, name) {
   }
   const r = addCollection(colList(kind), nm, pid, Date.now());
   colStores[kind] = r.cols;
-  if (pid) colCollapsed.delete(pid);      // 展开父节点，让新建的子合集可见
+  if (pid) setColCollapsed(pid, false);      // 展开父节点，让新建的子合集可见
   saveCols(kind);
   return r.node.id;
 }
@@ -1506,6 +1726,7 @@ document.getElementById('colToggle').onclick = () => {
   colTreeEl.classList.contains('open') ? closeColDrawer() : openColDrawer();
 };
 
+let lastColSel = null;   // 上次渲染时的选中合集 id，用于「选中变化 → 滚动到可视区」
 function renderColTree() {
   if (!colTreeEl) return;
   if (active !== 'q' && active !== 'k') { colTreeEl.innerHTML = ''; return; }
@@ -1521,6 +1742,17 @@ function renderColTree() {
     renderColRail(kind, cols, subtree, unassigned, sel);
     return;
   }
+
+  // 选中的合集若被折叠的祖先挡住，自动展开其祖先（不改该合集自身折叠态），保证高亮可见
+  if (sel && sel !== COL_ALL) {
+    let expanded = false;
+    for (const n of collectionPath(cols, sel).slice(0, -1)) {
+      if (colCollapsedSets[kind].delete(n.id)) expanded = true;
+    }
+    if (expanded) persistColCollapsed();
+  }
+  const selChanged = sel !== lastColSel;   // 仅在选中项变化时滚动定位，避免每次重渲染都跳动
+  lastColSel = sel;
 
   const nodeRow = o => {
     const pad = 6 + o.depth * 14;
@@ -1546,7 +1778,7 @@ function renderColTree() {
     let s = '';
     for (const c of collectionChildren(cols, parentId)) {
       const kids = collectionChildren(cols, c.id);
-      const collapsed = colCollapsed.has(c.id);
+      const collapsed = isColCollapsed(c.id);
       s += nodeRow({ id: c.id, name: c.name, count: subtree.get(c.id) || 0, active: sel === c.id, depth, hasKids: !!kids.length, collapsed });
       if (kids.length && !collapsed) s += walk(c.id, depth + 1);
     }
@@ -1557,6 +1789,11 @@ function renderColTree() {
   html += `<button class="coltree-new" id="colNew">＋ 新建合集</button>`;
   colTreeEl.innerHTML = html;
   colTreeEl.scrollTop = st;
+  // 选中项变化时（如从下拉/搜索/归档切到深层合集）把它滚到可视区
+  if (selChanged && sel && sel !== COL_ALL) {
+    const row = colTreeEl.querySelector(`[data-crow="${esc(sel)}"]`);
+    if (row) row.scrollIntoView({ block: 'nearest' });
+  }
 
   colTreeEl.querySelectorAll('[data-crow]').forEach(el => {
     el.onclick = e => {
@@ -1571,7 +1808,7 @@ function renderColTree() {
     el.onclick = e => {
       e.stopPropagation();
       const id = el.dataset.twist;
-      colCollapsed.has(id) ? colCollapsed.delete(id) : colCollapsed.add(id);
+      setColCollapsed(id, !isColCollapsed(id));
       renderColTree();
     };
   });
@@ -1589,23 +1826,31 @@ function renderColTree() {
 // 首字（竖条方块上显示一个字符；对代理对/emoji 安全）
 const firstChar = s => { const t = String(s == null ? '' : s).trim(); return t ? [...t][0] : '?'; };
 
-// 窄竖条：平铺「全部」「未分类」+ 所有合集（含子合集，不体现缩进），复用同一份 collectionFilter 选中态
+// 窄竖条：收起后的一列方块。递归分组体现父子层级（子合集缩进 + 左侧竖线），
+// 复用同一份 collectionFilter 选中态。
 function renderColRail(kind, cols, subtree, unassigned, sel) {
   const v = cur();
   // 保留竖条内部滚动位置
   const prev = colTreeEl.querySelector('.colrail-items');
   const st = prev ? prev.scrollTop : 0;
 
-  const item = (id, name, active, tip) =>
-    `<button class="colrail-item${active ? ' active' : ''}" data-rrow="${esc(id)}" title="${esc(tip)}">${esc(firstChar(name))}</button>`;
+  const item = (id, name, active, tip, extra) =>
+    `<button class="colrail-item${extra ? ' ' + extra : ''}${active ? ' active' : ''}" data-rrow="${esc(id)}" title="${esc(tip)}">${esc(firstChar(name))}</button>`;
 
-  let items = '';
-  items += item(COL_ALL, '全部', sel === COL_ALL, `全部 · ${curItems().length} 条`);
+  const walk = parentId => {
+    let s = '';
+    for (const c of collectionChildren(cols, parentId)) {
+      const kids = collectionChildren(cols, c.id);
+      const path = collectionPath(cols, c.id).map(x => x.name).join(' / ');
+      s += item(c.id, c.name, sel === c.id, `${path} · ${subtree.get(c.id) || 0} 条`, kids.length ? 'has-kids' : '');
+      if (kids.length) s += `<div class="colrail-sub">${walk(c.id)}</div>`;
+    }
+    return s;
+  };
+
+  let items = item(COL_ALL, '全部', sel === COL_ALL, `全部 · ${curItems().length} 条`);
   items += item(NONE_ID, '未分类', sel == null, `未分类 · ${unassigned} 条`);
-  for (const c of flattenCollections(cols)) {
-    const path = collectionPath(cols, c.id).map(x => x.name).join(' / ');
-    items += item(c.id, c.name, sel === c.id, `${path} · ${subtree.get(c.id) || 0} 条`);
-  }
+  items += `<div class="colrail-group">${walk(null)}</div>`;
 
   colTreeEl.innerHTML = '<div class="colrail">'
     + '<button class="colrail-btn" id="colRailExpand" title="展开合集侧栏">»</button>'
@@ -1670,6 +1915,7 @@ function deleteCollectionPrompt(id) {
     + '\n此操作不可撤销。';
   if (!confirm(msg)) return;
   colStores[kind] = deleteCollection(cols, id).cols;
+  forgetCollapsed(ids);
   let changed = false;
   for (const it of curItems()) {
     if (it.collectionId && ids.has(it.collectionId)) { it.collectionId = null; changed = true; }
@@ -2789,6 +3035,7 @@ function fillAiForm() {
   aiEl('aiProtocol').value = aiCfg.protocol || 'gemini';
   aiEl('aiBase').value = aiCfg.baseUrl || '';
   aiEl('aiModel').value = aiCfg.model || '';
+  aiEl('aiMaxTokens').value = aiCfg.maxTokens || '';
   aiEl('aiKey').value = aiCfg.key || '';
   updateAiHint();
 }
@@ -2798,6 +3045,7 @@ function readAiForm() {
     protocol: aiEl('aiProtocol').value,
     baseUrl: aiEl('aiBase').value.trim().replace(/\/+$/, ''),
     model: aiEl('aiModel').value.trim(),
+    maxTokens: clampMaxTokens(aiEl('aiMaxTokens').value),
     key: aiEl('aiKey').value.trim(),
   };
   saveAiCfg();
@@ -2815,7 +3063,7 @@ function applyAiPreset() {
 }
 aiEl('aiPreset').onchange = applyAiPreset;
 aiEl('aiApplyPreset').onclick = applyAiPreset;
-['aiProtocol', 'aiBase', 'aiModel', 'aiKey'].forEach(id => {
+['aiProtocol', 'aiBase', 'aiModel', 'aiMaxTokens', 'aiKey'].forEach(id => {
   aiEl(id).onchange = () => { readAiForm(); aiEl('aiMsg').textContent = ''; };
 });
 
@@ -2842,6 +3090,22 @@ function aiTinyImage() {
 /* ---------- 提示词：分两步（先只转录原文，再解题整理） ---------- */
 const aiNoun = () => active === 'q' ? '题目' : '知识点';
 
+/* 公式排版硬约束：所有会产出数学文本的提示词（识题 / 解题 / 整理 / 考点讲解）
+   都引用这一份，内置调用与「复制给免费 AI」共用，改一处即全局生效。 */
+function aiLatexRules() {
+  return [
+    '【公式排版：必须严格遵守，有一条不合规就算失败】',
+    '1. 全量 LaTeX 化：所有数学表达式、方程、等式、不等式、函数、集合、矩阵、微积分符号，以及单独出现的变量或数字（如 $A$、$B$、$0$、$1$），无一例外都要用 LaTeX；',
+    '2. 行内公式用 $...$：哪怕是半句话里的式子也必须包，如「当 $x \\to 0$ 时」「$a+b+c=0$」「$n \\ge 1$」「$f(x)$」；',
+    '3. 独立成行、较复杂或需要对齐的推导用 $$...$$，且 $$ 必须自己单独占一行；$...$ 不能跨行；',
+    '4. 绝对禁止纯文本数学：不许出现未包裹的 a+b=c、y=x^2、x>0、-1 这类写法；只要一句话里出现 \\frac、\\sqrt、\\int、\\sum、\\lim、^、_、{ 等数学写法，这一段式子就必须整体进 $...$ 或 $$...$$；',
+    '5. 汉字与中文标点不要放进 $...$ 里，只包数学部分。',
+  ];
+}
+
+// 紧凑版：用于 JSON 字段里的一句话（不适合塞整段硬约束）
+const AI_LATEX_BRIEF = '公式必须全量 LaTeX 化：单独出现的变量或数字也要包（如 $A$、$n$、$0$），行内用 $...$，独立推导用 $$...$$，禁止出现 a+b=c 这类未包裹的纯文本数学。';
+
 // 第一步：只做识别/转录，不解答、不给答案
 function aiOcrPrompt() {
   const n = aiNoun();
@@ -2850,10 +3114,9 @@ function aiOcrPrompt() {
     `请只把图中的${n}**原文**准确转录出来，不要解答，也不要添加任何解析、答案或说明。`,
     '要求：',
     '1. 只输出原文本身，不要输出【】这类标记，不要标题，不要任何解释；',
-    '2. 公式一律使用 LaTeX 且必须带定界符：行内公式用 $...$，独立公式用 $$...$$；',
-    '   注意：矩阵、方程组、分段函数、多行推导等会跨行的公式必须用 $$...$$ 包裹，$...$ 不能跨行；',
-    '   绝不允许输出没有任何 $ 包裹的裸公式：例如 y\'\' = \\frac{dp}{dx} 这种写法是错的，必须写成 $$y\'\' = \\frac{dp}{dx}$$；',
-    '   只要出现 \\frac、\\sqrt、\\int、\\sum、^、_ 这类数学写法，它就是一个公式，必须加 $...$ 或 $$...$$；',
+    '2. 原文里的数学内容同样要全量 LaTeX 化，不能因为「只是转录」就写成纯文本：',
+    ...aiLatexRules(),
+    '   · 矩阵、方程组、分段函数、多行推导必须用 $$...$$ 包裹，$...$ 不能跨行；',
     `3. 图中若有多道${n}，它们之间用单独一行 === 分隔；`,
     '4. 若图中没有可识别的内容，就只回答：未识别到内容。',
   ].join('\n');
@@ -2865,10 +3128,10 @@ function aiOutputRules() {
   const base = [
     '1. 只输出固定格式的内容，不要输出任何解释、寒暄或标题；',
     '2. 不要用 ``` 代码块把整体包裹起来；',
-    '3. 公式一律使用 LaTeX 且必须带定界符：行内公式用 $...$，独立公式用 $$...$$；矩阵、方程组、分段函数、多行推导等会跨行的公式必须用 $$...$$ 包裹（$...$ 不能跨行）；矩阵换行用 \\\\，列用 &，例如 $$\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}$$；',
-    '   · 最常犯的错：直接输出没有任何 $ 包裹的裸公式。像 y\'\' = \\frac{dp}{dx} = \\frac{dp}{dy} \\cdot \\frac{dy}{dx} = p \\frac{dp}{dy} 这样写是错的，必须写成 $$y\'\' = \\frac{dp}{dx} = \\frac{dp}{dy} \\cdot \\frac{dy}{dx} = p \\frac{dp}{dy}$$；',
+    '3. 公式排版：严格遵守下面这份硬约束，一条都不能破；',
+    ...aiLatexRules(),
     '   · 判断标准：只要一段文字里出现 \\frac、\\sqrt、\\int、\\sum、\\lim、^、_、{ 这类数学写法，它就是公式，必须加 $...$ 或 $$...$$，一个都不能漏；',
-    '   · 所有公式都要逐个检查一遍：凡是出现在【题目】【解析】【知识点】【讲解】里的公式，都必须被 $ 或 $$ 包住。',
+    '   · 所有公式都要逐个检查一遍：凡是出现在【题目】【解析】【知识点】【讲解】里的公式，都必须被 $ 或 $$ 包住；',
     '4. 不要使用 Markdown 语法：不要 **加粗**、不要 # 标题、不要 - 或 * 列表、不要 | 表格；需要分步就用行首「第 1 步：」这类前缀，每一步单独成行；',
   ];
   const steps = active === 'q' ? [
@@ -2925,23 +3188,32 @@ function aiPromptText() {
 }
 
 /* ---------- AI 整理：提示词与分批调用 ----------
-   dims: { tags:bool, collection:bool, knowledge:bool, sink:bool }
+   dims: { target:'q'|'k', tags:bool, collection:bool, link:bool, knowledge:bool, sink:bool }
    sink=true 时额外生成 kpTitle + kpExplain，用于沉淀到知识库；
    输出变长，所以每批数量单独调小，避免被 max_tokens 截断。 */
 const AI_ORG_BATCH = 30;          // 每次请求最多处理的错题数
 const AI_ORG_SINK_BATCH = 4;     // 带完整讲解时每批数量
 
 function aiOrgJsonRules(dims, kpTitles) {
+  const isKp = dims.target === 'k';
   const fields = [];
   if (dims.tags) fields.push('"tags": 字符串数组，2~4 个短标签（章节名 / 知识点 / 题型，不要整句话）');
-  if (dims.collection) fields.push('"collectionPath": 字符串，形如 "高等数学/极限"（最多两级，末级是考点名）');
-  if (dims.knowledge) fields.push('"knowledge": 字符串，一句话写清「考点 + 易错点」，公式用 $...$');
+  if (dims.collection) {
+    fields.push(isKp
+      ? '"collectionPath": 字符串，形如 "高等数学/极限"（一级是学科、二级是章节，最多两级）'
+      : '"collectionPath": 字符串，形如 "高等数学/极限"（最多两级，末级是考点名）');
+  }
+  if (dims.link) fields.push('"kpIds": 字符串数组，0~3 个，只能取自【知识点清单】里的 id，禁止编造');
+  if (dims.knowledge) fields.push('"knowledge": 字符串，一句话写清「考点 + 易错点」；' + AI_LATEX_BRIEF);
   if (dims.sink) {
     fields.push('"kpTitle": 字符串，短考点名（2~12 字，尽量复用已有知识点名称）');
     fields.push('"kpExplain": 字符串，该考点的完整讲解：定义 → 为什么成立 → 适用条件 → 怎么用（含逐步示范）→ 易错点；分步用「第 1 步：」开头，公式用 $...$');
   }
-  const out = [
-    '你是数学错题整理助手。下面会给你一个 JSON 数组，元素形如 {"id":"...","stem":"题目原文（可能含 $LaTeX$）"}。',
+  const head = isKp
+    ? '你是数学知识点库整理助手。下面会给你一个 JSON 数组，元素形如 {"id":"...","title":"考点名","tags":[...]}。'
+    : '你是数学错题整理助手。下面会给你一个 JSON 数组，元素形如 {"id":"...","stem":"题目原文（可能含 $LaTeX$）"}。';
+  const lines = [
+    head,
     '请为每一项给出整理建议，并**严格只输出一个 JSON 数组**，不要输出任何解释、标题或 ``` 围栏。',
     '每个元素形如：',
     '{',
@@ -2950,12 +3222,30 @@ function aiOrgJsonRules(dims, kpTitles) {
     '}',
     '要求：',
     '1. 输出数组的元素个数、顺序与输入完全一致，id 必须原样照抄；',
-    '2. 不要改动题目原文；',
+    isKp ? '2. 不要改动考点名；' : '2. 不要改动题目原文；',
     '3. 标签要短、要能复用，同一考点在不同题里必须用同一个词，不要输出同义写法；',
     '4. 若某项无法判断，对应字段给空数组或空字符串，不要瞎猜。',
   ];
+  if (dims.collection) {
+    const cols = isKp
+      ? flattenCollections(colStores.k).map(c => collectionPath(colStores.k, c.id).map(x => x.name).join('/'))
+      : [];
+    if (cols.length) {
+      lines.push('可选合集路径（已存在的优先复用，尽量不要造同义新路径）：');
+      lines.push(JSON.stringify(cols));
+    }
+  }
+  if (dims.link) {
+    lines.push('5. kpIds 只从【知识点清单】里挑最相关的，宁可少给也不要错给。');
+    lines.push('知识点清单（字段：id / title / path）：');
+    lines.push(JSON.stringify(stores.k.items.map(k => ({
+      id: k.id,
+      title: k.title || '',
+      path: k.collectionId ? collectionPath(colStores.k, k.collectionId).map(x => x.name).join('/') : '',
+    }))));
+  }
   if (dims.sink) {
-    out.push(
+    lines.push(
       '5. kpTitle 必须是短考点名；同一个考点在不同题里必须使用完全相同的 kpTitle；',
       '6. kpExplain 必须能独立阅读，不要只写一句话；没有把握时宁可给空字符串，也不要编造。'
     );
@@ -2963,22 +3253,27 @@ function aiOrgJsonRules(dims, kpTitles) {
   const known = (Array.isArray(kpTitles) ? kpTitles : [])
     .map(x => String(x || '').trim()).filter(Boolean).slice(0, 60);
   if (dims.sink && known.length) {
-    out.push('', `已有知识点（优先复用同名，不要另造同义写法）：${known.join('、')}`);
+    lines.push('', `已有知识点（优先复用同名，不要另造同义写法）：${known.join('、')}`);
   }
-  return out.join('\n');
+  return lines.join('\n');
 }
 
-function aiOrgUserText(items) {
-  return JSON.stringify(items.map(it => ({
+function aiOrgUserText(items, target) {
+  const isKp = target === 'k';
+  return JSON.stringify((Array.isArray(items) ? items : []).map(it => isKp ? {
+    id: it.id,
+    title: String(it.title || '').replace(/\s+/g, ' ').slice(0, 120),
+    tags: it.tags || [],
+  } : {
     id: it.id,
     stem: String(it.stem || '').replace(/\s+/g, ' ').slice(0, 400),
-  })));
+  }));
 }
 
 // 分类树建议：只让 AI 输出叶子路径列表
 function aiTreePrompt() {
   return [
-    '你是数学课程分类专家。下面给你一批数学错题原文（JSON 数组）。',
+    '你是数学课程分类专家。下面给你一批数学内容（错题原文或考点名，JSON 数组）。',
     '请按中国考研数学 / 高中数学的知识体系，给出**一套通用的两层分类**（一级为学科大块，二级为考点）。',
     '严格只输出 JSON 对象：{"paths":["高等数学/极限","高等数学/中值定理","线性代数/行列式","概率论/随机变量"]}',
     '要求：',
@@ -3005,11 +3300,145 @@ function aiOrgPromptText(items, dims, kpTitles) {
   return [
     aiOrgJsonRules(dims, kpTitles),
     '',
-    '下面是需要整理的错题（JSON）：',
-    aiOrgUserText(items),
+    dims.target === 'k' ? '下面是需要整理的知识点（JSON）：' : '下面是需要整理的错题（JSON）：',
+    aiOrgUserText(items, dims.target),
     '',
     '请只输出那个 JSON 数组。',
   ].join('\n');
+}
+
+/* ---------- AI 整理知识点：Step1 体系 / Step2 挂载 / Step3 讲解 ---------- */
+function aiKpExistingText() {
+  return JSON.stringify(stores.k.items.map(k => ({
+    title: k.title || '',
+    path: k.collectionId ? collectionPath(colStores.k, k.collectionId).map(x => x.name).join('/') : '',
+    kpId: k.id,
+  })));
+}
+
+function aiKpUserText(items) {
+  return JSON.stringify((Array.isArray(items) ? items : []).map(it => ({
+    id: it.id,
+    stem: String(it.stem || '').replace(/\s+/g, ' ').slice(0, 300),
+    tags: it.tags || [],
+  })));
+}
+
+// Step1：让 AI 提出三层考点体系（学科 / 章节 / 考点）
+function aiKpTaxonomyPrompt() {
+  return [
+    '你是考研数学 / 高中数学的课程分类专家。下面会给你两段 JSON：一批错题原文与标签，以及知识点库里已有的考点清单。',
+    '请据此提出一套**三层考点体系**：学科 → 章节 → 考点。',
+    '严格只输出一个 JSON 数组，不要输出任何解释、标题或 ``` 围栏。每个元素形如：',
+    '{ "subject": "高等数学", "chapter": "极限", "topics": [ { "title": "夹逼定理", "kpId": "k12" }, { "title": "单调有界准则", "kpId": null } ] }',
+    '要求：',
+    '1. subject 控制在 2~6 个（如 高等数学 / 线性代数 / 概率论与数理统计）；',
+    '2. 每个 subject 下 2~8 个 chapter；每个 chapter 下 1~6 个 topics；',
+    '3. 考点名要短（不超过 12 字）、要能复用，同一考点不要换个说法重复出现；',
+    '4. 【已有清单】里出现过的考点，必须原样照抄它的 kpId 复用，禁止编造 kpId；新考点 kpId 一律用 null；',
+    '5. 同一个考点不要同时放进两个 chapter；学科名与章节名里不要出现 / 字符。',
+  ].join('\n');
+}
+
+// Step2：把错题挂到考点上（多选），必要时补一句「考点 + 易错点」
+function aiKpLinkPrompt(entries) {
+  return [
+    '你是数学错题整理助手。下面给你一份**已确定的考点清单**（每个考点有唯一 key）和一批错题。',
+    '请为每道错题挑出它涉及的全部考点（可多个，也可以一个都不涉及），并在需要时补一句「考点 + 易错点」。',
+    '严格只输出一个 JSON 数组，不要输出任何解释或 ``` 围栏。每个元素形如：',
+    '{ "qid": "错题 id（原样照抄）", "kpKeys": ["k12", "tmp3"], "knowledge": "夹逼定理：……" }',
+    '要求：',
+    '1. kpKeys 只能取自下面清单里的 key，禁止编造；一道题最多 3 个考点；',
+    '2. 不确定就给空数组，不要瞎猜；',
+    '3. knowledge 是可选的一句话（考点 + 易错点）；' + AI_LATEX_BRIEF + '不确定就给空字符串；',
+    '4. 输出元素个数、id 与输入错题一一对应。',
+    '考点清单：',
+    JSON.stringify((Array.isArray(entries) ? entries : []).map(e => ({ key: e.key, path: e.path, title: e.title }))),
+  ].join('\n');
+}
+
+// Step3：只为被挂到的考点写讲解
+function aiKpExplainPrompt(entries) {
+  return [
+    '你是数学助教。下面给你一批数学考点，请为每个考点写一段讲解。',
+    '严格只输出一个 JSON 数组，不要输出任何解释或 ``` 围栏。每个元素形如：',
+    '{ "kpKey": "k12", "content": "……" }',
+    '要求：',
+    '1. 讲解写清「定义 + 为什么成立 + 怎么用 + 易错点」；',
+    ...aiLatexRules(),
+    '2. 不要用 Markdown 语法（不要 **加粗**、# 标题、- 列表）；需要分步就用「第 1 步：」这类前缀；',
+    '3. kpKey 必须原样照抄，不要编造。',
+    '考点清单：',
+    JSON.stringify((Array.isArray(entries) ? entries : []).map(e => ({ kpKey: e.key, title: e.title }))),
+  ].join('\n');
+}
+
+// 免 Key：拼成一段可直接丢给任意对话式 AI 的文本
+function aiKpCopyText(step, items, entries) {
+  if (step === 'taxonomy') {
+    return [
+      aiKpTaxonomyPrompt(), '',
+      '下面是错题（JSON）：', aiKpUserText(items), '',
+      '下面是知识点库里已有的考点清单：', aiKpExistingText(), '',
+      '请只输出那个 JSON 数组。',
+    ].join('\n');
+  }
+  if (step === 'link') {
+    return [aiKpLinkPrompt(entries), '', '下面是错题（JSON）：', aiKpUserText(items), '', '请只输出那个 JSON 数组。'].join('\n');
+  }
+  return [aiKpExplainPrompt(entries), '', '请只输出那个 JSON 数组。'].join('\n');
+}
+
+// Step2 / Step3：分批挂载 + 分批讲解，合并结果 → { rows, explains, errors }
+async function aiKpPlanRun(items, entries, mode, onProgress) {
+  const list = Array.isArray(items) ? items : [];
+  const total = list.length;
+  const rows = [], explains = [], errors = [];
+  for (let i = 0; i < total; i += KP_LINK_BATCH) {
+    const chunk = list.slice(i, i + KP_LINK_BATCH);
+    if (typeof onProgress === 'function') onProgress(Math.min(i + KP_LINK_BATCH, total), total);
+    const nth = i / KP_LINK_BATCH + 1;
+    try {
+      const text = await aiCall({ system: aiKpLinkPrompt(entries), ask: aiKpUserText(chunk) });
+      const o = parseAiJson(text);
+      if (!Array.isArray(o)) { errors.push(`第 ${nth} 批没返回 JSON 数组`); continue; }
+      for (const r of o) {
+        if (!r || typeof r.qid !== 'string') continue;
+        const kpKeys = Array.isArray(r.kpKeys) ? r.kpKeys.filter(k => typeof k === 'string' && k) : [];
+        rows.push({ qid: r.qid, kpKeys, knowledge: typeof r.knowledge === 'string' ? r.knowledge : '', skip: false });
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') throw err;   // 用户取消 → 中断整步
+      errors.push(`第 ${nth} 批失败（${((err && err.message) || err)}）`);
+    }
+  }
+  const got = new Set(rows.map(r => r.qid));
+  const missed = list.filter(it => !got.has(it.id)).length;
+  if (missed) errors.push(`${missed} 道题没拿到建议（已留空行，可手动补）`);
+
+  // 讲解：只为「本次挂到且讲解为空」的考点写
+  const usedKeys = new Set();
+  for (const r of rows) for (const k of r.kpKeys) usedKeys.add(k);
+  const need = entries.filter(e => usedKeys.has(e.key) && !(e.content || '').trim());
+  for (let i = 0; i < need.length; i += KP_EXPLAIN_BATCH) {
+    const chunk = need.slice(i, i + KP_EXPLAIN_BATCH);
+    if (typeof onProgress === 'function') onProgress(Math.min(i + KP_EXPLAIN_BATCH, need.length), need.length, 'explain');
+    try {
+      const t2 = await aiCall({ system: aiKpExplainPrompt(chunk), ask: '请写讲解。' });
+      const o2 = parseAiJson(t2);
+      if (Array.isArray(o2)) {
+        for (const e of o2) {
+          const key = e && typeof e.kpKey === 'string' ? e.kpKey : null;
+          const content = e && typeof e.content === 'string' ? e.content.trim() : '';
+          if (key && content) explains.push({ kpKey: key, content });
+        }
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') throw err;
+      errors.push('讲解生成失败（可稍后单独重试）：' + ((err && err.message) || err));
+    }
+  }
+  return { rows, explains, errors };
 }
 
 // 分批请求，合并结果 → { plan, failed, errors, ok }
@@ -3017,11 +3446,12 @@ async function aiOrganizeRun(items, dims, onProgress, kpTitles) {
   const list = Array.isArray(items) ? items : [];
   const plan = [], failed = [], errors = [];
   const total = list.length;
+  const validKpIds = new Set(stores.k.items.map(k => k.id));
   const batch = dims.sink ? AI_ORG_SINK_BATCH : AI_ORG_BATCH;
   for (let i = 0; i < total; i += batch) {
     const chunk = list.slice(i, i + batch);
     if (typeof onProgress === 'function') onProgress(Math.min(i + batch, total), total);
-    const text = await aiCall({ system: aiOrgJsonRules(dims, kpTitles), ask: aiOrgUserText(chunk) });
+    const text = await aiCall({ system: aiOrgJsonRules(dims, kpTitles), ask: aiOrgUserText(chunk, dims.target) });
     const arr = parseAiJson(text);
     if (!Array.isArray(arr)) {
       errors.push(`第 ${i / batch + 1} 批返回的不是 JSON 数组`);
@@ -3033,16 +3463,10 @@ async function aiOrganizeRun(items, dims, onProgress, kpTitles) {
     for (const c of chunk) {
       const e = byId.get(c.id);
       if (!e) { failed.push(c.id); continue; }
-      const row = { id: c.id };
-      if (dims.tags && Array.isArray(e.tags)) row.tags = e.tags.filter(t => typeof t === 'string' && t.trim());
-      if (dims.collection && typeof e.collectionPath === 'string') row.collectionPath = e.collectionPath;
-      if (dims.knowledge && typeof e.knowledge === 'string') row.knowledge = e.knowledge;
-      if (dims.sink && typeof e.kpTitle === 'string') row.kpTitle = e.kpTitle;
-      if (dims.sink && typeof e.kpExplain === 'string') row.kpExplain = e.kpExplain;
-      plan.push(row);
+      plan.push(MQ.planRowOf(Object.assign({}, e, { id: c.id }), dims, validKpIds));
     }
   }
-  if (failed.length) errors.push(`${failed.length} 道题未被模型返回（可重试）`);
+  if (failed.length) errors.push(`${failed.length} 条未被模型返回（可重试）`);
   return { plan, failed, errors, ok: plan.length };
 }
 
@@ -3051,21 +3475,16 @@ function aiOrganizeParsePasted(text, items, dims) {
   const arr = parseAiJson(text);
   if (!Array.isArray(arr)) return { plan: [], failed: items.map(i => i.id), errors: ['粘贴内容不是 JSON 数组'], ok: 0 };
   const valid = new Set(items.map(i => i.id));
+  const validKpIds = new Set(stores.k.items.map(k => k.id));
   const plan = [], failed = [];
   const seen = new Set();
   for (const e of arr) {
     if (!e || typeof e.id !== 'string' || !valid.has(e.id) || seen.has(e.id)) continue;
     seen.add(e.id);
-    const row = { id: e.id };
-    if (dims.tags && Array.isArray(e.tags)) row.tags = e.tags.filter(t => typeof t === 'string' && t.trim());
-    if (dims.collection && typeof e.collectionPath === 'string') row.collectionPath = e.collectionPath;
-    if (dims.knowledge && typeof e.knowledge === 'string') row.knowledge = e.knowledge;
-    if (dims.sink && typeof e.kpTitle === 'string') row.kpTitle = e.kpTitle;
-    if (dims.sink && typeof e.kpExplain === 'string') row.kpExplain = e.kpExplain;
-    plan.push(row);
+    plan.push(MQ.planRowOf(e, dims, validKpIds));
   }
   for (const it of items) if (!seen.has(it.id)) failed.push(it.id);
-  return { plan, failed, errors: failed.length ? [`${failed.length} 道题未出现在粘贴内容里`] : [], ok: plan.length };
+  return { plan, failed, errors: failed.length ? [`${failed.length} 条未出现在粘贴内容里`] : [], ok: plan.length };
 }
 
 /* ---------- 剪贴板（复制提示词用，失败时回退到 execCommand） ---------- */
@@ -3104,16 +3523,19 @@ function aiHttpErr(status, data) {
   return `请求失败（HTTP ${status}）${m ? '：' + m : ''}`;
 }
 
-/* ---------- 发起请求（system=角色设定；ask=本次指令；可选带图） ---------- */
+/* ---------- 发起请求（system=角色设定；ask=本次指令；可选带图） ----------
+   输出上限取设置里的「单次输出上限」（空则 4096），见 lib.js 的 clampMaxTokens。
+   超时随上限放宽，否则长输出容易在返回前被 abort。 */
 async function aiCall({ system, ask, b64, mime }) {
   readAiForm();
   if (!aiReady()) throw new Error('AI 配置不完整（需要 Base URL、模型名、API Key）。');
   const cfg = aiCfg;
   const base = cfg.baseUrl.replace(/\/+$/, '');
   const hasImg = !!(b64 && mime);
+  const maxOut = clampMaxTokens(cfg.maxTokens);
   const ctrl = new AbortController();
   aiAbort = ctrl;
-  const timer = setTimeout(() => ctrl.abort(), 120000);
+  const timer = setTimeout(() => ctrl.abort(), Math.max(120000, Math.round(maxOut / 4096 * 120000)));
   try {
     if (cfg.protocol === 'gemini') {
       const url = base + '/v1beta/models/' + encodeURIComponent(cfg.model) +
@@ -3125,7 +3547,7 @@ async function aiCall({ system, ask, b64, mime }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: gParts }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+          generationConfig: { temperature: 0.2, maxOutputTokens: maxOut },
         }),
         signal: ctrl.signal,
       });
@@ -3148,7 +3570,7 @@ async function aiCall({ system, ask, b64, mime }) {
         },
         body: JSON.stringify({
           model: cfg.model,
-          max_tokens: 4096,
+          max_tokens: maxOut,
           system,
           messages: [{ role: 'user', content: aContent }],
         }),
@@ -3168,7 +3590,7 @@ async function aiCall({ system, ask, b64, mime }) {
       body: JSON.stringify({
         model: cfg.model,
         temperature: 0.2,
-        max_tokens: 4096,
+        max_tokens: maxOut,
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: oContent },
@@ -3343,6 +3765,7 @@ aiEl('aiTest').onclick = async () => {
 /* ---------- 初始化 ---------- */
 async function boot() {
   await loadInitial();
+  pruneCollapsed();   // 清掉指向已删合集的折叠标记
   applySettings();
   fillAiForm();
   purgeTrash();
@@ -3360,11 +3783,15 @@ const orgModal = orgEl('aiOrgModal');
 let orgState = null;              // { items, dims, plan, rows, undo }
 
 function orgDims() {
+  const t = orgEl('aiOrgTarget').value;
   return {
+    target: t,
     tags: orgEl('aiOrgDimTags').checked,
     collection: orgEl('aiOrgDimCol').checked,
-    knowledge: orgEl('aiOrgDimKp').checked,
-    sink: orgEl('aiOrgDimSink').checked,
+    // 「挂到知识点」「写考点讲解」「沉淀到知识库」只对错题有意义
+    link: t === 'q' && orgEl('aiOrgDimLink').checked,
+    knowledge: t === 'q' && orgEl('aiOrgDimKp').checked,
+    sink: t === 'q' && orgEl('aiOrgDimSink').checked,
   };
 }
 // 传给 AI 的已有知识点名称，用于优先复用同名、避免同义写法
@@ -3372,11 +3799,38 @@ function kpTitleVocab() {
   return stores.k.items.map(it => String(it.title || '').trim()).filter(Boolean);
 }
 function orgPickItems() {
+  const t = orgEl('aiOrgTarget').value;
   const scope = orgEl('aiOrgScope').value;
-  const all = stores.q.items;
-  if (scope === 'filtered') return currentFiltered();
-  if (scope === 'qualified') return all.filter(it => !it.collectionId || !it.tags.length || !it.knowledge);
+  const all = stores[t].items;
+  if (scope === 'filtered') return currentFiltered(t);
+  if (scope === 'qualified') {
+    return all.filter(it => t === 'k'
+      ? (!it.collectionId || !it.tags.length || !it.content)
+      : (!it.collectionId || !it.tags.length || !it.knowledge));
+  }
   return all.slice();
+}
+// 切换整理对象：范围文案、可用维度跟着变
+function syncOrgTargetUi() {
+  const t = orgEl('aiOrgTarget').value;
+  const isQ = t === 'q';
+  orgEl('aiOrgDimLink').disabled = !isQ;
+  orgEl('aiOrgDimKp').disabled = !isQ;
+  orgEl('aiOrgDimSink').disabled = !isQ;
+  const sc = orgEl('aiOrgScope');
+  sc.options[0].textContent = isQ ? '全部错题' : '全部知识点';
+  sc.options[2].textContent = isQ ? '仅未分类或空白错题' : '仅未分类或缺讲解的知识点';
+  const tags = allTags();
+  orgEl('aiOrgVocabNote').textContent = tags.length
+    ? `已有标签 ${tags.length} 个，AI 会优先复用这些标签（避免同义标签泛滥）。`
+    : '目前还没有标签，AI 会新建一套。';
+  if (isQ) {
+    orgEl('aiOrgVocabNote').textContent += stores.k.items.length
+      ? ` 已有知识点 ${stores.k.items.length} 个，勾选「沉淀到知识库」时会优先复用同名。`
+      : ' 知识库还是空的，沉淀时会按考点名新建。';
+  } else {
+    orgEl('aiOrgVocabNote').textContent += ' 「挂到知识点」「写考点讲解」「沉淀到知识库」只对错题生效，已暂时停用。';
+  }
 }
 function orgShowStep(name) {
   ['aiOrgSetup', 'aiOrgPasteWrap', 'aiOrgTreeWrap', 'aiOrgReviewWrap'].forEach(id => {
@@ -3384,19 +3838,18 @@ function orgShowStep(name) {
   });
 }
 function openAiOrg() {
-  if (active !== 'q') { alert('AI 整理目前只针对错题库。'); return; }
-  if (!stores.q.items.length) { alert('错题库还是空的，先添加几道错题吧。'); return; }
+  if (active === 'p') { alert('AI 整理只针对错题库和知识点库。'); return; }
+  orgEl('aiOrgTarget').value = active === 'k' ? 'k' : 'q';
+  syncOrgTargetUi();
+  const t = orgEl('aiOrgTarget').value;
+  if (!stores[t].items.length) {
+    alert(t === 'q' ? '错题库还是空的，先添加几道错题吧。' : '知识点库还是空的，先建几个知识点吧。');
+    return;
+  }
   orgShowStep('aiOrgSetup');
   orgEl('aiOrgMsg').textContent = '';
   orgEl('aiOrgReview').innerHTML = '';
   orgEl('aiOrgUndo').style.display = 'none';
-  const tags = allTags();
-  orgEl('aiOrgVocabNote').textContent = (tags.length
-    ? `已有标签 ${tags.length} 个，AI 会优先复用这些标签（避免同义标签泛滥）。`
-    : '目前还没有标签，AI 会新建一套。') +
-    (stores.k.items.length
-      ? `已有知识点 ${stores.k.items.length} 个，勾选「沉淀到知识库」时会优先复用同名。`
-      : '知识库还是空的，沉淀时会按考点名新建。');
   orgModal.classList.add('open');
 }
 orgEl('aiOrgCancel').onclick = () => orgModal.classList.remove('open');
@@ -3406,14 +3859,14 @@ orgModal.onclick = e => { if (e.target === orgModal) orgModal.classList.remove('
 // 开始整理：分批调用 → 进入审阅
 orgEl('aiOrgRun').onclick = async () => {
   const dims = orgDims();
-  if (!dims.tags && !dims.collection && !dims.knowledge && !dims.sink) { orgEl('aiOrgMsg').textContent = '至少选一个整理维度。'; return; }
+  if (!dims.tags && !dims.collection && !dims.knowledge && !dims.link && !dims.sink) { orgEl('aiOrgMsg').textContent = '至少选一个整理维度。'; return; }
   if (!aiReady()) {
     orgEl('aiOrgMsg').textContent = '';
     alert('还没有配置 AI。\n请在「设置 → AI 识题」里填好 Base URL、模型名与 API Key；或改用「复制提示词（免 Key）」。');
     return;
   }
   const items = orgPickItems();
-  if (!items.length) { orgEl('aiOrgMsg').textContent = '这个范围里没有错题。'; return; }
+  if (!items.length) { orgEl('aiOrgMsg').textContent = dims.target === 'k' ? '这个范围里没有知识点。' : '这个范围里没有错题。'; return; }
   orgEl('aiOrgRun').disabled = true;
   showAiBusy('AI 正在整理，请稍候…');
   try {
@@ -3435,17 +3888,28 @@ function renderAiOrgReview() {
   const box = orgEl('aiOrgReview');
   if (!st) { box.innerHTML = ''; return; }
   const byId = new Map(st.items.map(it => [it.id, it]));
-  const rows = st.plan.map(p => Object.assign({ skip: false }, p));
+  // 行只建一次：每次重渲染都从 plan 重建会把用户刚改的 chips 冲掉
+  const rows = st.rows && st.rows.length === st.plan.length
+    ? st.rows
+    : st.plan.map(p => Object.assign({ skip: false }, p));
   st.rows = rows;
+  const kpById = new Map(stores.k.items.map(k => [k.id, k]));
+  const isKp = st.dims.target === 'k';
+  const targetCols = colStores[st.dims.target] || [];
 
   box.innerHTML = rows.map((row, i) => {
     const it = byId.get(row.id) || {};
     const chips = (row.tags || []).map(t =>
       `<span class="aio-chip" data-chip-i="${i}" data-chip-t="${esc(t)}">${esc(t)}<b>×</b></span>`).join('');
+    const kpChips = (row.kpIds || []).map(id => {
+      const k = kpById.get(id);
+      return `<span class="aio-chip" data-kpchip-i="${i}" data-kpchip-id="${esc(id)}">${esc((k && k.title) || id)}<b>×</b></span>`;
+    }).join('');
     return `<div class="aio-row">
       <label class="aio-skip"><input type="checkbox" data-skip="${i}"${row.skip ? ' checked' : ''}></label>
-      <div class="aio-stem">${renderMath(String(it.stem || '').slice(0, 160))}</div>
+      <div class="aio-stem">${renderMath(String((isKp ? it.title : it.stem) || '').slice(0, 160))}</div>
       <div class="aio-fields">
+        ${st.dims.link ? `<div class="aio-tags">${kpChips}<input class="aio-tagin" data-kpadd="${i}" list="aioKps" placeholder="＋知识点"></div>` : ''}
         ${st.dims.tags ? `<div class="aio-tags">${chips}<input class="aio-tagin" data-tagadd="${i}" placeholder="＋标签"></div>` : ''}
         ${st.dims.collection ? `<input class="aio-path" data-path="${i}" value="${esc(row.collectionPath || '')}" placeholder="如 高等数学/极限" list="aioCols">` : ''}
         ${st.dims.knowledge ? `<textarea class="aio-know" data-know="${i}" placeholder="考点 + 易错点">${esc(row.knowledge || '')}</textarea>` : ''}
@@ -3456,7 +3920,9 @@ function renderAiOrgReview() {
       </div>
     </div>`;
   }).join('') + `<datalist id="aioCols">${
-    flattenCollections(colStores.q).map(c => `<option value="${esc(collectionPath(colStores.q, c.id).map(x => x.name).join('/'))}"></option>`).join('')
+    flattenCollections(targetCols).map(c => `<option value="${esc(collectionPath(targetCols, c.id).map(x => x.name).join('/'))}"></option>`).join('')
+  }</datalist><datalist id="aioKps">${
+    stores.k.items.map(k => `<option value="${esc(k.title || '')}"></option>`).join('')
   }</datalist>`;
 
   box.querySelectorAll('[data-skip]').forEach(cb => { cb.onchange = () => { rows[+cb.dataset.skip].skip = cb.checked; }; });
@@ -3477,6 +3943,24 @@ function renderAiOrgReview() {
     };
   });
   box.querySelectorAll('[data-path]').forEach(inp => { inp.onchange = () => { rows[+inp.dataset.path].collectionPath = inp.value.trim(); }; });
+  box.querySelectorAll('[data-kpchip-i]').forEach(el => {
+    el.onclick = () => {
+      const row = rows[+el.dataset.kpchipI];
+      row.kpIds = (row.kpIds || []).filter(x => x !== el.dataset.kpchipId);
+      renderAiOrgReview();
+    };
+  });
+  box.querySelectorAll('[data-kpadd]').forEach(inp => {
+    inp.onchange = () => {
+      const row = rows[+inp.dataset.kpadd];
+      const v = normText(inp.value);
+      if (!v) return;
+      const hit = stores.k.items.find(k => normText(k.title) === v);
+      if (!hit) { inp.value = ''; return; }
+      if (!(row.kpIds || []).includes(hit.id) && (row.kpIds || []).length < 3) row.kpIds = [...(row.kpIds || []), hit.id];
+      renderAiOrgReview();
+    };
+  });
   box.querySelectorAll('[data-know]').forEach(ta => { ta.onchange = () => { rows[+ta.dataset.know].knowledge = ta.value; }; });
   box.querySelectorAll('[data-kptitle]').forEach(inp => { inp.onchange = () => { rows[+inp.dataset.kptitle].kpTitle = inp.value.trim(); }; });
   box.querySelectorAll('[data-kpexplain]').forEach(ta => { ta.onchange = () => { rows[+ta.dataset.kpexplain].kpExplain = ta.value; }; });
@@ -3492,21 +3976,20 @@ orgEl('aiOrgApply').onclick = async () => {
   if (!st) return;
   const picked = st.rows.filter(r => !r.skip);
   if (!picked.length) { alert('没有选中任何一条建议。'); return; }
+  const t = st.dims.target;
   st.undo = {
-    q: stores.q.items.map(it => ({
-      id: it.id, tags: it.tags.slice(), collectionId: it.collectionId, knowledge: it.knowledge, kpId: it.kpId,
+    t,
+    items: stores[t].items.map(it => ({
+      id: it.id, tags: it.tags.slice(), collectionId: it.collectionId,
+      knowledge: it.knowledge, kpIds: (it.kpIds || []).slice(), content: it.content,
     })),
     kps: stores.k.items.slice(),
   };
-  const matchKp = title => {
-    const hit = stores.k.items.find(k => (k.title || '').trim() === title);
-    return hit ? hit.id : null;
-  };
-  const r = applyOrganizePlan(stores.q.items, picked, { cols: colStores.q, vocab: allTags(), matchKp });
-  let qItems = r.items;
+  const r = applyOrganizePlan(stores[t].items, picked, { cols: colStores[t], vocab: allTags() });
+  let items = r.items;
   let sink = null;
-  if (st.dims.sink) {
-    const qById = new Map(qItems.map(it => [it.id, it]));
+  if (st.dims.sink && t === 'q') {
+    const qById = new Map(items.map(it => [it.id, it]));
     const sinkRows = picked
       .filter(x => String(x.kpTitle || '').trim() && String(x.kpExplain || '').trim())
       .map(x => ({
@@ -3519,16 +4002,19 @@ orgEl('aiOrgApply').onclick = async () => {
       sink = applyKpSink(stores.k.items, sinkRows);
       stores.k.items = sink.kps;
       const linkByQ = new Map(sink.links.map(l => [l.qid, l.kpId]));
-      qItems = qItems.map(it => linkByQ.has(it.id)
-        ? Object.assign({}, it, { kpId: linkByQ.get(it.id), updatedAt: Date.now() })
-        : it);
+      items = items.map(it => {
+        const kpId = linkByQ.get(it.id);
+        if (!kpId) return it;
+        const kpIds = [...new Set([...(it.kpIds || []), kpId])];
+        return Object.assign({}, it, { kpIds, updatedAt: Date.now() });
+      });
       await saveStore(stores.k.key, stores.k.items);
     }
   }
-  stores.q.items = qItems;
-  colStores.q = r.cols;
-  await saveCols('q');
-  await saveStore(stores.q.key, stores.q.items);
+  stores[t].items = items;
+  colStores[t] = r.cols;
+  await saveCols(t);
+  await saveStore(stores[t].key, stores[t].items);
   render();
   refreshTagPicker();
   orgEl('aiOrgUndo').style.display = '';
@@ -3540,14 +4026,18 @@ function undoAiOrg() {
   const st = orgState;
   if (!st || !st.undo) return;
   const u = st.undo;
-  const byId = new Map(u.q.map(x => [x.id, x]));
-  stores.q.items = stores.q.items.map(it => {
+  const t = u.t;
+  const byId = new Map(u.items.map(x => [x.id, x]));
+  stores[t].items = stores[t].items.map(it => {
     const old = byId.get(it.id);
-    return old ? Object.assign({}, it, { tags: old.tags.slice(), collectionId: old.collectionId, knowledge: old.knowledge, kpId: old.kpId }) : it;
+    return old ? Object.assign({}, it, {
+      tags: old.tags.slice(), collectionId: old.collectionId,
+      knowledge: old.knowledge, kpIds: old.kpIds.slice(), content: old.content,
+    }) : it;
   });
-  stores.k.items = u.kps;
-  saveStore(stores.q.key, stores.q.items);
-  saveStore(stores.k.key, stores.k.items);
+  if (u.kps) stores.k.items = u.kps;
+  saveStore(stores[t].key, stores[t].items);
+  if (u.kps) saveStore(stores.k.key, stores.k.items);
   render();
   refreshTagPicker();
   orgEl('aiOrgMsg').textContent = '已撤销。';
@@ -3555,6 +4045,467 @@ function undoAiOrg() {
   orgEl('aiOrgUndo').style.display = 'none';
 }
 orgEl('aiOrgUndo').onclick = () => undoAiOrg();
+
+/* ===================== AI 整理知识点（考点体系 + 挂载） ===================== */
+const kpEl = id => document.getElementById(id);
+const kpModal = kpEl('aiKpModal');
+let kpState = null;   // { items, mode, taxonomy, entries, keyMap, rows, explains, undo }
+
+/* ---------- 大题量参数 ----------
+   挂载步的输入与输出都随题量线性增长，必须分批：
+   一批 25 道的输入约 4k tokens、输出约 1.3k tokens，离 4096 上限有富余；
+   一批失败只影响该批（对应行留空，可在审阅里手动补）。 */
+const KP_LINK_BATCH = 25;
+// 讲解一次最多写 10 个考点，避免大段讲解把输出顶到上限
+const KP_EXPLAIN_BATCH = 10;
+/* 体系步是一次性请求（分批会产出多套互不相干的体系），所以给发送的题数设上限：
+   80 道 × 题干 300 字 ≈ 2.7 万字 ≈ 2 万 tokens，在安全区内。
+   超过就均匀抽样，见 kpTaxSample；挂载步不受这个上限约束。 */
+const KP_TAX_MAX = 80;
+
+function kpScopeItems() {
+  const scope = kpEl('aiKpScope').value;
+  if (scope === 'filtered') return currentFiltered();
+  if (scope === 'unlinked') return stores.q.items.filter(it => !(it.kpIds || []).length);
+  return stores.q.items.slice();
+}
+const kpMode = () => kpEl('aiKpMode').value === 'overwrite' ? 'overwrite' : 'append';
+
+function kpShowStep(name) {
+  ['aiKpSetup', 'aiKpPasteWrap', 'aiKpTaxWrap', 'aiKpLinkWrap'].forEach(id => {
+    kpEl(id).style.display = (id === name) ? '' : 'none';
+  });
+}
+
+function openAiKp() {
+  if (active !== 'q') { alert('AI 整理知识点需要从错题视图发起（结果写入知识点库）。'); return; }
+  if (!stores.q.items.length) { alert('错题库还是空的，先添加几道错题吧。'); return; }
+  kpState = { items: [], mode: kpMode(), taxonomy: [], entries: [], keyMap: new Map(), rows: [], explains: [], undo: null };
+  kpShowStep('aiKpSetup');
+  kpEl('aiKpMsg').textContent = '';
+  kpShowRaw('');
+  const unlinked = stores.q.items.filter(it => !(it.kpIds || []).length).length;
+  const linked = stores.q.items.length - unlinked;
+  // 增量优先：只要挂过一部分，默认就只处理未挂的题，避免无意重跑全库
+  kpEl('aiKpScope').value = linked ? 'unlinked' : 'all';
+  let note = stores.k.items.length
+    ? `知识点库已有 ${stores.k.items.length} 个条目，AI 会优先复用同名考点。共 ${stores.q.items.length} 道错题，已挂 ${linked} 道、未挂 ${unlinked} 道。`
+    : '知识点库还是空的，AI 会新建整套考点。';
+  if (linked && !unlinked) note += '全部错题都已挂过知识点；如需重跑全库，请把范围改成「全部错题」。';
+  kpEl('aiKpNote').textContent = note;
+  kpModal.classList.add('open');
+}
+kpEl('aiKpBtn').onclick = () => openAiKp();
+kpEl('aiKpCancel').onclick = () => kpModal.classList.remove('open');
+kpEl('aiKpClose').onclick = () => kpModal.classList.remove('open');
+kpModal.onclick = e => { if (e.target === kpModal) kpModal.classList.remove('open'); };
+
+/* ---------- 把 AI / 粘贴得到的体系 JSON 整理成待审阅的行（纯逻辑见 lib.js 的 normalizeKpTaxonomy） ---------- */
+// 解析后仍认不出体系时，把原始返回贴到设置屏，方便照抄给 AI 复跑 / 排查
+function kpShowRaw(text) {
+  const pre = kpEl('aiKpRaw');
+  if (!pre) return;
+  const s = String(text == null ? '' : text);
+  pre.textContent = s.slice(0, 2000) + (s.length > 2000 ? '\n…（已截断）' : '');
+  pre.style.display = s ? '' : 'none';
+}
+
+/* ---------- 步骤 2 渲染：三层体系审阅 ---------- */
+function renderKpTax() {
+  // 用「合集/条目」两级结构渲染：先按 subject/chapter 分组，再列考点
+  const subs = [];
+  kpState.taxonomy.forEach((ch, ci) => {
+    if (!subs.includes(ch.subject)) subs.push(ch.subject);
+  });
+  // 「复用」判定：AI 给的 kpId 真实存在，或「归一化考点名 + 同章节合集」命中已有条目
+  const clean = s => String(s == null ? '' : s).replace(/\//g, '·').trim();
+  const kpIds = new Set(stores.k.items.map(k => k.id));
+  const reuseSet = new Set();
+  for (const k of stores.k.items) {
+    if (k.collectionId && k.title) reuseSet.add(normText(k.title) + '\u0001' + k.collectionId);
+  }
+  let workCols = colStores.k.slice();
+  let html = '';
+  for (const sub of subs) {
+    const ids = kpState.taxonomy.map((ch, ci) => ch.subject === sub ? ci : -1).filter(i => i >= 0);
+    html += `<div class="kp-tax-lv1" data-kp-sub="${esc(sub)}"><input type="checkbox" data-kp-keep="sub:${esc(sub)}" checked><span class="kp-tax-name">${esc(sub)}</span><span class="kp-tax-badge">学科</span></div>`;
+    for (const ci of ids) {
+      const ch = kpState.taxonomy[ci];
+      // 用当前合集树推算该章节的合集 id（纯函数，不改动 colStores.k），用于判断同名考点是否可复用
+      const r = resolveCollectionPath(workCols, clean(sub) + '/' + clean(ch.chapter), Date.now());
+      workCols = r.cols;
+      const colId = r.id;
+      html += `<div class="kp-tax-lv2" data-kp-ch="${ci}"><input type="checkbox" data-kp-keep="ch:${ci}" checked><input class="kp-tax-name" data-kp-name="ch:${ci}" value="${esc(ch.chapter)}"><span class="kp-tax-badge">章节</span><button class="kp-tax-del" data-kp-del="ch:${ci}" title="不建这个章节">✕</button></div>`;
+      ch.topics.forEach((t, ti) => {
+        const exists = (t.kpId && kpIds.has(t.kpId)) || reuseSet.has(normText(t.title) + '\u0001' + colId);
+        html += `<div class="kp-tax-lv3" data-kp-tp="${ci}:${ti}"><input type="checkbox" data-kp-keep="tp:${ci}:${ti}" checked><input class="kp-tax-name" data-kp-name="tp:${ci}:${ti}" value="${esc(t.title)}"><span class="kp-tax-badge${exists ? '' : ' new'}">${exists ? '复用' : '新建'}</span><button class="kp-tax-del" data-kp-del="tp:${ci}:${ti}" title="不建这个考点">✕</button></div>`;
+      });
+    }
+  }
+  kpEl('aiKpTax').innerHTML = html || '<div class="col-empty">AI 没有给出可用的考点体系，请返回重试或改用手动输入。</div>';
+  kpState.keep = {};
+  kpEl('aiKpTax').querySelectorAll('[data-kp-keep]').forEach(cb => {
+    kpState.keep[cb.dataset.kpKeep] = cb.checked;
+    cb.onchange = () => { kpState.keep[cb.dataset.kpKeep] = cb.checked; };
+  });
+  kpEl('aiKpTax').querySelectorAll('[data-kp-name]').forEach(inp => {
+    inp.onchange = () => {
+      const [kind, a, b] = inp.dataset.kpName.split(':');
+      const v = inp.value.trim();
+      if (!v) { inp.value = kind === 'ch' ? kpState.taxonomy[a].chapter : kpState.taxonomy[a].topics[b].title; return; }
+      if (kind === 'ch') kpState.taxonomy[a].chapter = v;
+      else kpState.taxonomy[a].topics[b].title = v;
+    };
+  });
+  kpEl('aiKpTax').querySelectorAll('[data-kp-del]').forEach(btn => {
+    btn.onclick = () => {
+      const [kind, a, b] = btn.dataset.kpDel.split(':');
+      if (kind === 'ch') kpState.taxonomy[a].topics = [];
+      else kpState.taxonomy[a].topics[b].title = '';
+      renderKpTax();
+    };
+  });
+  kpEl('aiKpTaxMsg').textContent = `学科 ${new Set(kpState.taxonomy.map(t => t.subject)).size} 个 · 章节 ${kpState.taxonomy.length} 个 · 考点 ${kpState.taxonomy.reduce((n, t) => n + t.topics.length, 0)} 个`;
+}
+
+/* ---------- 收集审阅结果：勾选/改名/删除后真正要建的体系 ---------- */
+function kpCollectTaxonomy() {
+  const keep = kpState.keep || {};
+  const out = [];
+  kpState.taxonomy.forEach((ch, ci) => {
+    if (!keep['ch:' + ci]) return;
+    if (!keep['sub:' + ch.subject]) return;
+    const topics = [];
+    ch.topics.forEach((t, ti) => {
+      if (!keep['tp:' + ci + ':' + ti]) return;
+      if (!t.title.trim()) return;
+      topics.push({ title: t.title.trim(), kpId: t.kpId });
+    });
+    if (topics.length) out.push({ subject: ch.subject, chapter: ch.chapter, topics });
+  });
+  return out;
+}
+
+/* ---------- 体系这一步是一次性请求，范围太大必然超上下文 ----------
+   体系只需要覆盖「有哪些考点」，不需要逐题都在场，所以超限时均匀抽样；
+   抽样结果仍然要人工审阅，剩下没进抽样的题在挂载步归入已有考点。 */
+function kpTaxSample(items) {
+  return sampleEvenly(items, KP_TAX_MAX);
+}
+function kpTaxSampleNote(items) {
+  const used = kpTaxSample(items);
+  if (used.length === items.length) return '';
+  return `范围 ${items.length} 道，体系按其中 ${used.length} 道均匀抽样生成（不会逐题发送）；`
+    + '其余题在挂载步归入已有考点。若发现漏了章节，可缩小范围后再跑一次补充。';
+}
+
+/* ---------- 开始：调 AI 或粘贴 ---------- */
+kpEl('aiKpRun').onclick = async () => {
+  const items = kpScopeItems();
+  if (!items.length) { kpEl('aiKpMsg').textContent = '这个范围里没有错题。'; return; }
+  kpState.items = items;
+  kpState.mode = kpMode();
+  if (!aiReady()) {
+    kpEl('aiKpMsg').textContent = '';
+    alert('还没有配置 AI。\n请在「设置 → AI 识题」里填好 Base URL、模型名与 API Key；或改用「复制提示词（免 Key）」。');
+    return;
+  }
+  kpEl('aiKpRun').disabled = true;
+  kpEl('aiKpMsg').textContent = kpTaxSampleNote(items);
+  showAiBusy('AI 正在提考点体系，请稍候…');
+  try {
+    const text = await aiCall({
+      system: aiKpTaxonomyPrompt(),
+      ask: ['下面是错题（JSON）：', aiKpUserText(kpTaxSample(items)), '', '下面是知识点库里已有的考点清单：', aiKpExistingText()].join('\n'),
+    });
+    const raw = parseAiJson(text);
+    hideAiBusy();
+    kpState.taxonomy = normalizeKpTaxonomy(raw);
+    if (!kpState.taxonomy.length) {
+      kpShowRaw(text);
+      kpEl('aiKpMsg').textContent = raw == null
+        ? 'AI 返回的内容不是合法 JSON（常见于输出被 max_tokens 截断）。原始返回已贴在下方，可重试或改用「复制提示词（免 Key）」。'
+        : 'AI 返回的 JSON 认不出体系结构（需要 subject / chapter / topics）。原始返回已贴在下方，可重试或改用「复制提示词（免 Key）」。';
+      return;
+    }
+    kpShowRaw('');
+    renderKpTax();
+    kpShowStep('aiKpTaxWrap');
+  } catch (e) {
+    hideAiBusy();
+    kpEl('aiKpMsg').textContent = (e && e.name === 'AbortError') ? '已取消。' : '整理失败：' + ((e && e.message) || e);
+  } finally { kpEl('aiKpRun').disabled = false; }
+};
+
+/* ---------- 免 Key：复制提示词 ---------- */
+kpEl('aiKpCopy').onclick = async () => {
+  const items = kpScopeItems();
+  if (!items.length) { kpEl('aiKpMsg').textContent = '这个范围里没有错题。'; return; }
+  kpState.items = items;
+  kpState.mode = kpMode();
+  kpEl('aiKpMsg').textContent = kpTaxSampleNote(items);
+  const text = aiKpCopyText('taxonomy', kpTaxSample(items), []);
+  kpState.pasteStep = 'taxonomy';
+  kpEl('aiKpPaste').value = '';
+  kpEl('aiKpPasteHint').textContent = '把 AI 输出的 JSON 数组粘到下面（Step1 的体系 JSON）。';
+  try { await navigator.clipboard.writeText(text); kpEl('aiKpMsg').textContent = '提示词已复制，去任意 AI 跑一遍再粘回来。' + kpTaxSampleNote(items); }
+  catch (e) { kpEl('aiKpPaste').value = text; kpEl('aiKpMsg').textContent = '复制失败，提示词已填在下面的框里，请手动复制。' + kpTaxSampleNote(items); }
+  kpShowStep('aiKpPasteWrap');
+};
+
+kpEl('aiKpPasteBack').onclick = () => kpShowStep(kpState.pasteStep === 'taxonomy' ? 'aiKpSetup' : 'aiKpLinkWrap');
+kpEl('aiKpPasteGo').onclick = () => {
+  const text = kpEl('aiKpPaste').value;
+  let raw;
+  try { raw = parseAiJson(text); } catch (e) { alert('解析失败：' + ((e && e.message) || e)); return; }
+  if (kpState.pasteStep === 'link') {
+    // 挂载 JSON：映射成逐题行，未知 qid 自然被丢弃
+    const list = (Array.isArray(raw) ? raw : []).map(r => ({
+      qid: r && typeof r.qid === 'string' ? r.qid : '',
+      kpKeys: r && Array.isArray(r.kpKeys) ? r.kpKeys.filter(k => typeof k === 'string' && k) : [],
+      knowledge: r && typeof r.knowledge === 'string' ? r.knowledge : '',
+      skip: false,
+    })).filter(r => r.qid);
+    kpState.rows = kpDefaultRows(kpState.items, list);
+    kpState.explains = kpState.explains || [];
+    kpShowStep('aiKpLinkWrap');
+    renderKpLink();
+    kpEl('aiKpLinkMsg2').textContent = `已解析 ${list.length} 条挂载建议。`;
+    return;
+  }
+  if (kpState.pasteStep === 'explain') {
+    // 讲解 JSON 直接进入挂载审阅的讲解区
+    const list = (Array.isArray(raw) ? raw : []).map(e => ({
+      kpKey: e && typeof e.kpKey === 'string' ? e.kpKey : null,
+      content: e && typeof e.content === 'string' ? e.content.trim() : '',
+    })).filter(e => e.kpKey && e.content);
+    kpState.explains = list;
+    kpShowStep('aiKpLinkWrap');
+    renderKpLink();
+    kpEl('aiKpLinkMsg2').textContent = `已解析 ${list.length} 条讲解。`;
+    return;
+  }
+  kpState.taxonomy = normalizeKpTaxonomy(raw);
+  if (!kpState.taxonomy.length) { alert('没解析出可用的考点体系（需要 subject / chapter / topics 结构）。'); return; }
+  kpShowRaw('');
+  renderKpTax();
+  kpShowStep('aiKpTaxWrap');
+};
+
+/* ---------- 体系审阅：应用体系（建合集 + 条目），进入挂载 ---------- */
+kpEl('aiKpTaxBack').onclick = () => kpShowStep('aiKpSetup');
+kpEl('aiKpTaxApply').onclick = async () => {
+  const taxonomy = kpCollectTaxonomy();
+  if (!taxonomy.length) { alert('没有勾选任何要建的考点。'); return; }
+  const r = planKpTaxonomy(taxonomy, { cols: colStores.k, kps: stores.k.items });
+  kpState.taxonomy = taxonomy;
+  kpState.entries = r.entries;
+  kpState.keyMap = new Map(r.entries.map(e => [e.key, e.kpId]));
+  kpState.undo = { q: stores.q.items.slice(), k: stores.k.items.slice(), cols: colStores.k.slice() };
+  colStores.k = r.cols;
+  stores.k.items = r.kps;
+  await saveCols('k');
+  await saveStore(stores.k.key, stores.k.items);
+  render();
+  // 进入挂载：有 Key 调 AI，没 Key 走手动 / 复制粘贴
+  if (!aiReady()) {
+    kpState.rows = kpDefaultRows(kpState.items, []);
+    kpEl('aiKpLinkMsg').textContent = `已建 ${r.entries.filter(e => e.isNew).length} 个新考点、复用 ${r.entries.filter(e => !e.isNew).length} 个。未配置 AI：可逐题用「＋考点」手动挂载，或用「复制挂载提示词 / 粘贴 AI 结果」。`;
+    renderKpLink();
+    kpShowStep('aiKpLinkWrap');
+    return;
+  }
+  kpEl('aiKpTaxApply').disabled = true;
+  showAiBusy('AI 正在把错题挂到考点上，请稍候…');
+  try {
+    const res = await aiKpPlanRun(kpState.items, r.entries, kpState.mode, (done, total, kind) => {
+      kpEl('aiBusyText').textContent = kind === 'explain'
+        ? `AI 正在补写考点讲解（${done}/${total}）…`
+        : `AI 正在挂载错题（${done}/${total} 道）…`;
+    });
+    hideAiBusy();
+    kpState.rows = kpDefaultRows(kpState.items, res.rows);
+    kpState.explains = res.explains;
+    renderKpLink();
+    kpEl('aiKpLinkMsg2').textContent = res.errors.join('；');
+    kpEl('aiKpLinkMsg').textContent = `考点 ${r.entries.length} 个（新建 ${r.entries.filter(e => e.isNew).length}）· 错题 ${kpState.items.length} 道。`;
+    kpShowStep('aiKpLinkWrap');
+  } catch (e) {
+    hideAiBusy();
+    kpEl('aiKpTaxMsg').textContent = (e && e.name === 'AbortError') ? '已取消。' : '挂载失败：' + ((e && e.message) || e);
+    kpEl('aiKpLinkMsg').textContent = '体系已建好，可在挂载环节重试或手动填。';
+    renderKpLink();
+    kpShowStep('aiKpLinkWrap');
+  } finally { kpEl('aiKpTaxApply').disabled = false; }
+};
+
+/* ---------- 默认挂载行：每道错题一行，AI 没给建议的补空行 ---------- */
+function kpDefaultRows(items, aiRows) {
+  const byId = new Map();
+  for (const r of (Array.isArray(aiRows) ? aiRows : [])) {
+    if (r && typeof r.qid === 'string') byId.set(r.qid, r);
+  }
+  const out = [];
+  const seen = new Set();
+  for (const it of (Array.isArray(items) ? items : [])) {
+    if (!it || seen.has(it.id)) continue;
+    seen.add(it.id);
+    const r = byId.get(it.id);
+    const kpKeys = (r && Array.isArray(r.kpKeys)) ? r.kpKeys.filter(k => typeof k === 'string' && k) : [];
+    out.push({ qid: it.id, kpKeys, knowledge: (r && typeof r.knowledge === 'string') ? r.knowledge : '', skip: false });
+  }
+  return out;
+}
+
+/* ---------- 免 Key：切到粘贴屏 ---------- */
+function kpOpenPaste(step, hint, presetText) {
+  kpState.pasteStep = step;
+  kpEl('aiKpPaste').value = presetText || '';
+  kpEl('aiKpPasteHint').textContent = hint;
+  kpShowStep('aiKpPasteWrap');
+}
+
+/* ---------- 步骤 3 渲染：逐题挂载 + 待补讲解 ---------- */
+function renderKpLink() {
+  const entries = kpState.entries || [];
+  const byQid = new Map(kpState.items.map(it => [it.id, it]));
+  const rows = kpState.rows || [];
+  kpState.rows = rows;
+  kpEl('aiKpLink').innerHTML = rows.length ? rows.map((row, i) => {
+    const it = byQid.get(row.qid) || {};
+    const chips = row.kpKeys.map(k => {
+      const e = entries.find(x => x.key === k);
+      return `<span class="aio-chip" data-kp-chip-i="${i}" data-kp-chip-k="${esc(k)}">${esc(e ? e.title : k)}<b>×</b></span>`;
+    }).join('');
+    return `<div class="aio-row">
+      <label class="aio-skip"><input type="checkbox" data-kp-skip="${i}"${row.skip ? ' checked' : ''}></label>
+      <div class="aio-stem">${renderMath(String(it.stem || '').slice(0, 160))}</div>
+      <div class="aio-fields">
+        <div class="aio-tags">${chips}
+          <select data-kp-add="${i}"><option value="">＋考点</option>${
+            entries.map(e => `<option value="${esc(e.key)}">${esc(e.path + ' / ' + e.title)}</option>`).join('')
+          }</select>
+        </div>
+        <textarea class="aio-know" data-kp-know="${i}" placeholder="考点 + 易错点（可留空）">${esc(row.knowledge || '')}</textarea>
+        <p class="setnote">现有挂载：${(it.kpIds || []).length} 个</p>
+      </div>
+    </div>`;
+  }).join('') : '<div class="col-empty">AI 没有给出挂载建议，可返回重试；或直接点「应用并保存」只建体系。</div>';
+
+  kpEl('aiKpLink').querySelectorAll('[data-kp-skip]').forEach(cb => {
+    cb.onchange = () => { rows[+cb.dataset.kpSkip].skip = cb.checked; };
+  });
+  kpEl('aiKpLink').querySelectorAll('[data-kp-chip-i]').forEach(el => {
+    el.onclick = () => {
+      const row = rows[+el.dataset.kpChipI];
+      row.kpKeys = row.kpKeys.filter(k => k !== el.dataset.kpChipK);
+      renderKpLink();
+    };
+  });
+  kpEl('aiKpLink').querySelectorAll('[data-kp-add]').forEach(sel => {
+    sel.onchange = () => {
+      const row = rows[+sel.dataset.kpAdd];
+      const k = sel.value;
+      if (!k) return;
+      if (!row.kpKeys.includes(k)) row.kpKeys.push(k);
+      renderKpLink();
+    };
+  });
+  kpEl('aiKpLink').querySelectorAll('[data-kp-know]').forEach(ta => {
+    ta.onchange = () => { rows[+ta.dataset.kpKnow].knowledge = ta.value; };
+  });
+
+  // 待补讲解：只列本次被挂到、且还没有讲解的考点
+  const usedKeys = new Set();
+  for (const row of rows) if (!row.skip) for (const k of row.kpKeys) usedKeys.add(k);
+  const need = entries.filter(e => usedKeys.has(e.key));
+  const ex = kpState.explains || [];
+  kpEl('aiKpExplain').innerHTML = need.length ? need.map((e, i) => {
+    const cur = ex.find(x => x.kpKey === e.key);
+    return `<div class="aio-row">
+      <div class="aio-stem">${esc(e.path + ' / ' + e.title)}<span class="kp-tax-badge${e.isNew ? ' new' : ''}">${e.isNew ? '新建' : '复用'}</span></div>
+      <div class="aio-fields">
+        <textarea class="aio-know kp-exp-ta" data-kp-exp="${esc(e.key)}" placeholder="讲解（定义 + 为什么成立 + 怎么用 + 易错点）">${esc(cur ? cur.content : '')}</textarea>
+      </div>
+    </div>`;
+  }).join('') : '<div class="col-empty">本次没有需要补讲解的考点。</div>';
+  kpEl('aiKpExplain').querySelectorAll('[data-kp-exp]').forEach(ta => {
+    ta.onchange = () => {
+      const key = ta.dataset.kpExp;
+      kpState.explains = (kpState.explains || []).filter(x => x.kpKey !== key);
+      if (ta.value.trim()) kpState.explains.push({ kpKey: key, content: ta.value });
+    };
+  });
+}
+
+kpEl('aiKpAll').onclick = () => { (kpState.rows || []).forEach(r => { r.skip = false; }); renderKpLink(); };
+kpEl('aiKpNone').onclick = () => { (kpState.rows || []).forEach(r => { r.skip = true; }); renderKpLink(); };
+
+/* ---------- 免 Key：挂载 / 讲解 的复制与粘贴 ---------- */
+kpEl('aiKpLinkCopy').onclick = async () => {
+  const text = aiKpCopyText('link', kpState.items, kpState.entries);
+  let pre = '';
+  try { await navigator.clipboard.writeText(text); kpEl('aiKpLinkMsg2').textContent = '挂载提示词已复制，去任意 AI 跑一遍再粘回来。'; }
+  catch (e) { pre = text; kpEl('aiKpLinkMsg2').textContent = '复制失败，提示词已填在下面的框里，请手动复制。'; }
+  // 免 Key 路径一次贴不了太多题：AI 输出会被截断，粘回来只能认出前面一部分
+  if (kpState.items.length > KP_LINK_BATCH) {
+    kpEl('aiKpLinkMsg2').textContent += ` 注意：这次有 ${kpState.items.length} 道题，AI 输出可能被截断；`
+      + '粘回来的部分照样能应用，剩余题可先用「仅未挂知识点」再跑一轮补上。';
+  }
+  kpOpenPaste('link', '把 AI 输出的挂载 JSON 数组粘到下面。', pre);
+};
+kpEl('aiKpLinkPaste').onclick = () => kpOpenPaste('link', '把 AI 输出的挂载 JSON 数组粘到下面。');
+kpEl('aiKpExpCopy').onclick = async () => {
+  const used = new Set();
+  for (const row of (kpState.rows || [])) if (!row.skip) for (const k of row.kpKeys) used.add(k);
+  const need = (kpState.entries || []).filter(e => used.has(e.key));
+  if (!need.length) { kpEl('aiKpLinkMsg2').textContent = '还没有挂到任何考点，先挂载再复制讲解提示词。'; return; }
+  // 讲解一次给 10 个：一次贴太多容易被截断，剩下的应用后再点一次本按钮
+  const batch = need.slice(0, KP_EXPLAIN_BATCH);
+  const text = aiKpCopyText('explain', kpState.items, batch);
+  let pre = '';
+  const more = need.length > batch.length ? `本次含 ${batch.length} 个考点，应用后再点一次本按钮继续剩下的 ${need.length - batch.length} 个。` : '';
+  try { await navigator.clipboard.writeText(text); kpEl('aiKpLinkMsg2').textContent = '讲解提示词已复制。' + more; }
+  catch (e) { pre = text; kpEl('aiKpLinkMsg2').textContent = '复制失败，提示词已填在下面的框里，请手动复制。' + more; }
+  kpOpenPaste('explain', '把 AI 输出的讲解 JSON 数组粘到下面。', pre);
+};
+kpEl('aiKpExpPaste').onclick = () => kpOpenPaste('explain', '把 AI 输出的讲解 JSON 数组粘到下面。');
+
+/* ---------- 应用并保存 + 撤销 ---------- */
+kpEl('aiKpApply').onclick = async () => {
+  const st = kpState;
+  if (!st) return;
+  const rows = (st.rows || []).filter(r => !r.skip && r.kpKeys.length);
+  if (!rows.length && !(st.explains || []).length) { alert('没有选中任何可应用的挂载或讲解。'); return; }
+  const r1 = applyKpLinks(stores.q.items, rows, { keyMap: st.keyMap, mode: st.mode });
+  const r2 = applyKpExplain(stores.k.items, st.explains || [], { keyMap: st.keyMap, mode: st.mode });
+  stores.q.items = r1.items;
+  stores.k.items = r2.kps;
+  await saveStore(stores.q.key, stores.q.items);
+  await saveStore(stores.k.key, stores.k.items);
+  render();
+  refreshTagPicker();
+  kpEl('aiKpUndo').style.display = '';
+  kpEl('aiKpLinkMsg2').textContent = `已应用：错题 ${r1.changed} 道、考点讲解 ${r2.changed} 条。`;
+};
+
+function undoAiKp() {
+  const st = kpState;
+  if (!st || !st.undo) return;
+  stores.q.items = st.undo.q;
+  stores.k.items = st.undo.k;
+  colStores.k = st.undo.cols;
+  saveStore(stores.q.key, stores.q.items);
+  saveStore(stores.k.key, stores.k.items);
+  saveCols('k');
+  render();
+  refreshTagPicker();
+  kpEl('aiKpUndo').style.display = 'none';
+  kpEl('aiKpLinkMsg2').textContent = '已撤销。';
+  st.undo = null;
+}
+kpEl('aiKpUndo').onclick = () => undoAiKp();
+
 
 // 分类树建议 → 可编辑 → 一键建合集
 orgEl('aiOrgTree').onclick = async () => {
@@ -3566,7 +4517,8 @@ orgEl('aiOrgTree').onclick = async () => {
   }
   showAiBusy('AI 正在建议分类体系…');
   try {
-    const text = await aiCall({ system: aiTreePrompt(), ask: aiOrgUserText(orgPickItems().slice(0, AI_ORG_BATCH)) });
+    const treeTarget = orgEl('aiOrgTarget').value;
+    const text = await aiCall({ system: aiTreePrompt(), ask: aiOrgUserText(orgPickItems().slice(0, AI_ORG_BATCH), treeTarget) });
     const o = parseAiJson(text);
     const paths = (o && Array.isArray(o.paths)) ? o.paths.filter(p => typeof p === 'string' && p.trim()) : [];
     hideAiBusy();
@@ -3582,10 +4534,11 @@ orgEl('aiOrgTreeBack').onclick = () => orgShowStep('aiOrgSetup');
 orgEl('aiOrgTreeCreate').onclick = async () => {
   const paths = orgEl('aiOrgTreeText').value.split('\n').map(s => s.trim()).filter(Boolean);
   if (!paths.length) { alert('没有可用的路径。'); return; }
-  let cols = colStores.q;
+  const treeKind = orgEl('aiOrgTarget').value;
+  let cols = colStores[treeKind];
   for (const p of paths) cols = resolveCollectionPath(cols, p, Date.now()).cols;
-  colStores.q = cols;
-  await saveCols('q');
+  colStores[treeKind] = cols;
+  await saveCols(treeKind);
   renderColTree();
   orgEl('aiOrgMsg').textContent = `已按 ${paths.length} 条路径建好合集。`;
   orgShowStep('aiOrgSetup');
@@ -3594,9 +4547,9 @@ orgEl('aiOrgTreeCreate').onclick = async () => {
 // 免 Key 路径：复制提示词 → 粘回输出 → 审阅
 orgEl('aiOrgCopy').onclick = async () => {
   const dims = orgDims();
-  if (!dims.tags && !dims.collection && !dims.knowledge && !dims.sink) { orgEl('aiOrgMsg').textContent = '至少选一个整理维度。'; return; }
+  if (!dims.tags && !dims.collection && !dims.knowledge && !dims.link && !dims.sink) { orgEl('aiOrgMsg').textContent = '至少选一个整理维度。'; return; }
   const items = orgPickItems();
-  if (!items.length) { orgEl('aiOrgMsg').textContent = '这个范围里没有错题。'; return; }
+  if (!items.length) { orgEl('aiOrgMsg').textContent = dims.target === 'k' ? '这个范围里没有知识点。' : '这个范围里没有错题。'; return; }
   const ok = await copyText(aiOrgPromptText(items, dims, kpTitleVocab()));
   if (!ok) { orgEl('aiOrgMsg').textContent = '复制失败，请手动复制。'; return; }
   orgState = { items, dims, plan: [], undo: null };
@@ -3620,7 +4573,7 @@ orgEl('aiOrgPasteGo').onclick = () => {
 const kpFillModal = orgEl('kpFillModal');
 let kpFillState = null;          // { items, selected:Set, rows, undo }
 
-function aiKpExplainPrompt() {
+function kpFillPrompt() {
   return [
     '你是数学知识点讲解助手。请只为给定的那一个知识点写讲解。',
     '要求：',
@@ -3747,7 +4700,7 @@ orgEl('kpFillRun').onclick = async () => {
       const it = list[i];
       showAiBusy(`AI 正在补讲解 ${i + 1}/${list.length}…`);
       try {
-        const text = await aiCall({ system: aiKpExplainPrompt(), ask: aiKpExplainAsk(it) });
+        const text = await aiCall({ system: kpFillPrompt(), ask: aiKpExplainAsk(it) });
         const content = kpFillClean(text, it.title);
         if (content) rows.push({ id: it.id, title: it.title, content, skip: false });
         else errors.push(`${it.title || '未命名'}：模型没有返回内容`);
@@ -3829,6 +4782,7 @@ document.getElementById('aiOrgBtn').onclick = () => {
   if (active === 'k') openKpFill();
   else openAiOrg();
 };
+orgEl('aiOrgTarget').onchange = syncOrgTargetUi;
 
 /* ===================== 整理工具（相似题 / 薄弱诊断） ===================== */
 const toolsModal = orgEl('aiToolsModal');
