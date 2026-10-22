@@ -3194,6 +3194,8 @@ function aiPromptText() {
 const AI_ORG_BATCH = 30;          // 每次请求最多处理的条目数
 const AI_ORG_SINK_BATCH = 4;     // 带完整讲解时每批数量
 const AI_ORG_EXPLAIN_BATCH = 6;  // 知识点库补写完整讲解时每批数量（输出更长）
+const AI_ORG_RETRY_BATCH = 5;    // 补漏时每小批的条目数
+const AI_ORG_RETRY_ROUNDS = 2;   // 补漏最多重问几轮
 
 function aiOrgJsonRules(dims, kpTitles) {
   const isKp = dims.target === 'k';
@@ -3397,6 +3399,33 @@ function aiKpCopyText(step, items, entries) {
   return [aiKpExplainPrompt(entries), '', '请只输出那个 JSON 数组。'].join('\n');
 }
 
+// 单次请求：返回 Map(qid → 建议)；不是 JSON 数组时返回 null
+async function aiKpAskLinks(chunk, entries) {
+  const text = await aiCall({ system: aiKpLinkPrompt(entries), ask: aiKpUserText(chunk) });
+  const o = parseAiJson(text);
+  if (!Array.isArray(o)) return null;
+  const byId = new Map();
+  for (const r of o) {
+    if (!r || (typeof r.qid !== 'string' && typeof r.qid !== 'number')) continue;
+    byId.set(String(r.qid), r);
+  }
+  return byId;
+}
+
+// 单次请求：返回 Map(kpKey → 讲解)；不是 JSON 数组时返回 null
+async function aiKpAskExplain(chunk) {
+  const t2 = await aiCall({ system: aiKpExplainPrompt(chunk), ask: '请写讲解。' });
+  const o2 = parseAiJson(t2);
+  if (!Array.isArray(o2)) return null;
+  const byKey = new Map();
+  for (const e of o2) {
+    const key = e && typeof e.kpKey === 'string' ? e.kpKey : '';
+    const content = e && typeof e.content === 'string' ? e.content.trim() : '';
+    if (key && content) byKey.set(key, content);
+  }
+  return byKey;
+}
+
 // Step2 / Step3：分批挂载 + 分批讲解，合并结果 → { rows, explains, errors }
 async function aiKpPlanRun(items, entries, mode, onProgress) {
   const list = Array.isArray(items) ? items : [];
@@ -3406,23 +3435,40 @@ async function aiKpPlanRun(items, entries, mode, onProgress) {
     const chunk = list.slice(i, i + KP_LINK_BATCH);
     if (typeof onProgress === 'function') onProgress(Math.min(i + KP_LINK_BATCH, total), total);
     const nth = i / KP_LINK_BATCH + 1;
+    let byId = null;
     try {
-      const text = await aiCall({ system: aiKpLinkPrompt(entries), ask: aiKpUserText(chunk) });
-      const o = parseAiJson(text);
-      if (!Array.isArray(o)) { errors.push(`第 ${nth} 批没返回 JSON 数组`); continue; }
-      for (const r of o) {
-        if (!r || typeof r.qid !== 'string') continue;
-        const kpKeys = Array.isArray(r.kpKeys) ? r.kpKeys.filter(k => typeof k === 'string' && k) : [];
-        rows.push({ qid: r.qid, kpKeys, knowledge: typeof r.knowledge === 'string' ? r.knowledge : '', skip: false });
-      }
+      byId = await aiKpAskLinks(chunk, entries);
     } catch (err) {
       if (err && err.name === 'AbortError') throw err;   // 用户取消 → 中断整步
       errors.push(`第 ${nth} 批失败（${((err && err.message) || err)}）`);
     }
+    // 模型少返回几条时，把漏掉的题拆成小批再问，避免静默漏题
+    let missing = chunk.filter(it => !(byId && byId.has(String(it.id))));
+    for (let round = 0; round < AI_ORG_RETRY_ROUNDS && missing.length; round++) {
+      const got = new Map();
+      for (let j = 0; j < missing.length; j += AI_ORG_RETRY_BATCH) {
+        const sub = missing.slice(j, j + AI_ORG_RETRY_BATCH);
+        try {
+          const m = await aiKpAskLinks(sub, entries);
+          if (m) for (const [id, row] of m) got.set(id, row);
+        } catch (err) {
+          if (err && err.name === 'AbortError') throw err;
+        }
+      }
+      if (!got.size) break;
+      byId = new Map([...(byId || []), ...got]);
+      missing = missing.filter(it => !got.has(String(it.id)));
+    }
+    for (const it of chunk) {
+      const r = byId && byId.get(String(it.id));
+      if (!r) continue;
+      const kpKeys = Array.isArray(r.kpKeys) ? r.kpKeys.filter(k => typeof k === 'string' && k) : [];
+      rows.push({ qid: it.id, kpKeys, knowledge: typeof r.knowledge === 'string' ? r.knowledge : '', skip: false });
+    }
   }
   const got = new Set(rows.map(r => r.qid));
   const missed = list.filter(it => !got.has(it.id)).length;
-  if (missed) errors.push(`${missed} 道题没拿到建议（已留空行，可手动补）`);
+  if (missed) errors.push(`${missed} 道题自动重试后仍未拿到建议（已留空行，可手动补）`);
 
   // 讲解：只为「本次挂到且讲解为空」的考点写
   const usedKeys = new Set();
@@ -3431,22 +3477,46 @@ async function aiKpPlanRun(items, entries, mode, onProgress) {
   for (let i = 0; i < need.length; i += KP_EXPLAIN_BATCH) {
     const chunk = need.slice(i, i + KP_EXPLAIN_BATCH);
     if (typeof onProgress === 'function') onProgress(Math.min(i + KP_EXPLAIN_BATCH, need.length), need.length, 'explain');
+    let byKey = null;
     try {
-      const t2 = await aiCall({ system: aiKpExplainPrompt(chunk), ask: '请写讲解。' });
-      const o2 = parseAiJson(t2);
-      if (Array.isArray(o2)) {
-        for (const e of o2) {
-          const key = e && typeof e.kpKey === 'string' ? e.kpKey : null;
-          const content = e && typeof e.content === 'string' ? e.content.trim() : '';
-          if (key && content) explains.push({ kpKey: key, content });
-        }
-      }
+      byKey = await aiKpAskExplain(chunk);
     } catch (err) {
       if (err && err.name === 'AbortError') throw err;
       errors.push('讲解生成失败（可稍后单独重试）：' + ((err && err.message) || err));
     }
+    let missing = chunk.filter(e => !(byKey && byKey.has(e.key)));
+    for (let round = 0; round < AI_ORG_RETRY_ROUNDS && missing.length; round++) {
+      const got2 = new Map();
+      for (let j = 0; j < missing.length; j += AI_ORG_RETRY_BATCH) {
+        const sub = missing.slice(j, j + AI_ORG_RETRY_BATCH);
+        try {
+          const m = await aiKpAskExplain(sub);
+          if (m) for (const [key, content] of m) got2.set(key, content);
+        } catch (err) {
+          if (err && err.name === 'AbortError') throw err;
+        }
+      }
+      if (!got2.size) break;
+      byKey = new Map([...(byKey || []), ...got2]);
+      missing = missing.filter(e => !got2.has(e.key));
+    }
+    for (const [kpKey, content] of (byKey || [])) explains.push({ kpKey, content });
   }
   return { rows, explains, errors };
+}
+
+// 单次请求一批，返回 Map(id → 建议)；不是 JSON 数组时返回 null
+async function aiOrgAskBatch(chunk, dims, kpTitles) {
+  const text = await aiCall({ system: aiOrgJsonRules(dims, kpTitles), ask: aiOrgUserText(chunk, dims.target) });
+  const arr = parseAiJson(text);
+  if (!Array.isArray(arr)) return null;
+  const byId = new Map();
+  for (const e of arr) {
+    // 模型有时把 id 写成数字，统一转字符串再比对
+    if (!e || (typeof e.id !== 'string' && typeof e.id !== 'number')) continue;
+    byId.set(String(e.id), e);
+  }
+  return byId;
 }
 
 // 分批请求，合并结果 → { plan, failed, errors, ok }
@@ -3461,22 +3531,36 @@ async function aiOrganizeRun(items, dims, onProgress, kpTitles) {
   for (let i = 0; i < total; i += batch) {
     const chunk = list.slice(i, i + batch);
     if (typeof onProgress === 'function') onProgress(Math.min(i + batch, total), total);
-    const text = await aiCall({ system: aiOrgJsonRules(dims, kpTitles), ask: aiOrgUserText(chunk, dims.target) });
-    const arr = parseAiJson(text);
-    if (!Array.isArray(arr)) {
-      errors.push(`第 ${i / batch + 1} 批返回的不是 JSON 数组`);
-      chunk.forEach(c => failed.push(c.id));
-      continue;
+    let byId = await aiOrgAskBatch(chunk, dims, kpTitles);
+    // 模型偶尔会少返回几条（或整批不是合法 JSON）。把漏掉的条目拆成更小的批次再问，
+    // 避免用户看到「整理完了但少做了几道」。
+    let missing = chunk.filter(c => !(byId && byId.has(String(c.id))));
+    for (let round = 0; round < AI_ORG_RETRY_ROUNDS && missing.length; round++) {
+      const got = new Map();
+      for (let j = 0; j < missing.length; j += AI_ORG_RETRY_BATCH) {
+        const sub = missing.slice(j, j + AI_ORG_RETRY_BATCH);
+        if (typeof onProgress === 'function') onProgress(Math.min(i + batch, total), total);
+        const m = await aiOrgAskBatch(sub, dims, kpTitles);
+        if (m) for (const [id, row] of m) got.set(id, row);
+      }
+      if (!got.size) break;
+      byId = new Map([...(byId || []), ...got]);
+      missing = missing.filter(c => !got.has(String(c.id)));
     }
-    const byId = new Map();
-    for (const e of arr) if (e && typeof e.id === 'string') byId.set(e.id, e);
     for (const c of chunk) {
-      const e = byId.get(c.id);
+      const e = byId && byId.get(String(c.id));
       if (!e) { failed.push(c.id); continue; }
       plan.push(MQ.planRowOf(Object.assign({}, e, { id: c.id }), dims, validKpIds));
     }
   }
-  if (failed.length) errors.push(`${failed.length} 条未被模型返回（可重试）`);
+  if (failed.length) {
+    const byIdAll = new Map(list.map(it => [String(it.id), it]));
+    const names = failed.slice(0, 5).map(id => {
+      const it = byIdAll.get(String(id)) || {};
+      return String(it.title || it.stem || id).replace(/\s+/g, ' ').slice(0, 24);
+    });
+    errors.push(`${failed.length} 条自动重试后仍未返回，已跳过：${names.join('、')}${failed.length > 5 ? ' 等' : ''}`);
+  }
   return { plan, failed, errors, ok: plan.length };
 }
 
@@ -3489,9 +3573,11 @@ function aiOrganizeParsePasted(text, items, dims) {
   const plan = [], failed = [];
   const seen = new Set();
   for (const e of arr) {
-    if (!e || typeof e.id !== 'string' || !valid.has(e.id) || seen.has(e.id)) continue;
-    seen.add(e.id);
-    plan.push(MQ.planRowOf(e, dims, validKpIds));
+    if (!e || (typeof e.id !== 'string' && typeof e.id !== 'number')) continue;
+    const id = String(e.id);
+    if (!valid.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    plan.push(MQ.planRowOf(Object.assign({}, e, { id }), dims, validKpIds));
   }
   for (const it of items) if (!seen.has(it.id)) failed.push(it.id);
   return { plan, failed, errors: failed.length ? [`${failed.length} 条未出现在粘贴内容里`] : [], ok: plan.length };
@@ -4003,6 +4089,7 @@ orgEl('aiOrgApply').onclick = async () => {
   const r = applyOrganizePlan(stores[t].items, picked, { cols: colStores[t], vocab: allTags() });
   let items = r.items;
   let sink = null;
+  let sinkBad = 0;
   if (st.dims.sink && t === 'q') {
     const qById = new Map(items.map(it => [it.id, it]));
     const sinkRows = picked
@@ -4013,6 +4100,7 @@ orgEl('aiOrgApply').onclick = async () => {
         kpExplain: x.kpExplain,
         tags: (x.tags && x.tags.length) ? x.tags : ((qById.get(x.id) || {}).tags || []),
       }));
+    sinkBad = picked.length - sinkRows.length;
     if (sinkRows.length) {
       sink = applyKpSink(stores.k.items, sinkRows);
       stores.k.items = sink.kps;
@@ -4034,7 +4122,8 @@ orgEl('aiOrgApply').onclick = async () => {
   refreshTagPicker();
   orgEl('aiOrgUndo').style.display = '';
   orgEl('aiOrgMsg').textContent = `已应用 ${r.changed} 条改动。` +
-    (sink ? `知识库：新建 ${sink.created} 条，补讲解 ${sink.filled} 条。` : '');
+    (sink ? `知识库：新建 ${sink.created} 条，补讲解 ${sink.filled} 条。` : '') +
+    (sinkBad ? ` ${sinkBad} 条缺少考点名或讲解，未沉淀。` : '');
 };
 
 function undoAiOrg() {
