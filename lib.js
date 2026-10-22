@@ -484,6 +484,52 @@
     return { items: out, changed };
   }
 
+  /* ---------- 错题「沉淀到知识库」（纯函数） ----------
+     rows: [{ id, kpTitle, kpExplain, tags? }]
+     规则：同名（去首尾空白后完全相同）视为同一个知识点，同一批只新建一次；
+           已存在且讲解为空 → 补讲解；已有讲解 → 不覆盖。
+     返回：{ kps, links:[{qid,kpId}], created, filled, changed } */
+  function applyKpSink(kps, rows, now) {
+    const t = now || Date.now();
+    const list = (Array.isArray(kps) ? kps : []).slice();
+    const byTitle = new Map();
+    for (const k of list) {
+      const title = String((k && k.title) || '').trim();
+      if (title && !byTitle.has(title)) byTitle.set(title, k);
+    }
+    const links = [];
+    let created = 0, filled = 0, changed = 0;
+    for (const row of (Array.isArray(rows) ? rows : [])) {
+      if (!row || typeof row.id !== 'string') continue;
+      const title = String(row.kpTitle || '').trim();
+      const content = String(row.kpExplain || '').trim();
+      if (!title || !content) continue;
+      let kp = byTitle.get(title);
+      if (!kp) {
+        kp = {
+          id: uid(), title, content,
+          tags: (Array.isArray(row.tags) ? row.tags : [])
+            .filter(x => typeof x === 'string' && x.trim()).slice(),
+          status: 'new', star: false, images: [],
+          collectionId: null, srs: normalizeSrs(undefined), order: null,
+          createdAt: t, updatedAt: t,
+        };
+        list.push(kp);
+        byTitle.set(title, kp);
+        created++; changed++;
+      } else if (!String(kp.content || '').trim()) {
+        const idx = list.indexOf(kp);
+        const next = Object.assign({}, kp, { content, updatedAt: t });
+        if (idx >= 0) list[idx] = next;
+        kp = next;
+        byTitle.set(title, next);
+        filled++; changed++;
+      }
+      links.push({ qid: row.id, kpId: kp.id });
+    }
+    return { kps: list, links, created, filled, changed };
+  }
+
   /* ---------- 期3：相似题聚类（纯本地，零 API 成本） ----------
      贪心聚类：按顺序取未归组的项作「种子」，把其后与种子相似度 >= threshold 的项并入同组；
      只有成员数 >= 2 的组会被返回。textOf 缺省取 stem。 */
@@ -865,7 +911,7 @@
     filterItemsByCollection, collectionCounts, sanitizeItemCollections,
     parseAiJson, normTag, mergeSuggestTags,
     resolveCollectionPath, applyOrganizePlan,
-    kpsMissingContent, fillKpContent,
+    kpsMissingContent, fillKpContent, applyKpSink,
     clusterBySimilarity, groupStats,
     parseSearch,
     bareMathSegments,

@@ -658,6 +658,9 @@ img.thumb.broken{opacity:.35;}
 .aio-tagin{width:96px;}
 .aio-path{width:210px;}
 .aio-know{width:100%; min-height:44px; font-family:inherit;}
+.aio-sink{width:100%; display:flex; flex-direction:column; gap:6px; border-top:1px dashed var(--line); padding-top:8px;}
+.aio-sink .aio-path{width:260px;}
+.aio-sink .aio-know{min-height:96px;}
 .aio-group{margin:8px 0 14px;}
 .aio-group-h{font-size:13px; color:var(--muted); margin-bottom:6px;}
 .aio-group-row{display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px dashed var(--line);}

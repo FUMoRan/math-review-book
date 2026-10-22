@@ -19,7 +19,7 @@ const {
   canMoveCollection, moveCollection, deleteCollection,
   filterItemsByCollection, collectionCounts, sanitizeItemCollections,
   parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
-  kpsMissingContent, fillKpContent,
+  kpsMissingContent, fillKpContent, applyKpSink,
   clusterBySimilarity, groupStats,
   bareMathSegments,
 } = MQ;
@@ -1056,6 +1056,58 @@ test('fillKpContent 忽略未知 id、空内容与重复项', () => {
   ]);
   assert.equal(r.changed, 1);
   assert.equal(r.items[0].content, '第二份');
+});
+
+/* ===================== 错题沉淀到知识库 ===================== */
+test('applyKpSink 新建知识点并回链错题', () => {
+  const kps = [normalizeKp({ id: 'k1', title: '极限', content: '已有讲解' })];
+  const r = applyKpSink(kps, [
+    { id: 'q1', kpTitle: '中值定理', kpExplain: '第 1 步：罗尔定理。', tags: ['微分', ' '] },
+  ], 2000);
+  assert.equal(r.created, 1);
+  assert.equal(r.filled, 0);
+  assert.equal(r.changed, 1);
+  assert.equal(r.kps.length, 2);
+  const nk = r.kps[1];
+  assert.equal(nk.title, '中值定理');
+  assert.equal(nk.content, '第 1 步：罗尔定理。');
+  assert.deepEqual(nk.tags, ['微分']);
+  assert.equal(nk.createdAt, 2000);
+  assert.equal(nk.collectionId, null);
+  assert.deepEqual(r.links, [{ qid: 'q1', kpId: nk.id }]);
+  // 纯函数：不改动入参
+  assert.equal(kps.length, 1);
+});
+
+test('applyKpSink 同名只补空讲解，不覆盖已有内容', () => {
+  const kps = [
+    normalizeKp({ id: 'k1', title: '极限', content: '' }),
+    normalizeKp({ id: 'k2', title: '导数', content: '原有讲解' }),
+  ];
+  const r = applyKpSink(kps, [
+    { id: 'q1', kpTitle: ' 极限 ', kpExplain: '新的极限讲解' },
+    { id: 'q2', kpTitle: '导数', kpExplain: '新的导数讲解' },
+  ], 3000);
+  assert.equal(r.created, 0);
+  assert.equal(r.filled, 1);
+  assert.equal(r.kps[0].content, '新的极限讲解');
+  assert.equal(r.kps[0].id, 'k1');
+  assert.equal(r.kps[1].content, '原有讲解');
+  assert.deepEqual(r.links.map(l => l.kpId), ['k1', 'k2']);
+});
+
+test('applyKpSink 同批同名只建一个，并忽略缺标题或缺讲解', () => {
+  const r = applyKpSink([], [
+    { id: 'q1', kpTitle: '洛必达法则', kpExplain: '第一份' },
+    { id: 'q2', kpTitle: '洛必达法则', kpExplain: '第二份' },
+    { id: 'q3', kpTitle: '', kpExplain: '没有标题' },
+    { id: 'q4', kpTitle: '夹逼定理', kpExplain: '   ' },
+  ], 4000);
+  assert.equal(r.created, 1);
+  assert.equal(r.kps.length, 1);
+  assert.equal(r.kps[0].content, '第一份');
+  assert.deepEqual(r.links.map(l => l.qid), ['q1', 'q2']);
+  assert.equal(r.links[0].kpId, r.links[1].kpId);
 });
 
 /* ===================== 期3：相似聚类与分组统计 ===================== */
