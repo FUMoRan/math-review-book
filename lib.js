@@ -469,7 +469,11 @@
     if (d.tags && Array.isArray(e.tags)) row.tags = e.tags.filter(t => typeof t === 'string' && t.trim());
     if (d.collection && typeof e.collectionPath === 'string') row.collectionPath = e.collectionPath;
     if (d.link && Array.isArray(e.kpIds)) row.kpIds = pickKpIds(e.kpIds, validKpIds);
-    if (d.knowledge && typeof e.knowledge === 'string') row.knowledge = e.knowledge;
+    // 错题写 knowledge（一句话考点摘要）；知识点库写 content（完整讲解）
+    if (d.knowledge) {
+      if (d.target === 'k' && typeof e.content === 'string') row.content = e.content;
+      else if (typeof e.knowledge === 'string') row.knowledge = e.knowledge;
+    }
     if (d.sink && typeof e.kpTitle === 'string') row.kpTitle = e.kpTitle;
     if (d.sink && typeof e.kpExplain === 'string') row.kpExplain = e.kpExplain;
     return row;
@@ -509,6 +513,10 @@
       }
       if (typeof p.knowledge === 'string' && p.knowledge.trim() && !next.knowledge) {
         set('knowledge', p.knowledge.trim());
+      }
+      // 知识点讲解只补空，已有内容不覆盖
+      if (typeof p.content === 'string' && p.content.trim() && !String(next.content || '').trim()) {
+        set('content', p.content.trim());
       }
       if (Array.isArray(p.kpIds) && p.kpIds.length) {
         const add = p.kpIds.filter(x => typeof x === 'string' && x);

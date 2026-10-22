@@ -3191,8 +3191,9 @@ function aiPromptText() {
    dims: { target:'q'|'k', tags:bool, collection:bool, link:bool, knowledge:bool, sink:bool }
    sink=true 时额外生成 kpTitle + kpExplain，用于沉淀到知识库；
    输出变长，所以每批数量单独调小，避免被 max_tokens 截断。 */
-const AI_ORG_BATCH = 30;          // 每次请求最多处理的错题数
+const AI_ORG_BATCH = 30;          // 每次请求最多处理的条目数
 const AI_ORG_SINK_BATCH = 4;     // 带完整讲解时每批数量
+const AI_ORG_EXPLAIN_BATCH = 6;  // 知识点库补写完整讲解时每批数量（输出更长）
 
 function aiOrgJsonRules(dims, kpTitles) {
   const isKp = dims.target === 'k';
@@ -3204,7 +3205,11 @@ function aiOrgJsonRules(dims, kpTitles) {
       : '"collectionPath": 字符串，形如 "高等数学/极限"（最多两级，末级是考点名）');
   }
   if (dims.link) fields.push('"kpIds": 字符串数组，0~3 个，只能取自【知识点清单】里的 id，禁止编造');
-  if (dims.knowledge) fields.push('"knowledge": 字符串，一句话写清「考点 + 易错点」；' + AI_LATEX_BRIEF);
+  if (dims.knowledge) {
+    fields.push(isKp
+      ? '"content": 字符串，该考点的完整讲解：定义 → 为什么成立 → 适用条件 → 怎么用（含逐步示范）→ 易错点；分步用「第 1 步：」开头；' + AI_LATEX_BRIEF
+      : '"knowledge": 字符串，一句话写清「考点 + 易错点」；' + AI_LATEX_BRIEF);
+  }
   if (dims.sink) {
     fields.push('"kpTitle": 字符串，短考点名（2~12 字，尽量复用已有知识点名称）');
     fields.push('"kpExplain": 字符串，该考点的完整讲解：定义 → 为什么成立 → 适用条件 → 怎么用（含逐步示范）→ 易错点；分步用「第 1 步：」开头，公式用 $...$');
@@ -3234,6 +3239,9 @@ function aiOrgJsonRules(dims, kpTitles) {
       lines.push('可选合集路径（已存在的优先复用，尽量不要造同义新路径）：');
       lines.push(JSON.stringify(cols));
     }
+  }
+  if (dims.knowledge && isKp) {
+    lines.push('5. content 必须能独立阅读，至少覆盖定义、适用条件和易错点，不能只写一句话。');
   }
   if (dims.link) {
     lines.push('5. kpIds 只从【知识点清单】里挑最相关的，宁可少给也不要错给。');
@@ -3447,7 +3455,9 @@ async function aiOrganizeRun(items, dims, onProgress, kpTitles) {
   const plan = [], failed = [], errors = [];
   const total = list.length;
   const validKpIds = new Set(stores.k.items.map(k => k.id));
-  const batch = dims.sink ? AI_ORG_SINK_BATCH : AI_ORG_BATCH;
+  const batch = dims.sink
+    ? AI_ORG_SINK_BATCH
+    : ((dims.target === 'k' && dims.knowledge) ? AI_ORG_EXPLAIN_BATCH : AI_ORG_BATCH);
   for (let i = 0; i < total; i += batch) {
     const chunk = list.slice(i, i + batch);
     if (typeof onProgress === 'function') onProgress(Math.min(i + batch, total), total);
@@ -3788,9 +3798,10 @@ function orgDims() {
     target: t,
     tags: orgEl('aiOrgDimTags').checked,
     collection: orgEl('aiOrgDimCol').checked,
-    // 「挂到知识点」「写考点讲解」「沉淀到知识库」只对错题有意义
+    // 「挂到知识点」「沉淀到知识库」只对错题有意义；
+    // 「写考点讲解」两个库都可用：错题写一句话考点摘要，知识点库写完整讲解
     link: t === 'q' && orgEl('aiOrgDimLink').checked,
-    knowledge: t === 'q' && orgEl('aiOrgDimKp').checked,
+    knowledge: orgEl('aiOrgDimKp').checked,
     sink: t === 'q' && orgEl('aiOrgDimSink').checked,
   };
 }
@@ -3815,8 +3826,9 @@ function syncOrgTargetUi() {
   const t = orgEl('aiOrgTarget').value;
   const isQ = t === 'q';
   orgEl('aiOrgDimLink').disabled = !isQ;
-  orgEl('aiOrgDimKp').disabled = !isQ;
   orgEl('aiOrgDimSink').disabled = !isQ;
+  orgEl('aiOrgDimKp').disabled = false;
+  orgEl('aiOrgDimKp').nextSibling.nodeValue = isQ ? ' 写考点讲解' : ' 补写完整讲解';
   const sc = orgEl('aiOrgScope');
   sc.options[0].textContent = isQ ? '全部错题' : '全部知识点';
   sc.options[2].textContent = isQ ? '仅未分类或空白错题' : '仅未分类或缺讲解的知识点';
@@ -3829,7 +3841,7 @@ function syncOrgTargetUi() {
       ? ` 已有知识点 ${stores.k.items.length} 个，勾选「沉淀到知识库」时会优先复用同名。`
       : ' 知识库还是空的，沉淀时会按考点名新建。';
   } else {
-    orgEl('aiOrgVocabNote').textContent += ' 「挂到知识点」「写考点讲解」「沉淀到知识库」只对错题生效，已暂时停用。';
+    orgEl('aiOrgVocabNote').textContent += ' 「挂到知识点」「沉淀到知识库」只对错题生效；勾选「补写完整讲解」会为缺讲解的知识点生成完整内容（已有讲解不覆盖）。';
   }
 }
 function orgShowStep(name) {
@@ -3912,7 +3924,9 @@ function renderAiOrgReview() {
         ${st.dims.link ? `<div class="aio-tags">${kpChips}<input class="aio-tagin" data-kpadd="${i}" list="aioKps" placeholder="＋知识点"></div>` : ''}
         ${st.dims.tags ? `<div class="aio-tags">${chips}<input class="aio-tagin" data-tagadd="${i}" placeholder="＋标签"></div>` : ''}
         ${st.dims.collection ? `<input class="aio-path" data-path="${i}" value="${esc(row.collectionPath || '')}" placeholder="如 高等数学/极限" list="aioCols">` : ''}
-        ${st.dims.knowledge ? `<textarea class="aio-know" data-know="${i}" placeholder="考点 + 易错点">${esc(row.knowledge || '')}</textarea>` : ''}
+        ${st.dims.knowledge ? (isKp
+          ? `<textarea class="aio-know" data-content="${i}" placeholder="完整讲解：定义 → 为什么 → 适用条件 → 怎么用 → 易错点">${esc(row.content || '')}</textarea>`
+          : `<textarea class="aio-know" data-know="${i}" placeholder="考点 + 易错点">${esc(row.knowledge || '')}</textarea>`) : ''}
         ${st.dims.sink ? `<div class="aio-sink">
           <input class="aio-path" data-kptitle="${i}" value="${esc(row.kpTitle || '')}" placeholder="考点名（写入知识库）">
           <textarea class="aio-know" data-kpexplain="${i}" placeholder="完整讲解：定义 → 为什么 → 适用条件 → 怎么用 → 易错点">${esc(row.kpExplain || '')}</textarea>
@@ -3962,6 +3976,7 @@ function renderAiOrgReview() {
     };
   });
   box.querySelectorAll('[data-know]').forEach(ta => { ta.onchange = () => { rows[+ta.dataset.know].knowledge = ta.value; }; });
+  box.querySelectorAll('[data-content]').forEach(ta => { ta.onchange = () => { rows[+ta.dataset.content].content = ta.value; }; });
   box.querySelectorAll('[data-kptitle]').forEach(inp => { inp.onchange = () => { rows[+inp.dataset.kptitle].kpTitle = inp.value.trim(); }; });
   box.querySelectorAll('[data-kpexplain]').forEach(ta => { ta.onchange = () => { rows[+ta.dataset.kpexplain].kpExplain = ta.value; }; });
   orgEl('aiOrgReviewMsg').textContent = `共 ${rows.length} 条建议（AI 未返回的 ${Math.max(0, st.items.length - rows.length)} 道已跳过）。`;

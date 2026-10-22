@@ -1038,6 +1038,20 @@ test('applyOrganizePlan 合并标签、归入合集、写考点，并新建合�
   assert.equal(r2.changed, 0);
 });
 
+test('applyOrganizePlan 只给知识点补空讲解，已有内容不覆盖', () => {
+  const items = [
+    normalizeKp({ id: 'k1', title: '极限' }),
+    normalizeKp({ id: 'k2', title: '导数', content: '手写讲解' }),
+  ];
+  const r = applyOrganizePlan(items, [
+    { id: 'k1', content: '完整讲解 A' },
+    { id: 'k2', content: 'AI 讲解 B' },
+  ], { cols: [], now: 9000 });
+  assert.equal(r.items[0].content, '完整讲解 A');
+  assert.equal(r.items[1].content, '手写讲解');
+  assert.equal(r.changed, 1);
+});
+
 test('applyOrganizePlan 跳过 skip 项，不改动原数组', () => {
   const items = [normalizeQuestion({ id: 'q1', stem: 'a' })];
   const snap = JSON.stringify(items);
@@ -1449,6 +1463,12 @@ test('planRowOf 对非法入参与缺失字段安全', () => {
   assert.deepEqual(planRowOf({ id: 'q1' }, { tags: true, link: true, knowledge: true }), { id: 'q1' });
   // 模型把 collectionPath 写成数组时应丢弃，不能落成 "[object Object]"
   assert.deepEqual(planRowOf({ id: 'q1', collectionPath: ['a'] }, { collection: true }), { id: 'q1' });
+});
+
+test('planRowOf 知识点库目标把讲解映射到 content，而不是 knowledge', () => {
+  const e = { id: 'k1', knowledge: '摘要', content: '完整讲解' };
+  assert.deepEqual(planRowOf(e, { target: 'k', knowledge: true }), { id: 'k1', content: '完整讲解' });
+  assert.deepEqual(planRowOf(e, { target: 'q', knowledge: true }), { id: 'k1', knowledge: '摘要' });
 });
 
 
