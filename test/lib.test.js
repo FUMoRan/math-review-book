@@ -14,7 +14,7 @@ const {
   cleanAiText, setPaperSteps,
   paperProgress, answerVisible,
   sortItems, materializeOrder, reorderItems,
-  parseText, parsePaper, parseSearch,
+  parseText, parsePaper, parseSearch, cleanPasted,
   normalizeCollection, settleCollections, collectionChildren, collectionSubtreeIds,
   collectionPath, flattenCollections, addCollection, renameCollection,
   canMoveCollection, moveCollection, deleteCollection,
@@ -489,6 +489,54 @@ test('parseText 支持知识点库的字段映射', () => {
   assert.equal(out[0].title, '顶点式');
   assert.equal(out[0].content, '$y=a(x-h)^2+k$');
   assert.deepEqual(out[0].tags, ['函数']);
+});
+
+/* ===================== 粘贴内容清洗 ===================== */
+test('cleanPasted 剥掉 ```text 围栏，保留 $ 与反斜杠', () => {
+  const src = '```text\n【题目】\n求 $\\frac{a}{b}$ 的值\n```';
+  assert.equal(cleanPasted(src), '【题目】\n求 $\\frac{a}{b}$ 的值');
+});
+
+test('cleanPasted 处理开围栏与正文写在同一行', () => {
+  assert.equal(cleanPasted('```latex $$x^2$$'), '$$x^2$$');
+});
+
+test('cleanPasted 剥掉独立成行的语言名（仅在有围栏时）', () => {
+  assert.equal(cleanPasted('```\ntext\n【题目】\n内容'), '【题目】\n内容');
+  assert.equal(cleanPasted('这是 text 字段'), '这是 text 字段');
+});
+
+test('cleanPasted 去掉行尾围栏与多余空行', () => {
+  const src = '【题目】\n第一行   \n\n\n\n【解析】\n解 ```';
+  assert.equal(cleanPasted(src), '【题目】\n第一行\n\n【解析】\n解');
+});
+
+test('cleanPasted 只剥整段包裹的引号', () => {
+  assert.equal(cleanPasted('"【题目】\n内容"'), '【题目】\n内容');
+  assert.equal(cleanPasted('“【题目】\n内容”'), '【题目】\n内容');
+  assert.equal(cleanPasted('"a" 与 "b"'), '"a" 与 "b"');
+});
+
+test('cleanPasted 普通文本与空值安全', () => {
+  assert.equal(cleanPasted('【题目】\n$x=0$'), '【题目】\n$x=0$');
+  assert.equal(cleanPasted(''), '');
+  assert.equal(cleanPasted(null), '');
+  assert.equal(cleanPasted(undefined), '');
+});
+
+test('parseText 能直接导入带代码围栏的 AI 输出', () => {
+  const input = [
+    '```text',
+    '【题目】', '求 $x^2$ 的最小值。',
+    '【解析】', '显然为 $0$。',
+    '【标签】', '二次函数',
+    '```',
+  ].join('\n');
+  const out = parseText(input, Q_MAP, Q_REQ);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].stem, '求 $x^2$ 的最小值。');
+  assert.equal(out[0].tags[0], '二次函数');
+  assert.deepEqual(out[0].errors, []);
 });
 
 /* ===================== 搜索语法 ===================== */

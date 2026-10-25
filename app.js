@@ -3183,6 +3183,8 @@ function aiPromptText() {
     '',
     '特别提醒：不要把公式写成没有 $ 的裸写法，例如 y\'\' = \\frac{dp}{dx} 是错的，正确写法是 $$y\'\' = \\frac{dp}{dx}$$。',
     '',
+    '为避免聊天界面把公式渲染掉，请把整段结果放进一个 ```text 代码块里输出（围栏内不要再解释、不要加引号包裹）。',
+    '',
     '现在请等我发送内容。',
   ]).join('\n');
 }
@@ -3221,7 +3223,7 @@ function aiOrgJsonRules(dims, kpTitles) {
     : '你是数学错题整理助手。下面会给你一个 JSON 数组，元素形如 {"id":"...","stem":"题目原文（可能含 $LaTeX$）"}。';
   const lines = [
     head,
-    '请为每一项给出整理建议，并**严格只输出一个 JSON 数组**，不要输出任何解释、标题或 ``` 围栏。',
+    '请为每一项给出整理建议，并**严格只输出一个 JSON 数组**，不要输出任何解释或标题。',
     '每个元素形如：',
     '{',
     '  "id": "与输入完全相同的 id",',
@@ -3313,7 +3315,7 @@ function aiOrgPromptText(items, dims, kpTitles) {
     dims.target === 'k' ? '下面是需要整理的知识点（JSON）：' : '下面是需要整理的错题（JSON）：',
     aiOrgUserText(items, dims.target),
     '',
-    '请只输出那个 JSON 数组。',
+    '请把整个 JSON 数组放进一个 ```json 代码块里输出，围栏内不要加说明或引号包裹；这样 $ 和反斜杠不会被聊天界面转义。',
   ].join('\n');
 }
 
@@ -3390,7 +3392,7 @@ function aiKpCopyText(step, items, entries) {
       aiKpTaxonomyPrompt(), '',
       '下面是错题（JSON）：', aiKpUserText(items), '',
       '下面是知识点库里已有的考点清单：', aiKpExistingText(), '',
-      '请只输出那个 JSON 数组。',
+      '请把整个 JSON 数组放进一个 ```json 代码块里输出，围栏内不要加说明或引号包裹；这样 $ 和反斜杠不会被聊天界面转义。',
     ].join('\n');
   }
   if (step === 'link') {

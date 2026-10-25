@@ -217,8 +217,53 @@
     return obj;
   }
 
+  /* ---------- 粘贴内容清洗 ----------
+     从聊天窗口复制 AI 输出时，常会带上 ``` 围栏、语言名、首尾引号和多条空行。
+     这里统一剥掉这些「搬运痕迹」，但只在确实出现过围栏时才认语言名，避免误删正文。
+     公式里的 $ 与反斜杠原样保留。 */
+  const PASTE_LANGS = new Set(['text', 'plaintext', 'txt', 'latex', 'tex', 'math', 'markdown', 'md', 'json', 'jsonc']);
+  const FENCE_LINE = /^[ \t]*(?:```+|~~~+)[ \t]*([A-Za-z0-9_+.-]*)[ \t]*$/;
+
+  function cleanPasted(text) {
+    let s = String(text == null ? '' : text)
+      .replace(/\r\n?/g, '\n')
+      .replace(/\u00a0/g, ' ');
+    let sawFence = false;
+    const out = [];
+    for (let line of s.split('\n')) {
+      if (FENCE_LINE.test(line)) { sawFence = true; continue; }
+      // ```text 正文写在同一行
+      const inline = line.match(/^[ \t]*(?:```+|~~~+)[ \t]*[A-Za-z0-9_+.-]*[ \t]*(\S[\s\S]*)$/);
+      if (inline) {
+        sawFence = true;
+        line = inline[1];
+      } else {
+        // 结束围栏贴在正文末尾
+        const tail = line.match(/^([\s\S]*?\S)[ \t]*(?:```+|~~~+)[ \t]*$/);
+        if (tail) { sawFence = true; line = tail[1]; }
+      }
+      out.push(line.replace(/[ \t]+$/, ''));
+    }
+    // 独立成行的语言名（通常紧跟在开围栏后），只在出现过围栏时清理
+    let lines = out;
+    if (sawFence) {
+      lines = out.filter((l, i) => !(i < 2 && PASTE_LANGS.has(l.trim().toLowerCase())));
+    }
+    s = lines.join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/^\n+|\n+$/g, '');
+    // 整段被一对引号包住时才剥掉，避免动到正文里的引号
+    if (s[0] === '"' && s[s.length - 1] === '"' && s.indexOf('"', 1) === s.length - 1) {
+      s = s.slice(1, -1).trim();
+    }
+    if (s[0] === '“' && s[s.length - 1] === '”' && s.indexOf('“', 1) === -1) {
+      s = s.slice(1, -1).trim();
+    }
+    return s;
+  }
+
   function parseText(text, map, requiredLabel) {
-    return text
+    return cleanPasted(text)
       .split(/^[ \t]*={3,}[ \t]*$/m)
       .map(b => parseBlockGeneric(b, map, requiredLabel))
       .filter(o => Object.values(map).some(k => (k === 'tags' ? o.tags.length : o[k])) || o.preText.trim());
@@ -230,7 +275,7 @@
   function parsePaper(text, now) {
     const t = now || Date.now();
     const questions = [];
-    String(text == null ? '' : text)
+    cleanPasted(text)
       .split(/^[ \t]*={3,}[ \t]*$/m)
       .forEach(block => {
         const o = parseBlockGeneric(block, PAPER_FIELD_MAP, '题目');
@@ -374,9 +419,7 @@
 
   // 从 AI 输出里抽取 JSON：容忍 ```json 围栏、前后夹带的说明文字
   function parseAiJson(text) {
-    const s = String(text == null ? '' : text);
-    const fence = s.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-    const body = (fence ? fence[1] : s).trim();
+    const body = cleanPasted(text);
     try { return JSON.parse(body); } catch (e) { /* 继续退化尝试 */ }
     // 退化：取「最先出现的开括号」配对到同类型的最后一个闭括号
     // （散文里嵌 JSON 对象时，先出现的 { 优先于对象内部的 [，避免误取内层数组）
@@ -1199,6 +1242,7 @@
     SRS_DEF, normalizeSrs, scheduleSrs, isDue, dueLabel,
     normalizeQuestion, normalizeKp, normalizePaperQuestion, normalizePaper, mergeSeedPapers,
     parseBlockGeneric, parseText, parsePaper,
+    cleanPasted,
     paperWrongToQuestion,
     cleanAiText, setPaperSteps,
     nextUnmarked, paperProgress, answerVisible,
