@@ -33,7 +33,7 @@ const {
 
 /* ===================== 设置（偏好，与数据分开存） ===================== */
 const K_SET = 'mq_settings';
-const SET_DEF = { cols: 'auto', theme: 'system', density: 'comfortable', anim: 'on', rail: 'off', sortMode: { q: 'auto', k: 'auto' }, colCollapsed: { q: [], k: [] } };
+const SET_DEF = { cols: 'auto', theme: 'system', density: 'comfortable', anim: 'on', rail: 'off', sortMode: { q: 'auto', k: 'auto' }, colCollapsed: { q: [], k: [] }, autoBackup: 'on', autoBackupMin: 10 };
 
 function readSettings() {
   try {
@@ -86,6 +86,9 @@ function applySettings() {
   document.querySelectorAll('#setTheme button').forEach(b => b.classList.toggle('on', b.dataset.theme === settings.theme));
   document.querySelectorAll('#setDensity button').forEach(b => b.classList.toggle('on', b.dataset.density === settings.density));
   document.querySelectorAll('#setAnim button').forEach(b => b.classList.toggle('on', b.dataset.anim === settings.anim));
+  document.querySelectorAll('#setAutoBackup button').forEach(b => b.classList.toggle('on', b.dataset.backup === settings.autoBackup));
+  const abMin = document.getElementById('autoBackupMin');
+  if (abMin) abMin.value = String(parseInt(settings.autoBackupMin, 10) || 10);
 
   const sm = (settings.sortMode && settings.sortMode[active]) || 'auto';
   document.querySelectorAll('#setSort button').forEach(b => b.classList.toggle('on', b.dataset.sort === sm));
@@ -429,9 +432,10 @@ async function persist(key, val) {
   try { localStorage.setItem(key, json); mirrored = true; } catch (e) { /* 超出 5MB 配额时忽略，IDB 仍是主存储 */ }
   try {
     await idbKVPut(key, json);
+    noteDataChanged(key);
     return true;
   } catch (e) {
-    if (mirrored) return true;
+    if (mirrored) { noteDataChanged(key); return true; }
     alert('本地存储写入失败（可能是隐私模式或空间不足），建议先「导出」备份。');
     return false;
   }
@@ -2883,6 +2887,131 @@ document.getElementById('backupLater').onclick = () => {
   updateBackupBar();
 };
 
+/* ---------- 自动本地备份（快照，只存本机） ---------- */
+const AUTO_SLOTS = 3;                 // 保留最近 3 份，轮换覆盖
+const K_AUTO_TS = 'mq_autobackup_ts';
+const K_AUTO_IDX = 'mq_autobackup_idx';
+const AUTO_DATA_KEYS = [K_Q, K_K, K_P];
+
+let autoDirty = false;
+let autoTimer = null;
+
+// 业务数据发生写入后打标记，等节流时间到再生成快照
+function noteDataChanged(key) {
+  if (AUTO_DATA_KEYS.includes(key)) autoDirty = true;
+}
+
+function autoLastTs() {
+  try { return parseInt(localStorage.getItem(K_AUTO_TS), 10) || 0; } catch (e) { return 0; }
+}
+
+async function autoReadSnapshots() {
+  const out = [];
+  for (let i = 0; i < AUTO_SLOTS; i++) {
+    try {
+      const rec = await idbKVGet('mq_auto_' + i);
+      if (!rec || !rec.json) continue;
+      const snap = JSON.parse(rec.json);
+      if (snap && Array.isArray(snap.questions) && Array.isArray(snap.knowledge)) out.push(snap);
+    } catch (e) { /* 单份损坏就跳过 */ }
+  }
+  return out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+}
+
+async function saveAutoSnapshot(reason) {
+  if (reason !== 'manual' && reason !== 'beforeRestore' && !autoDirty) return false;
+  const payload = {
+    ts: Date.now(),
+    reason: reason || 'auto',
+    questions: stores.q.items,
+    knowledge: stores.k.items,
+    papers: stores.p.items,
+    collections: { q: colStores.q, k: colStores.k },
+  };
+  let idx = 0;
+  try { idx = (parseInt(localStorage.getItem(K_AUTO_IDX), 10) || 0) % AUTO_SLOTS; } catch (e) {}
+  try {
+    await idbKVPut('mq_auto_' + idx, JSON.stringify(payload));
+  } catch (e) { return false; }
+  try {
+    localStorage.setItem(K_AUTO_IDX, String((idx + 1) % AUTO_SLOTS));
+    localStorage.setItem(K_AUTO_TS, String(payload.ts));
+  } catch (e) {}
+  autoDirty = false;
+  refreshAutoBackupStatus();
+  return true;
+}
+
+async function maybeAutoSnapshot() {
+  if (settings.autoBackup === 'off' || !autoDirty) return;
+  const gap = Math.max(1, parseInt(settings.autoBackupMin, 10) || 10) * 60000;
+  if (Date.now() - autoLastTs() < gap) return;
+  await saveAutoSnapshot('auto');
+}
+
+function scheduleAutoBackup() {
+  if (autoTimer) clearInterval(autoTimer);
+  autoTimer = setInterval(maybeAutoSnapshot, 60000);
+}
+
+function fmtAgo(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return '刚刚';
+  if (s < 3600) return Math.floor(s / 60) + ' 分钟前';
+  if (s < 86400) return Math.floor(s / 3600) + ' 小时前';
+  return Math.floor(s / 86400) + ' 天前';
+}
+
+function refreshAutoBackupStatus() {
+  const el = document.getElementById('autoBackupStatus');
+  if (!el) return;
+  if (settings.autoBackup === 'off') { el.textContent = '已关闭：不再自动生成快照。'; return; }
+  const ts = autoLastTs();
+  el.textContent = ts
+    ? `上次备份：${fmtAgo(ts)}（保留最近 ${AUTO_SLOTS} 份，只存在本机）`
+    : '还没有自动备份，很快就会生成第一份。';
+}
+
+async function restoreAutoBackup() {
+  const snaps = await autoReadSnapshots();
+  const snap = snaps[0];
+  if (!snap) { alert('还没有可用的自动备份。'); return; }
+  const when = new Date(snap.ts).toLocaleString('zh-CN');
+  if (!confirm(`恢复 ${when} 的自动备份？\n\n错题 ${snap.questions.length} 道、知识点 ${snap.knowledge.length} 个。\n当前数据会先自动备份一份，不用担心覆盖后找不回。`)) return;
+
+  await saveAutoSnapshot('beforeRestore');
+  stores.q.items = snap.questions.map(normalizeQuestion);
+  stores.k.items = snap.knowledge.map(normalizeKp);
+  if (Array.isArray(snap.papers)) stores.p.items = snap.papers.map(normalizePaper);
+  for (const kind of ['q', 'k']) {
+    const inc = (snap.collections && Array.isArray(snap.collections[kind])) ? snap.collections[kind] : [];
+    colStores[kind] = settleCollections(inc);
+    saveCols(kind);
+    sanitizeItemCollections(stores[kind].items, colStores[kind]);
+  }
+  await persist(K_Q, stores.q.items);
+  await persist(K_K, stores.k.items);
+  savePapers();
+  alert('已恢复到自动备份。');
+  location.reload();
+}
+
+document.getElementById('autoBackupNow').onclick = async () => {
+  const ok = await saveAutoSnapshot('manual');
+  alert(ok ? '已保存一份自动备份。' : '保存失败，可能是存储空间不足。');
+};
+document.getElementById('autoBackupRestore').onclick = restoreAutoBackup;
+document.getElementById('autoBackupMin').onchange = e => {
+  settings.autoBackupMin = parseInt(e.target.value, 10) || 10;
+  saveSettings();
+  scheduleAutoBackup();
+  refreshAutoBackupStatus();
+};
+// 页面切到后台时补一份，避免直接被杀进程
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') maybeAutoSnapshot();
+});
+
 /* ---------- 返回顶部 ---------- */
 const toTopEl = document.getElementById('toTop');
 function updateToTop() {
@@ -3001,12 +3130,23 @@ document.addEventListener('keydown', e => {
 
 /* ---------- 设置抽屉 ---------- */
 const settingsDrawer = document.getElementById('settingsDrawer');
-document.getElementById('settingsBtn').onclick = () => { applySettings(); settingsDrawer.classList.add('open'); };
+document.getElementById('settingsBtn').onclick = () => {
+  applySettings();
+  refreshAutoBackupStatus();
+  settingsDrawer.classList.add('open');
+};
 document.getElementById('settingsClose').onclick = () => settingsDrawer.classList.remove('open');
 settingsDrawer.onclick = e => { if (e.target === settingsDrawer) settingsDrawer.classList.remove('open'); };
 settingsDrawer.querySelectorAll('.seg button').forEach(btn => {
   btn.onclick = () => {
     const seg = btn.closest('.seg');
+    if (seg.id === 'setAutoBackup') {            // 自动备份开关
+      settings.autoBackup = btn.dataset.backup;
+      saveSettings();
+      applySettings();
+      refreshAutoBackupStatus();
+      return;
+    }
     if (seg.id === 'setSort') {                 // 排序：按当前库写入 sortMode
       if (active === 'p') return;
       settings.sortMode[active] = btn.dataset.sort;
@@ -3927,6 +4067,8 @@ async function boot() {
   updateTrashCount();
   updateBackupBar();
   refreshTagPicker();
+  refreshAutoBackupStatus();
+  scheduleAutoBackup();
   render();
 }
 boot();

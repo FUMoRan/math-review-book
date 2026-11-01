@@ -644,6 +644,26 @@
     </div>
 
     <div class="setrow">
+      <span class="lbl">自动本地备份</span>
+      <div class="seg" id="setAutoBackup">
+        <button data-backup="on">开启</button>
+        <button data-backup="off">关闭</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <select id="autoBackupMin" style="flex:0 0 auto">
+          <option value="5">每 5 分钟</option>
+          <option value="10">每 10 分钟</option>
+          <option value="30">每 30 分钟</option>
+          <option value="60">每 60 分钟</option>
+        </select>
+        <button id="autoBackupNow">立即备份</button>
+        <button id="autoBackupRestore">恢复最近一次</button>
+      </div>
+      <p class="setnote" id="autoBackupStatus">—</p>
+      <p class="setnote">自动备份只存在本机（保留最近 3 份，不含配图），用于误删、误导入后回退。想换设备或彻底防丢，仍请用下面的「完整备份」导出文件。</p>
+    </div>
+
+    <div class="setrow">
       <span class="lbl">AI 识题（可选功能，<b>使用时会联网</b>）</span>
       <p class="setnote">
         拍一张题目照片，让 AI 识别并整理成字段，核对后再导入。<br>
