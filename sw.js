@@ -1,7 +1,7 @@
 // 离线缓存：首次访问后把页面和公式引擎缓存到本地，之后断网也能打开。
 // 静态资源「网络优先」：联网时总是拿最新代码，避免发新版后仍加载到旧缓存；断网时回退缓存。
 // KaTeX 字体「缓存优先」：字体几乎不变，且首次没命中就会拖慢公式渲染。
-const CACHE = 'math-review-v12';
+const CACHE = 'math-review-v13';
 
 // 常用公式字形（正文、粗体、斜体、数学斜体、上下标与大型定界符尺寸 1/2）。
 // 这几类覆盖绝大多数公式，预缓存后打开页面公式立即正确成型。
@@ -22,6 +22,7 @@ const CORE = [
   './styles.css',
   './lib.js',
   './app.js',
+  './rescue.html',
   './papers-data.json',
   './manifest.json',
   './vendor/katex/katex.min.css',
@@ -92,7 +93,8 @@ async function netFirst(req) {
   const slow = new Promise((resolve) => setTimeout(() => resolve(null), NET_TIMEOUT));
   const first = await Promise.race([net.catch(() => null), slow]);
   if (first) return first;
-  return (await caches.match('./index.html')) || net;
+  // 弱网兜底：优先给当前这次导航对应的缓存页（如 rescue.html），没有再退回首页
+  return (await caches.match(req)) || (await caches.match('./index.html')) || net;
 }
 
 self.addEventListener('fetch', (e) => {

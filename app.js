@@ -398,7 +398,6 @@ function countDups(kind, incoming) {
 /* ---------- 持久化：优先 IndexedDB（容量大），不可用时回退 localStorage ---------- */
 const KV_STORE = 'kv';
 function lsRead(key) { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return undefined; } }
-function lsWrite(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { return false; } }
 
 async function idbKVGet(key) {
   const db = await idb();
@@ -422,14 +421,17 @@ async function kvGet(key) {
     return rec === undefined ? undefined : JSON.parse(rec.json);
   } catch (e) { return lsRead(key); }
 }
-// 写：IndexedDB 优先；失败回退 localStorage；两者都失败才提示
+// 写：IndexedDB 优先，同时在 localStorage 留一份小副本作第二道保险。
+// 之前会在写入成功后删除 localStorage 副本，导致 IndexedDB 一旦被系统清理就彻底没有副本。
 async function persist(key, val) {
+  const json = JSON.stringify(val);
+  let mirrored = false;
+  try { localStorage.setItem(key, json); mirrored = true; } catch (e) { /* 超出 5MB 配额时忽略，IDB 仍是主存储 */ }
   try {
-    await idbKVPut(key, JSON.stringify(val));
-    localStorage.removeItem(key); // 迁移到 IDB 后释放 localStorage 空间
+    await idbKVPut(key, json);
     return true;
   } catch (e) {
-    if (lsWrite(key, val)) return true;
+    if (mirrored) return true;
     alert('本地存储写入失败（可能是隐私模式或空间不足），建议先「导出」备份。');
     return false;
   }
@@ -484,17 +486,50 @@ const saveCols = kind => persist(colKey(kind), colStores[kind]);
 // 合集树/未分类在侧栏里作为「虚拟节点」的筛选值
 const COL_ALL = '__all__';
 
+// 这台设备以前是否用过（有历史痕迹）：用来区分「第一次打开」和「数据读不出来」
+async function hadHistory() {
+  try { if (localStorage.getItem(K_SEED)) return true; } catch (e) {}
+  try { if (localStorage.getItem(K_LASTEXPORT)) return true; } catch (e) {}
+  try {
+    const t = await kvGet(K_TRASH);
+    if (Array.isArray(t) && t.length) return true;
+  } catch (e) {}
+  try {
+    const imgs = await idbKeys();
+    if (imgs && imgs.length) return true;
+  } catch (e) {}
+  try {
+    const cq = await kvGet(K_C_Q);
+    if (Array.isArray(cq) && cq.length) return true;
+  } catch (e) {}
+  return false;
+}
+
+const missingKeys = [];   // 启动时读不到、但设备有历史痕迹的键（不再自动填充，留给救援页）
+let dataMissing = false;
+
 // 启动时从 IndexedDB 载入（并把旧版 localStorage 数据迁移过来）
 async function loadInitial() {
+  const usedBefore = await hadHistory();
+
   for (const kind of ['q', 'k', 'p']) {
     const key = stores[kind].key;
     let raw = await kvGet(key);
     if (!Array.isArray(raw)) raw = lsRead(key);
-    stores[kind].items = Array.isArray(raw)
-      ? raw.map(stores[kind].norm)
-      : (kind === 'q' ? seedQuestions() : (kind === 'k' ? seedKps() : [])).map(stores[kind].norm);
-    await persist(key, stores[kind].items);
+    if (Array.isArray(raw)) {
+      stores[kind].items = raw.map(stores[kind].norm);
+      await persist(key, stores[kind].items);
+    } else if (usedBefore) {
+      // 设备用过、但现在读不到：绝不灌示例数据覆盖，先留空并提示去数据救援
+      stores[kind].items = [];
+      missingKeys.push(key);
+    } else {
+      // 确实是第一次打开，才灌示例
+      stores[kind].items = (kind === 'q' ? seedQuestions() : (kind === 'k' ? seedKps() : [])).map(stores[kind].norm);
+      await persist(key, stores[kind].items);
+    }
   }
+  dataMissing = missingKeys.includes(K_Q) || missingKeys.includes(K_K);
   // 合集树（两库各一棵）
   for (const kind of ['q', 'k']) {
     const key = colKey(kind);
@@ -2806,6 +2841,24 @@ function setBackupMeta(o) {
 function updateBackupBar() {
   const bar = document.getElementById('backupBar');
   if (!bar) return;
+  const rescueBtn = document.getElementById('backupRescue');
+  const nowBtn = document.getElementById('backupNow');
+  const laterBtn = document.getElementById('backupLater');
+
+  // 读不到历史数据：优先提示去做数据救援，而不是导出（此时导出只会得到空数据）
+  if (dataMissing) {
+    document.getElementById('backupText').textContent =
+      '⚠️ 没有读到之前的错题/知识点数据（可能是浏览器清理了本机存储）。先运行「数据救援」检查还能不能找回。';
+    if (rescueBtn) rescueBtn.style.display = '';
+    if (nowBtn) nowBtn.style.display = 'none';
+    if (laterBtn) laterBtn.style.display = 'none';
+    bar.style.display = 'flex';
+    return;
+  }
+  if (rescueBtn) rescueBtn.style.display = 'none';
+  if (nowBtn) nowBtn.style.display = '';
+  if (laterBtn) laterBtn.style.display = '';
+
   const total = stores.q.items.length + stores.k.items.length;
   const meta = getBackupMeta();
   if (!total || (meta.snooze && Date.now() - meta.snooze < SNOOZE_DAYS * 86400000)) {
@@ -2823,6 +2876,7 @@ function updateBackupBar() {
   document.getElementById('backupText').textContent = txt;
   bar.style.display = 'flex';
 }
+document.getElementById('backupRescue').onclick = () => { location.href = './rescue.html'; };
 document.getElementById('backupNow').onclick = () => document.getElementById('exportBtn').click();
 document.getElementById('backupLater').onclick = () => {
   setBackupMeta(Object.assign(getBackupMeta(), { snooze: Date.now() }));
@@ -3862,6 +3916,8 @@ aiEl('aiTest').onclick = async () => {
 
 /* ---------- 初始化 ---------- */
 async function boot() {
+  // 申请持久化存储，降低浏览器在空间紧张时清掉本机数据的概率
+  try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) {}
   await loadInitial();
   pruneCollapsed();   // 清掉指向已删合集的折叠标记
   applySettings();

@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数学复习本 · 数据救援</title>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="88">🩺</text></svg>'>
+<style>
+  :root{
+    --bg:#f6f7fb; --card:#fff; --line:#e6e8f0; --text:#1f2430; --muted:#7a8194;
+    --brand:#4c6ef5; --danger:#e03131; --ok:#2f9e44; --warn:#e8590c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:16px; background:var(--bg); color:var(--text);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  .wrap{max-width:820px; margin:0 auto}
+  h1{font-size:18px; margin:0 0 4px}
+  .sub{color:var(--muted); font-size:13px; margin:0 0 16px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:14px;}
+  .card h2{font-size:15px; margin:0 0 10px}
+  .note{color:var(--muted); font-size:13px; margin:0 0 10px}
+  .warnbox{background:#fff4e6; border-color:#ffd8a8; color:#7a3d00;}
+  button{
+    font:inherit; cursor:pointer; border:1px solid var(--line); background:#fff; color:var(--text);
+    padding:9px 14px; border-radius:10px; margin:0 8px 8px 0;
+  }
+  button.primary{background:var(--brand); border-color:var(--brand); color:#fff}
+  button.danger{color:var(--danger); border-color:#ffc9c9}
+  button:disabled{opacity:.45; cursor:not-allowed}
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  th,td{text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{color:var(--muted); font-weight:600; white-space:nowrap}
+  td.k{word-break:break-all}
+  .pill{display:inline-block; padding:1px 8px; border-radius:99px; font-size:12px; border:1px solid currentColor}
+  .pill.ok{color:var(--ok)} .pill.bad{color:var(--danger)} .pill.warn{color:var(--warn)}
+  pre{background:#f4f5fa; border:1px solid var(--line); border-radius:10px; padding:10px;
+      overflow:auto; max-height:280px; font-size:12px; white-space:pre-wrap; word-break:break-all}
+  .row{display:flex; flex-wrap:wrap; align-items:center; gap:10px}
+  .stem{font-size:13px; color:var(--muted); margin-top:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🩺 数学复习本 · 数据救援</h1>
+  <p class="sub">本页只读取本机存储，<b>不会修改、不会覆盖</b>任何数据。请在出问题的那个浏览器 / PWA 里打开它。</p>
+
+  <div class="card warnbox">
+    <h2>扫描前请先完全关闭复习本</h2>
+    <p class="note" style="color:#7a3d00;margin:0">
+      如果还开着「数学复习本」页面或 PWA，请先关掉（后台也划掉）再回来点「重新扫描」，
+      否则旧代码可能正在写入示例数据、干扰判断。
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>1. 存储概况</h2>
+    <div id="envBox"><span class="note">扫描中…</span></div>
+  </div>
+
+  <div class="card">
+    <h2>2. 错题 / 知识点数据</h2>
+    <div id="dataBox"><span class="note">扫描中…</span></div>
+  </div>
+
+  <div class="card">
+    <h2>3. localStorage 里的全部键</h2>
+    <div id="lsBox"><span class="note">扫描中…</span></div>
+  </div>
+
+  <div class="card">
+    <h2>4. 导出与找回</h2>
+    <p class="note">导出的 JSON 可以直接在复习本里「导入」。建议先下载保存，再考虑写回。</p>
+    <div class="row">
+      <label><input type="checkbox" id="withImgs" checked> 包含配图（文件会更大）</label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="dlData" disabled>下载救援包（可导入）</button>
+      <button id="dlRaw" disabled>下载原始转储</button>
+      <button id="copyDiag">复制诊断信息</button>
+      <button id="rescan">重新扫描</button>
+    </div>
+    <div class="row" style="margin-top:4px">
+      <button class="danger" id="writeBack" disabled>把检测到的数据写回复习本</button>
+    </div>
+    <p class="note" style="margin-top:10px" id="actMsg"></p>
+    <pre id="diagOut" style="display:none"></pre>
+  </div>
+
+  <div class="card">
+    <h2>5. 回到复习本</h2>
+    <div class="row">
+      <button onclick="location.href='./index.html'">打开复习本</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ 常量 ============ */
+const DB_NAME = 'mqimg';
+const KV_STORE = 'kv';
+const IMG_STORE = 'imgs';
+// 应用里的数据键（新版本在 IndexedDB 的 kv，旧版本在 localStorage）
+const DATA_KEYS = [
+  { key: 'mq_items',        label: '错题',       countBy: 'array' },
+  { key: 'mq_kps',          label: '知识点',     countBy: 'array' },
+  { key: 'mq_papers',       label: '试卷',       countBy: 'array' },
+  { key: 'mq_collections_q', label: '错题合集树', countBy: 'array' },
+  { key: 'mq_collections_k', label: '知识点合集树', countBy: 'array' },
+  { key: 'mq_trash',        label: '回收站',     countBy: 'array' },
+];
+const LS_ONLY_HINTS = ['mq_settings', 'mq_ai', 'mq_lastExport', 'mq_seed_papers_v1'];
+
+/* ============ 工具 ============ */
+const $ = id => document.getElementById(id);
+const fmtSize = n => n < 1024 ? n + ' B' : (n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(2) + ' MB');
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function lsAll() {
+  const out = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      out[k] = localStorage.getItem(k);
+    }
+  } catch (e) { /* 隐私模式等 */ }
+  return out;
+}
+function parseMaybe(s) { try { return JSON.parse(s); } catch (e) { return undefined; } }
+function previewItem(it) {
+  if (!it || typeof it !== 'object') return '';
+  const t = it.stem || it.title || '';
+  return String(t).replace(/\s+/g, ' ').slice(0, 60);
+}
+function looksDemo(arr) {
+  if (!Array.isArray(arr) || !arr.length) return false;
+  const s = arr.map(x => (x && (x.stem || x.title)) || '').join('|');
+  return /x\^?\{?2\}?-2x\+1|x\^\{3\}-3x|二次函数顶点式|用导数判断单调性/.test(s) && arr.length <= 2;
+}
+
+/* ============ IndexedDB 读取（不升级版本，避免任何结构变动） ============ */
+function idbDatabases() {
+  return new Promise(res => {
+    if (!indexedDB || !indexedDB.databases) { res(null); return; }
+    indexedDB.databases().then(dbs => res(dbs || []), () => res(null));
+  });
+}
+function openExistingDB(name) {
+  // 不带 version：已存在就按当前版本打开，不会触发升级；不存在则创建空的 v1（无对象仓库）
+  return new Promise((res, rej) => {
+    const rq = indexedDB.open(name);
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error || new Error('IndexedDB 打开失败'));
+    rq.onupgradeneeded = () => { /* 新建空库，不建仓 */ };
+  });
+}
+function getAllKeys(db, store) {
+  return new Promise((res, rej) => {
+    try {
+      const rq = db.transaction(store, 'readonly').objectStore(store).getAllKeys();
+      rq.onsuccess = () => res(rq.result || []);
+      rq.onerror = () => rej(rq.error);
+    } catch (e) { rej(e); }
+  });
+}
+function getAll(db, store) {
+  return new Promise((res, rej) => {
+    try {
+      const rq = db.transaction(store, 'readonly').objectStore(store).getAll();
+      rq.onsuccess = () => res(rq.result || []);
+      rq.onerror = () => rej(rq.error);
+    } catch (e) { rej(e); }
+  });
+}
+
+/* ============ 扫描结果 ============ */
+let scan = null;   // { env, idb, kv, ls, found, canWriteBack }
+
+async function runScan() {
+  $('actMsg').textContent = '';
+  const ls = lsAll();
+  const env = { persisted: '未知', quota: '', usage: '', dbs: '' };
+
+  try {
+    if (navigator.storage && navigator.storage.persisted) {
+      env.persisted = (await navigator.storage.persisted()) ? '已持久化' : '未持久化（可能被系统清理）';
+    }
+    if (navigator.storage && navigator.storage.estimate) {
+      const e = await navigator.storage.estimate();
+      env.quota = fmtSize(e.quota || 0);
+      env.usage = fmtSize(e.usage || 0);
+    }
+  } catch (e) {}
+  const dbs = await idbDatabases();
+  env.dbs = dbs ? dbs.map(d => `${d.name}${d.version ? ' v' + d.version : ''}`).join('、') || '（无）' : '浏览器不支持列出数据库';
+
+  const idb = { ok: false, stores: [], kv: {}, imgs: { count: 0, size: 0 }, err: '' };
+  try {
+    const db = await openExistingDB(DB_NAME);
+    idb.stores = [...db.objectStoreNames];
+    for (const st of idb.stores) {
+      if (st === KV_STORE) {
+        const rows = await getAll(db, KV_STORE);
+        for (const r of rows) {
+          const parsed = parseMaybe(r && r.json);
+          idb.kv[r.key] = {
+            key: r.key,
+            json: r && r.json,
+            parsed,
+            size: (r && r.json || '').length,
+            count: Array.isArray(parsed) ? parsed.length : null,
+          };
+        }
+      } else if (st === IMG_STORE) {
+        const recs = await getAll(db, IMG_STORE);
+        idb.imgs.count = recs.length;
+        idb.imgs.size = recs.reduce((n, r) => n + ((r && r.size) || 0), 0);
+      }
+    }
+    idb.ok = true;
+  } catch (e) {
+    idb.err = (e && (e.message || e.name)) || String(e);
+  }
+
+  // 汇总每类数据的来源：优先 IDB，其次 localStorage
+  const found = {};
+  for (const d of DATA_KEYS) {
+    const inKv = idb.kv[d.key];
+    const inLs = ls[d.key] != null ? parseMaybe(ls[d.key]) : undefined;
+    let source = null, data = null, count = null, size = 0;
+    if (inKv && Array.isArray(inKv.parsed)) { source = 'IndexedDB'; data = inKv.parsed; count = data.length; size = inKv.size; }
+    else if (Array.isArray(inLs)) { source = 'localStorage'; data = inLs; count = data.length; size = (ls[d.key] || '').length; }
+    found[d.key] = { d, source, data, count, size, demo: looksDemo(data), rawKv: !!inKv };
+  }
+
+  // 可写回：检测到 localStorage 里有、但 IndexedDB 里缺失/为空的数据
+  const canWriteBack = DATA_KEYS.some(d => {
+    const f = found[d.key];
+    return f.source === 'localStorage' && Array.isArray(f.data) && f.data.length;
+  });
+
+  scan = { env, idb, ls, found, canWriteBack };
+
+  renderScan();
+}
+
+function renderScan() {
+  const { env, idb, ls, found, canWriteBack } = scan;
+
+  /* ---- 1. 环境 ---- */
+  $('envBox').innerHTML = `
+    <table>
+      <tr><th>入口</th><td class="k">${esc(location.origin + location.pathname)}</td></tr>
+      <tr><th>持久化</th><td>${esc(env.persisted)}</td></tr>
+      <tr><th>已用 / 配额</th><td>${env.usage ? esc(env.usage + ' / ' + env.quota) : '未知'}</td></tr>
+      <tr><th>IndexedDB 库</th><td class="k">${esc(env.dbs)}</td></tr>
+      <tr><th>数据库打开</th><td>${idb.ok
+        ? `<span class="pill ok">成功</span> 仓库：${esc(idb.stores.join('、') || '（空库，没有任何仓库）')}`
+        : `<span class="pill bad">失败</span> ${esc(idb.err)}`}</td></tr>
+    </table>
+    <p class="note" style="margin:10px 0 0">
+      配图：${idb.imgs.count} 张，约 ${fmtSize(idb.imgs.size)}。
+      ${idb.imgs.count && !found.mq_items.data ? '（配图还在，说明数据曾经在这台设备上。）' : ''}
+    </p>`;
+
+  /* ---- 2. 数据 ---- */
+  const rows = DATA_KEYS.map(d => {
+    const f = found[d.key];
+    let state;
+    if (!f.source) state = '<span class="pill bad">未找到</span>';
+    else if (f.demo) state = '<span class="pill warn">疑似示例数据</span>';
+    else state = '<span class="pill ok">已找到</span>';
+    const count = f.count == null ? '—' : (f.count + ' 条');
+    const sample = f.data && f.data.length
+      ? `<div class="stem">${esc(previewItem(f.data[0]))}${f.data.length > 1 ? ' …' : ''}</div>`
+      : '';
+    return `<tr>
+      <td>${esc(d.label)}</td>
+      <td>${state}${sample}</td>
+      <td>${esc(f.source || '')}<br>${esc(count)}</td>
+      <td>${f.size ? esc(fmtSize(f.size)) : ''}</td>
+    </tr>`;
+  }).join('');
+  $('dataBox').innerHTML = `<table><tr><th>类型</th><th>状态</th><th>来源 / 数量</th><th>大小</th></tr>${rows}</table>`;
+
+  /* ---- 3. localStorage ---- */
+  const keys = Object.keys(ls).sort();
+  $('lsBox').innerHTML = keys.length
+    ? `<table><tr><th>键</th><th>大小</th><th>内容摘要</th></tr>${keys.map(k => {
+        const v = ls[k] || '';
+        let brief = '';
+        if (k === 'mq_items' || k === 'mq_kps' || k === 'mq_papers' || k === 'mq_trash') {
+          const p = parseMaybe(v);
+          brief = Array.isArray(p) ? `${p.length} 条` : v.slice(0, 60);
+        } else if (k === 'mq_ai') {
+          brief = '（AI 配置，含 Key，未展开）';
+        } else if (k === 'mq_settings') {
+          brief = v.slice(0, 120);
+        } else {
+          brief = v.slice(0, 80);
+        }
+        return `<tr><td class="k">${esc(k)}</td><td>${esc(fmtSize(v.length))}</td><td class="k">${esc(brief)}</td></tr>`;
+      }).join('')}</table>`
+    : '<span class="note">localStorage 是空的。</span>';
+
+  /* ---- 4. 按钮 ---- */
+  const hasAny = Object.values(found).some(f => Array.isArray(f.data) && f.data.length);
+  $('dlData').disabled = !hasAny;
+  $('dlRaw').disabled = !(hasAny || keys.length || idb.ok);
+  $('writeBack').disabled = !canWriteBack;
+
+  if (canWriteBack) {
+    $('actMsg').innerHTML = '<b>检测到 localStorage 里还留着数据。</b>可以直接下载导出，或点「写回复习本」把它搬回 IndexedDB。';
+  } else if (hasAny) {
+    $('actMsg').textContent = '数据在 IndexedDB 里。先下载救援包，再回到复习本确认是否显示。';
+  } else {
+    $('actMsg').textContent = '没有找到任何数据。如果这里也找不到，本机基本没有副本了，只能靠之前导出过的文件。';
+  }
+}
+
+/* ============ 导出 ============ */
+function downloadBlob(name, blob) {
+  const a = document.createElement('a');
+  const u = URL.createObjectURL(blob);
+  a.href = u; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 2000);
+}
+function stamp() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+}
+function blobToB64(blob) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result).split(',')[1] || '');
+    fr.onerror = () => rej(fr.error);
+    fr.readAsDataURL(blob);
+  });
+}
+
+async function buildRescue(withImages) {
+  const f = scan.found;
+  const payload = {
+    version: 4,
+    exportedAt: Date.now(),
+    source: 'rescue.html',
+    questions: f.mq_items.data || [],
+    knowledge: f.mq_kps.data || [],
+    papers: f.mq_papers.data || null,
+    collections: {
+      q: f.mq_collections_q.data || [],
+      k: f.mq_collections_k.data || [],
+    },
+  };
+  if (!withImages) return payload;
+
+  payload.images = {};
+  try {
+    const db = await openExistingDB(DB_NAME);
+    if (db.objectStoreNames.contains(IMG_STORE)) {
+      const recs = await getAll(db, IMG_STORE);
+      for (const r of recs) {
+        if (!r || !r.blob) continue;
+        payload.images[r.id] = {
+          type: r.type || 'image/jpeg',
+          data: await blobToB64(r.blob),
+        };
+      }
+    }
+  } catch (e) {}
+  return payload;
+}
+
+$('dlData').onclick = async () => {
+  try {
+    const payload = await buildRescue($('withImgs').checked);
+    const p = payload;
+    const n = (p.questions || []).length, k = (p.knowledge || []).length;
+    downloadBlob(`数学复习本-救援-${stamp()}.json`,
+      new Blob([JSON.stringify(p)], { type: 'application/json' }));
+    $('actMsg').textContent = `已下载救援包：错题 ${n} 道、知识点 ${k} 个${p.images ? '、配图 ' + Object.keys(p.images).length + ' 张' : ''}。`;
+  } catch (e) {
+    $('actMsg').textContent = '导出失败：' + ((e && e.message) || e);
+  }
+};
+
+$('dlRaw').onclick = () => {
+  const dump = {
+    exportedAt: Date.now(),
+    origin: location.origin,
+    localStorage: scan.ls,
+    indexedDB: {
+      stores: scan.idb.stores,
+      kv: Object.fromEntries(Object.entries(scan.idb.kv).map(([k, v]) => [k, v.parsed !== undefined ? v.parsed : v.json])),
+    },
+  };
+  downloadBlob(`数学复习本-原始转储-${stamp()}.json`,
+    new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' }));
+  $('actMsg').textContent = '已下载原始转储（未包含配图二进制）。';
+};
+
+/* ============ 复制诊断 ============ */
+$('copyDiag').onclick = async () => {
+  const lines = [];
+  lines.push('入口: ' + location.origin + location.pathname);
+  lines.push('持久化: ' + scan.env.persisted + ' | 已用/配额: ' + scan.env.usage + '/' + scan.env.quota);
+  lines.push('IDB 库: ' + scan.env.dbs);
+  lines.push('IDB 打开: ' + (scan.idb.ok ? '成功 ' + scan.idb.stores.join('、') : '失败 ' + scan.idb.err));
+  lines.push('配图: ' + scan.idb.imgs.count + ' 张 ' + fmtSize(scan.idb.imgs.size));
+  for (const d of DATA_KEYS) {
+    const f = scan.found[d.key];
+    lines.push(`${d.label}(${d.key}): ${f.source || '未找到'}${f.count != null ? ' ' + f.count + ' 条' : ''}${f.demo ? ' [示例]' : ''}`);
+  }
+  lines.push('localStorage 键: ' + Object.keys(scan.ls).sort().join(', '));
+  const txt = lines.join('\n');
+  $('diagOut').style.display = 'block';
+  $('diagOut').textContent = txt;
+  try {
+    await navigator.clipboard.writeText(txt);
+    $('actMsg').textContent = '诊断信息已复制，可以直接发给我。';
+  } catch (e) {
+    $('actMsg').textContent = '已显示在下方，可长按手动复制。';
+  }
+};
+
+/* ============ 写回 ============ */
+$('writeBack').onclick = async () => {
+  if (!confirm('把 localStorage 里的数据写回 IndexedDB（应用使用的那份）？\n\n原 IndexedDB 里同名键会被覆盖。')) return;
+  const db = await openExistingDB(DB_NAME);
+  if (!db.objectStoreNames.contains(KV_STORE)) {
+    $('actMsg').textContent = '当前数据库还没有 kv 仓库（属于旧版本）。请先打开一次新版复习本，再回来写回。';
+    return;
+  }
+  let n = 0;
+  try {
+    for (const d of DATA_KEYS) {
+      const f = scan.found[d.key];
+      if (f.source !== 'localStorage' || !Array.isArray(f.data)) continue;
+      await new Promise((res, rej) => {
+        const tx = db.transaction(KV_STORE, 'readwrite');
+        tx.objectStore(KV_STORE).put({ key: d.key, json: JSON.stringify(f.data) });
+        tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
+      });
+      n++;
+    }
+    $('actMsg').textContent = `已写回 ${n} 项数据。现在可以打开复习本查看。`;
+    $('writeBack').disabled = true;
+  } catch (e) {
+    $('actMsg').textContent = '写回失败：' + ((e && e.message) || e);
+  }
+};
+
+/* ============ 启动 ============ */
+$('rescan').onclick = () => {
+  $('envBox').innerHTML = $('dataBox').innerHTML = $('lsBox').innerHTML = '<span class="note">扫描中…</span>';
+  runScan();
+};
+runScan();
+</script>
+</body>
+</html>
