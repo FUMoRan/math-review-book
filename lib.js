@@ -549,7 +549,7 @@
       }
       if (typeof p.collectionPath === 'string' && p.collectionPath.trim()) {
         const key = p.collectionPath.trim();
-        if (!pathCache.has(key)) pathCache.set(key, resolveCollectionPath(cols, key, now));
+        if (!pathCache.has(key)) pathCache.set(key, resolveCollectionPathSmart(cols, key, now));
         const r = pathCache.get(key);
         cols = r.cols;
         if (r.id && next.collectionId !== r.id) set('collectionId', r.id);
@@ -570,6 +570,326 @@
       return next;
     });
     return { items: out, cols, changed };
+  }
+
+  /* ---------- 体系整理（P2）：输入构建 / 计划归一 / 应用 ----------
+     设计要点：
+       1. AI 只提案；客户端校验并将路径解析成真实 id，同名（含全半角/空格/与和/括号差异）一律复用；
+       2. 合并/改名冲突时先把子合集与条目改挂到目标，再删空壳，绝不丢条目；
+       3. 解析不到、有环、目标在源子树内等情况一律原地不动，并记入 warnings。 */
+
+  // 路径拆分：兼容 /、>、＞、\ 与数组写法
+  function splitCollPath(p) {
+    const arr = Array.isArray(p) ? p : String(p == null ? '' : p).split(/\s*(?:\/|>|＞|\\)\s*/);
+    return arr.map(s => String(s == null ? '' : s).replace(/\s+/g, ' ').trim()).filter(Boolean);
+  }
+
+  // 名称归一：全角转半角、去空格/括号/连接号，并把「与/及」统一成「和」
+  function normCollName(s) {
+    let t = String(s == null ? '' : s).replace(/[\uFF01-\uFF5E]/g, ch =>
+      String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)).replace(/\u3000/g, ' ');
+    t = t.replace(/[（(【\[「]/g, '').replace(/[）)】\]」]/g, '');
+    t = t.replace(/[与及]/g, '和');
+    return t.toLowerCase().replace(/\s+/g, '').replace(/[·・\-—_]/g, '');
+  }
+
+  // 按路径找合集（末级节点），名称按 normCollName 匹配；找不到返回 null
+  function findCollectionByPath(cols, path) {
+    const parts = splitCollPath(path);
+    if (!parts.length) return null;
+    const arr = Array.isArray(cols) ? cols : [];
+    let parentId = null, node = null;
+    for (const name of parts) {
+      const want = normCollName(name);
+      const hit = arr
+        .filter(c => (c.parentId || null) === parentId && normCollName(c.name) === want)
+        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))[0];
+      if (!hit) return null;
+      node = hit;
+      parentId = hit.id;
+    }
+    return node;
+  }
+
+  // 路径状态（供导入预览）：是否已存在、若要新建会新建哪几级
+  function pathCreateInfo(cols, path) {
+    const parts = splitCollPath(path);
+    const arr = Array.isArray(cols) ? cols : [];
+    let parentId = null, exists = true;
+    const newNames = [];
+    for (const name of parts) {
+      const hit = arr.find(c => (c.parentId || null) === parentId && normCollName(c.name) === normCollName(name));
+      if (!hit) {
+        exists = false;
+        newNames.push(name);
+        parentId = null;   // 后面各级都视为新建
+      } else {
+        parentId = hit.id;
+      }
+    }
+    const node = exists ? findCollectionByPath(arr, parts.join('/')) : null;
+    return { exists, id: node ? node.id : null, newNames };
+  }
+
+  // 与 resolveCollectionPath 相同的语义，但按归一名称复用已有节点；缺失才新建
+  function resolveCollectionPathSmart(cols, path, now) {
+    const t = now || Date.now();
+    const parts = splitCollPath(path);
+    let list = Array.isArray(cols) ? cols.slice() : [];
+    if (!parts.length) return { cols: list, id: null, created: 0 };
+    let parentId = null, id = null, created = 0;
+    for (const name of parts) {
+      const want = normCollName(name);
+      let found = list
+        .filter(c => (c.parentId || null) === parentId && normCollName(c.name) === want)
+        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))[0];
+      if (!found) {
+        const r = addCollection(list, name, parentId, t);
+        list = r.cols;
+        found = r.node;
+        created++;
+      }
+      id = found.id;
+      parentId = found.id;
+    }
+    return { cols: list, id, created };
+  }
+
+  /* 构建体系整理/分配阶段给 AI 的输入（纯函数）。
+     items —— 范围内的条目；cols —— 该库合集树
+     opts: { target:'q'|'k', maxItems, stemMax }
+     返回 { target, items:[{id,s,t,c}], collections:[{id,name,path,depth,count,total}], total, sampled } */
+  function buildOrganizeInput(items, cols, opts) {
+    const o = opts || {};
+    const target = o.target === 'k' ? 'k' : 'q';
+    const arr = Array.isArray(items) ? items : [];
+    const colsArr = Array.isArray(cols) ? cols : [];
+    const counts = collectionCounts(arr, colsArr);
+    const existing = flattenCollections(colsArr).map(c => ({
+      id: c.id,
+      name: c.name,
+      depth: c.depth,
+      path: collectionPath(colsArr, c.id).map(x => x.name).join('/'),
+      count: counts.direct.get(c.id) || 0,
+      total: counts.subtree.get(c.id) || 0,
+    }));
+    const maxItems = (typeof o.maxItems === 'number' && o.maxItems > 0) ? Math.floor(o.maxItems) : 0;
+    const stemMax = (typeof o.stemMax === 'number' && o.stemMax > 0) ? Math.floor(o.stemMax) : 120;
+    const total = arr.length;
+    const picked = maxItems && total > maxItems ? sampleEvenly(arr, maxItems) : arr.slice();
+    const rows = picked.map(it => ({
+      id: it.id,
+      s: String((target === 'k' ? it.title : it.stem) || '').replace(/\s+/g, ' ').slice(0, stemMax),
+      t: Array.isArray(it.tags) ? it.tags.slice(0, 6) : [],
+      c: it.collectionId ? collectionPath(colsArr, it.collectionId).map(x => x.name).join('/') : '',
+    }));
+    return { target, items: rows, collections: existing, total, sampled: rows.length !== total };
+  }
+
+  // 把 AI 的体系提案归一成安全结构：{ ops, assigns, warnings }
+  function normalizeTaxonomyPlan(raw, opts) {
+    const warnings = [];
+    const o = opts || {};
+    let opsIn = [], assignsIn = [];
+    if (Array.isArray(raw)) {
+      if (raw.some(x => x && typeof x === 'object' && typeof x.op === 'string')) opsIn = raw;
+      else assignsIn = raw;
+    } else if (raw && typeof raw === 'object') {
+      for (const k of ['ops', 'operations', 'actions', 'changes', 'plan']) {
+        if (Array.isArray(raw[k])) { opsIn = raw[k]; break; }
+      }
+      for (const k of ['assigns', 'assignments', 'items', 'rows', 'map']) {
+        if (Array.isArray(raw[k])) { assignsIn = raw[k]; break; }
+      }
+    }
+    const OPS = { create: 'create', add: 'create', 'new': 'create', '新建': 'create', '新增': 'create',
+      rename: 'rename', '改名': 'rename', '重命名': 'rename',
+      merge: 'merge', '合并': 'merge', keep: 'keep', '保留': 'keep' };
+    const refOf = (obj, idKeys, pathKeys) => {
+      const ref = {};
+      for (const k of idKeys) if (obj && typeof obj[k] === 'string' && obj[k]) { ref.id = obj[k]; break; }
+      for (const k of pathKeys) {
+        const v = obj && obj[k];
+        if (Array.isArray(v) || (typeof v === 'string' && v.trim())) { ref.path = splitCollPath(v).join('/'); break; }
+      }
+      return (ref.id || ref.path) ? ref : null;
+    };
+    const ops = [];
+    const seenCreate = new Set(), seenRename = new Set(), seenMerge = new Set();
+    for (const x of opsIn) {
+      if (!x || typeof x !== 'object') continue;
+      const opRaw = String(x.op || x.action || x.type || x.kind || '').trim().toLowerCase();
+      const op = OPS[opRaw] || OPS[String(x.op || x.action || x.type || x.kind || '').trim()];
+      if (!op || op === 'keep') continue;
+      if (op === 'create') {
+        const path = splitCollPath(x.path != null ? x.path : (x.to != null ? x.to : x.name));
+        if (!path.length) { warnings.push('有一条新建建议缺少路径，已忽略'); continue; }
+        if (path.length > 4) { warnings.push(`路径「${path.join('/')}」超过 4 级，已忽略`); continue; }
+        const key = path.map(normCollName).join('/');
+        if (seenCreate.has(key)) continue;
+        seenCreate.add(key);
+        ops.push({ op: 'create', path: path.join('/') });
+      } else if (op === 'rename') {
+        const target = refOf(x, ['id', 'targetId'], ['path', 'from', 'source']);
+        let name = String(x.name != null ? x.name : (x.newName != null ? x.newName : (x.toName || ''))).replace(/\s+/g, ' ').trim();
+        if (!name && typeof x.to === 'string' && !/[\/(＞>]/.test(x.to)) name = x.to.trim();
+        if (!target) { warnings.push('有一条改名建议找不到目标，已忽略'); continue; }
+        if (!name || /[\/]/.test(name)) { warnings.push('有一条改名建议名称不合法，已忽略'); continue; }
+        const key = (target.id || 'p:' + target.path) + '\u0001' + name;
+        if (seenRename.has(key)) continue;
+        seenRename.add(key);
+        ops.push({ op: 'rename', target, name });
+      } else if (op === 'merge') {
+        const from = refOf(x, ['fromId', 'sourceId'], ['from', 'source', 'path']);
+        const into = refOf(x, ['intoId', 'targetId'], ['into', 'target', 'to']);
+        if (!from || !into) { warnings.push('有一条合并建议缺少来源或目标，已忽略'); continue; }
+        const key = (from.id || 'p:' + from.path) + '\u0001' + (into.id || 'p:' + into.path);
+        if (seenMerge.has(key)) continue;
+        seenMerge.add(key);
+        ops.push({ op: 'merge', from, into });
+      }
+    }
+    const assigns = [];
+    const seenAssign = new Map();
+    for (const x of assignsIn) {
+      if (!x || typeof x !== 'object') continue;
+      const rawId = x.id != null ? x.id : (x.qid != null ? x.qid : (x.itemId != null ? x.itemId : x.kpId));
+      if (typeof rawId !== 'string' && typeof rawId !== 'number') continue;
+      const id = String(rawId);
+      const path = splitCollPath(x.path != null ? x.path : (x.collectionPath != null ? x.collectionPath : (x.to != null ? x.to : ''))).join('/');
+      seenAssign.set(id, { id, path });
+    }
+    for (const v of seenAssign.values()) assigns.push(v);
+    return { ops, assigns, warnings };
+  }
+
+  /* 应用体系提案（纯函数，不改入参）。
+     plan —— normalizeTaxonomyPlan 的结果（也兼容未归一的原始对象）
+     opts —— { now, allowedPaths }
+       allowedPaths：定稿后的路径白名单（分配阶段用），不在白名单且不存在的路径不新建
+     返回 { cols, items, changed, stats, details, warnings } */
+  function applyTaxonomyPlan(cols, items, plan, opts) {
+    const o = opts || {};
+    const now = o.now || Date.now();
+    const norm = (plan && Array.isArray(plan.ops) && Array.isArray(plan.assigns) && Array.isArray(plan.warnings))
+      ? plan : normalizeTaxonomyPlan(plan, { cols });
+    const warnings = (norm.warnings || []).slice();
+    const details = [];
+    let work = settleCollections(Array.isArray(cols) ? cols : []);
+    let list = (Array.isArray(items) ? items : []).slice();
+    const stats = { created: 0, renamed: 0, merged: 0, removed: 0, moved: 0, changed: 0 };
+    const allowed = o.allowedPaths
+      ? new Set([...o.allowedPaths].map(p => splitCollPath(p).map(normCollName).join('/')))
+      : null;
+
+    const nodeOf = ref => {
+      if (!ref) return null;
+      if (ref.id) {
+        const hit = work.find(c => c.id === ref.id);
+        if (hit) return hit;
+      }
+      // path 字段里可能写的其实是 id，两种都试一次
+      return ref.path ? (findCollectionByPath(work, ref.path) || work.find(c => c.id === ref.path) || null) : null;
+    };
+
+    // 把 from 合集并入 into：先改挂直接条目，再递归改挂子合集（同名则继续合并），最后删空壳
+    const mergeInto = (fromId, intoId) => {
+      if (!fromId || !intoId || fromId === intoId) return false;
+      const from = work.find(c => c.id === fromId);
+      const into = work.find(c => c.id === intoId);
+      if (!from || !into) return false;
+      if (collectionSubtreeIds(work, fromId).has(intoId)) {
+        warnings.push(`不能把「${from.name}」合并到它自己的子合集「${into.name}」，已跳过`);
+        return false;
+      }
+      let moved = 0;
+      list = list.map(it => {
+        if (!it || it.collectionId !== fromId) return it;
+        moved++;
+        return Object.assign({}, it, { collectionId: intoId, updatedAt: now });
+      });
+      stats.moved += moved;
+      for (const kid of work.filter(c => c.parentId === fromId)) {
+        const sib = work.find(c => c.id !== kid.id && (c.parentId || null) === intoId
+          && normCollName(c.name) === normCollName(kid.name));
+        if (sib) mergeInto(kid.id, sib.id);
+        else work = work.map(c => c.id === kid.id ? Object.assign({}, c, { parentId: intoId, updatedAt: now }) : c);
+      }
+      work = work.filter(c => c.id !== fromId);
+      stats.merged++;
+      stats.removed++;
+      details.push({ type: 'merge', text: `合并「${from.name}」→「${into.name}」${moved ? `，改挂 ${moved} 条` : ''}` });
+      return true;
+    };
+
+    for (const op of (norm.ops || [])) {
+      if (op.op === 'create') {
+        const r = resolveCollectionPathSmart(work, op.path, now);
+        work = r.cols;
+        stats.created += r.created;
+        if (r.created) details.push({ type: 'create', text: `新建合集 ${op.path}` + (r.created > 1 ? `（新建 ${r.created} 级）` : '') });
+      } else if (op.op === 'rename') {
+        const node = nodeOf(op.target);
+        if (!node) { warnings.push('改名目标不存在，已跳过'); continue; }
+        if (!op.name) continue;
+        const sib = work.find(c => c.id !== node.id && (c.parentId || null) === node.parentId
+          && normCollName(c.name) === normCollName(op.name));
+        if (sib) {
+          if (mergeInto(node.id, sib.id)) details.push({ type: 'rename', text: `「${node.name}」与新名称同名，已并入「${sib.name}」` });
+        } else if (node.name !== op.name) {
+          work = work.map(c => c.id === node.id ? Object.assign({}, c, { name: op.name, updatedAt: now }) : c);
+          stats.renamed++;
+          details.push({ type: 'rename', text: `重命名「${node.name}」→「${op.name}」` });
+        }
+      } else if (op.op === 'merge') {
+        const from = nodeOf(op.from);
+        let into = nodeOf(op.into);
+        if (!from) { warnings.push('合并来源不存在，已跳过'); continue; }
+        if (!into && op.into && op.into.path) {
+          const r = resolveCollectionPathSmart(work, op.into.path, now);
+          work = r.cols;
+          stats.created += r.created;
+          into = work.find(c => c.id === r.id);
+        }
+        if (!into) { warnings.push('合并目标不存在，已跳过'); continue; }
+        mergeInto(from.id, into.id);
+      }
+    }
+
+    const idx = new Map(list.map((it, i) => [it && it.id, i]));
+    for (const a of (norm.assigns || [])) {
+      if (!a.path) continue;
+      const at = idx.get(a.id);
+      if (at === undefined) { warnings.push(`条目 ${a.id} 不存在，未分配`); continue; }
+      const key = splitCollPath(a.path).map(normCollName).join('/');
+      const existing = findCollectionByPath(work, a.path);
+      if (allowed && !allowed.has(key) && !existing) {
+        warnings.push(`路径「${a.path}」不在定稿体系里，未分配（条目保持原位）`);
+        continue;
+      }
+      const r = resolveCollectionPathSmart(work, a.path, now);
+      work = r.cols;
+      stats.created += r.created;
+      const it = list[at];
+      if ((it.collectionId || null) !== r.id) {
+        list[at] = Object.assign({}, it, { collectionId: r.id, updatedAt: now });
+        stats.moved++;
+        stats.changed++;
+      }
+    }
+
+    // 兜底：不保留任何孤儿 collectionId（仍然不改条目数量）
+    const valid = new Set(work.map(c => c.id));
+    list = list.map(it => {
+      if (it && it.collectionId && !valid.has(it.collectionId)) {
+        warnings.push(`条目 ${it.id} 的合集已不存在，已改为未分类`);
+        stats.changed++;
+        return Object.assign({}, it, { collectionId: null, updatedAt: now });
+      }
+      return it;
+    });
+
+    return { cols: work, items: list, changed: stats.changed, stats, details, warnings };
   }
 
   /* ---------- 知识点讲解补全（纯函数） ----------
@@ -1255,6 +1575,8 @@
     filterItemsByCollection, collectionCounts, sanitizeItemCollections,
     parseAiJson, normTag, mergeSuggestTags,
     resolveCollectionPath, applyOrganizePlan, pickKpIds, planRowOf,
+    splitCollPath, normCollName, findCollectionByPath, pathCreateInfo,
+    resolveCollectionPathSmart, buildOrganizeInput, normalizeTaxonomyPlan, applyTaxonomyPlan,
     planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy,
     sampleEvenly, clampMaxTokens, MAX_TOKENS_DEF,
     kpsMissingContent, fillKpContent, applyKpSink,

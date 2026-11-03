@@ -20,6 +20,8 @@ const {
   canMoveCollection, moveCollection, deleteCollection,
   filterItemsByCollection, collectionCounts, sanitizeItemCollections,
   parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan, pickKpIds, planRowOf,
+  splitCollPath, normCollName, findCollectionByPath, pathCreateInfo,
+  resolveCollectionPathSmart, buildOrganizeInput, normalizeTaxonomyPlan, applyTaxonomyPlan,
   planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy, sampleEvenly,
   clampMaxTokens, MAX_TOKENS_DEF,
   kpsMissingContent, fillKpContent, applyKpSink,
@@ -1522,3 +1524,155 @@ test('planRowOf 知识点库目标把讲解映射到 content，而不是 knowled
 
 
 
+
+/* ===================== 体系整理：输入 / 归一 / 应用 ===================== */
+const mkCols = list => list.map(([id, name, parentId]) => ({
+  id, name, parentId: parentId || null, createdAt: 1000, updatedAt: 1000,
+}));
+
+test('normCollName 归一全半角、空格、括号与「与/及/和」', () => {
+  assert.equal(normCollName('高等数学（上）'), normCollName('高等数学(上)'));
+  assert.equal(normCollName('概率论 与 数理统计'), normCollName('概率论和数理统计'));
+  assert.equal(normCollName('线性代数·行列式'), normCollName('线性代數-行列式').replace('數', '数'));
+  assert.equal(normCollName('  极 限 '), '极限');
+});
+
+test('findCollectionByPath 按归一名称复用，不重复造同义节点', () => {
+  const cols = mkCols([['a', '高等数学（上）', null], ['b', '极限', 'a']]);
+  assert.equal(findCollectionByPath(cols, '高等数学(上)/极限').id, 'b');
+  const r = resolveCollectionPathSmart(cols, '高等数学（上） / 极 限', 2000);
+  assert.equal(r.created, 0);
+  assert.equal(r.id, 'b');
+  assert.equal(r.cols.length, 2);
+});
+
+test('pathCreateInfo 标出将新建的层级', () => {
+  const cols = mkCols([['a', '高等数学', null], ['b', '极限', 'a']]);
+  assert.deepEqual(pathCreateInfo(cols, '高等数学/极限'), { exists: true, id: 'b', newNames: [] });
+  const r = pathCreateInfo(cols, '高等数学/导数');
+  assert.equal(r.exists, false);
+  assert.deepEqual(r.newNames, ['导数']);
+  assert.deepEqual(pathCreateInfo(cols, '线性代数/行列式').newNames, ['线性代数', '行列式']);
+});
+
+test('buildOrganizeInput 输出条目预览与现有路径统计', () => {
+  const cols = mkCols([['a', '高等数学', null], ['b', '极限', 'a']]);
+  const items = [
+    { id: 'q1', stem: '求极限', tags: ['极限'], collectionId: 'b' },
+    { id: 'q2', stem: '求导', tags: [], collectionId: null },
+  ];
+  const r = buildOrganizeInput(items, cols, { target: 'q', maxItems: 1 });
+  assert.equal(r.total, 2);
+  assert.equal(r.sampled, true);
+  assert.equal(r.items.length, 1);
+  assert.ok(r.items[0].s.length <= 120);
+  assert.deepEqual(r.items[0].t, ['极限']);
+  assert.equal(r.items[0].c, '高等数学/极限');
+  const paths = r.collections.map(c => c.path);
+  assert.deepEqual(paths, ['高等数学', '高等数学/极限']);
+  assert.equal(r.collections[1].count, 1);
+});
+
+test('normalizeTaxonomyPlan 归一 op 名称、去重并过滤非法项', () => {
+  const raw = {
+    ops: [
+      { op: 'create', path: '高等数学/极限' },
+      { op: '新建', path: ['高等数学', '极限'] },          // 与上一条重复（归一后）
+      { op: 'rename', path: '高等数学/函数', name: '函数与极限' },
+      { op: 'merge', from: '高等数学/极限', into: '高等数学/函数与极限' },
+      { op: 'keep', path: '高等数学' },
+      { op: 'merge', from: '高等数学/极限' },             // 缺目标，丢弃
+      { op: 'rename', name: '无目标' },                    // 缺目标，丢弃
+    ],
+    assigns: [
+      { id: 'q1', path: '高等数学/极限' },
+      { qid: 'q2', collectionPath: '高等数学 > 极限' },
+      { id: 'q1', path: '高等数学/函数' },                 // 同 id 后者覆盖
+      { id: 'q3', path: '' },
+    ],
+  };
+  const p = normalizeTaxonomyPlan(raw);
+  assert.equal(p.ops.length, 3);
+  assert.deepEqual(p.ops[0], { op: 'create', path: '高等数学/极限' });
+  assert.deepEqual(p.ops[1], { op: 'rename', target: { path: '高等数学/函数' }, name: '函数与极限' });
+  assert.deepEqual(p.ops[2], { op: 'merge', from: { path: '高等数学/极限' }, into: { path: '高等数学/函数与极限' } });
+  assert.deepEqual(p.assigns, [
+    { id: 'q1', path: '高等数学/函数' },
+    { id: 'q2', path: '高等数学/极限' },
+    { id: 'q3', path: '' },
+  ]);
+  assert.equal(p.warnings.length, 2);
+});
+
+test('applyTaxonomyPlan 合并时先搬题再删空壳，总数不变且无孤儿', () => {
+  const cols = mkCols([['a', '高等数学', null], ['b', '极限', 'a'], ['c', '函数与极限', 'a'], ['d', '夹逼定理', 'b']]);
+  const items = [
+    { id: 'q1', collectionId: 'b', tags: [] },
+    { id: 'q2', collectionId: 'b', tags: [] },
+    { id: 'q3', collectionId: 'd', tags: [] },
+    { id: 'q4', collectionId: null, tags: [] },
+  ];
+  const plan = normalizeTaxonomyPlan({
+    ops: [{ op: 'merge', from: '高等数学/极限', into: '高等数学/函数与极限' }],
+  });
+  const r = applyTaxonomyPlan(cols, items, plan);
+  assert.equal(r.items.length, items.length);
+  assert.equal(r.cols.some(c => c.id === 'b'), false);          // 空壳已删
+  const d = r.cols.find(c => c.id === 'd');
+  assert.equal(d.parentId, 'c');                               // 子合集已改挂到目标
+  assert.equal(r.items.find(i => i.id === 'q1').collectionId, 'c');
+  assert.equal(r.items.find(i => i.id === 'q2').collectionId, 'c');
+  assert.equal(r.items.find(i => i.id === 'q3').collectionId, 'd'); // 子合集里的题保持不动
+  assert.equal(r.items.find(i => i.id === 'q4').collectionId, null);
+  const valid = new Set(r.cols.map(c => c.id));
+  assert.ok(r.items.every(i => !i.collectionId || valid.has(i.collectionId)));
+});
+
+test('applyTaxonomyPlan 改名撞上同名合集时按合并处理，不丢题', () => {
+  const cols = mkCols([['a', '高等数学', null], ['b', '极限', 'a'], ['c', '函数与极限', 'a']]);
+  const items = [
+    { id: 'q1', collectionId: 'b' },
+    { id: 'q2', collectionId: 'c' },
+  ];
+  const plan = normalizeTaxonomyPlan({ ops: [{ op: 'rename', path: '高等数学/极限', name: '函数与极限' }] });
+  const r = applyTaxonomyPlan(cols, items, plan);
+  assert.equal(r.cols.length, 2);
+  assert.equal(r.stats.merged, 1);
+  assert.equal(r.items.find(i => i.id === 'q1').collectionId, 'c');
+  assert.equal(r.items.length, 2);
+});
+
+test('applyTaxonomyPlan 不允许把合集合并进自己的子树（原地不动）', () => {
+  const cols = mkCols([['a', '高等数学', null], ['b', '极限', 'a'], ['c', '夹逼定理', 'b']]);
+  const items = [{ id: 'q1', collectionId: 'b' }];
+  const plan = normalizeTaxonomyPlan({ ops: [{ op: 'merge', from: '高等数学/极限', into: '高等数学/极限/夹逼定理' }] });
+  const r = applyTaxonomyPlan(cols, items, plan);
+  assert.equal(r.cols.length, 3);
+  assert.equal(r.items[0].collectionId, 'b');
+  assert.ok(r.warnings.some(w => w.includes('自己的子合集')));
+});
+
+test('applyTaxonomyPlan 分配：复用归一同名路径，白名单外不新建', () => {
+  const cols = mkCols([['a', '高等数学', null], ['b', '极限', 'a']]);
+  const items = [{ id: 'q1', collectionId: null }, { id: 'q2', collectionId: null }];
+  const plan = normalizeTaxonomyPlan({
+    assigns: [
+      { id: 'q1', path: '高等数学 / 极 限' },
+      { id: 'q2', path: '高等数学/中值定理' },
+    ],
+  });
+  const r = applyTaxonomyPlan(cols, items, plan, { allowedPaths: ['高等数学', '高等数学/极限'] });
+  assert.equal(r.items.find(i => i.id === 'q1').collectionId, 'b'); // 复用，未新建
+  assert.equal(r.items.find(i => i.id === 'q2').collectionId, null); // 白名单外原样保留
+  assert.equal(r.cols.length, 2);
+  assert.ok(r.warnings.some(w => w.includes('不在定稿体系')));
+});
+
+test('applyTaxonomyPlan 创建路径时逐级复用已有节点', () => {
+  const cols = mkCols([['a', '高等数学', null], ['b', '极限', 'a']]);
+  const plan = normalizeTaxonomyPlan({ ops: [{ op: 'create', path: '高等数学/导数' }] });
+  const r = applyTaxonomyPlan(cols, [], plan);
+  assert.equal(r.stats.created, 1);
+  assert.equal(r.cols.length, 3);
+  assert.equal(findCollectionByPath(r.cols, '高等数学/导数').parentId, 'a');
+});

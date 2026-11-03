@@ -24,7 +24,9 @@ const {
   settleCollections, collectionSubtreeIds, flattenCollections, collectionChildren,
   collectionPath, addCollection, renameCollection, canMoveCollection, moveCollection,
   deleteCollection, collectionCounts, sanitizeItemCollections,
-  parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, applyOrganizePlan,
+  parseAiJson, normTag, mergeSuggestTags, resolveCollectionPath, resolveCollectionPathSmart,
+  pathCreateInfo, findCollectionByPath, applyOrganizePlan,
+  buildOrganizeInput, normalizeTaxonomyPlan, applyTaxonomyPlan,
   planKpTaxonomy, applyKpLinks, applyKpExplain, kpUsage, normalizeKpTaxonomy, sampleEvenly, clampMaxTokens,
   kpsMissingContent, fillKpContent, applyKpSink,
   clusterBySimilarity, groupStats,
@@ -574,7 +576,7 @@ const DEF = {
     randomLabel: '随机一题',
     overviewTitle: '随机一题 · 先自己想，再展开',
     fieldLabels: { stem: '题目（公式用 $...$）', analysis: '解析', knowledge: '知识点讲解', myAnswer: '我的错误答案（可选）' },
-    importFieldMap: { 题目: 'stem', 解析: 'analysis', 知识点: 'knowledge', 我的错误答案: 'myAnswer', 标签: 'tags' },
+    importFieldMap: { 题目: 'stem', 解析: 'analysis', 知识点: 'knowledge', 我的错误答案: 'myAnswer', 标签: 'tags', 合集: 'collection' },
     importRequired: '题目',
     importExample: [
       '【题目】',
@@ -587,6 +589,8 @@ const DEF = {
       '第 5 步：下结论。开口向上时最小值就是顶点的纵坐标，故最小值为 $0$，在 $x=1$ 处取得。',
       '【知识点】',
       '二次函数顶点式 $y=a(x-h)^2+k$：顶点为 $(h,k)$；$a>0$ 时开口向上、有最小值 $k$，$a<0$ 时开口向下、有最大值 $k$。',
+      '【合集】',
+      '高等数学/二次函数',
       '【我的错误答案】',
       '（选填：我当时是怎么错的）',
       '【标签】',
@@ -610,7 +614,7 @@ const DEF = {
     randomLabel: '随机一个知识点',
     overviewTitle: '只看知识点 · 先回忆，再展开',
     fieldLabels: { title: '知识点名称', content: '讲解（公式用 $...$）' },
-    importFieldMap: { 知识点: 'title', 讲解: 'content', 标签: 'tags' },
+    importFieldMap: { 知识点: 'title', 讲解: 'content', 标签: 'tags', 合集: 'collection' },
     importRequired: '知识点',
     importExample: [
       '【知识点】',
@@ -620,6 +624,8 @@ const DEF = {
       '第 2 步：为什么成立。因为 $(x-h)^2\\ge 0$ 恒成立，所以 $a>0$ 时 $y\\ge k$、$a<0$ 时 $y\\le k$，最值可以直接从式子里读出来。',
       '第 3 步：怎么用。把一般式 $y=ax^2+bx+c$ 配方：$$y=a\\left(x+\\frac{b}{2a}\\right)^2+\\frac{4ac-b^2}{4a}$$ 由此得 $h=-\\frac{b}{2a}$、$k=\\frac{4ac-b^2}{4a}$。',
       '第 4 步：易错点。配方要先提出二次项系数 $a$ 再配平方，别在提出 $a$ 之前直接对 $bx$ 配；$a$ 的符号决定最值是最大还是最小。',
+      '【合集】',
+      '高等数学/二次函数',
       '【标签】',
       '函数, 二次函数',
       '',
@@ -2404,6 +2410,17 @@ addBtn.onclick = () => {
 document.getElementById('closeBtn').onclick = () => modal.classList.remove('open');
 modal.onclick = e => { if (e.target === modal) modal.classList.remove('open'); };
 
+// 导入预览：标出该合集路径是「复用已有」还是「将新建」（P1）
+function collectionSuggestionHtml(kind, path) {
+  const p = String(path || '').trim();
+  if (!p) return '';
+  const info = pathCreateInfo(colStores[kind], p);
+  if (info.exists) {
+    return `<div class="pathnote reuse">合集：${esc(p)} · 复用已有</div>`;
+  }
+  return `<div class="pathnote new">合集：${esc(p)} · 将新建「${esc(info.newNames.join(' / '))}」</div>`;
+}
+
 document.getElementById('parseBtn').onclick = () => {
   const d = DEF[active];
   pending = parseText(document.getElementById('rawInput').value, d.importFieldMap, d.importRequired);
@@ -2433,6 +2450,7 @@ document.getElementById('parseBtn').onclick = () => {
       </div>
       <div class="stem">${renderMath(d.previewMain(p))}</div>
       <div class="fields">${d.previewInfo(p)}</div>
+      ${collectionSuggestionHtml(active, p.collection)}
     </div>
   `).join('');
 };
@@ -2454,11 +2472,23 @@ document.getElementById('importBtn').onclick = () => {
   if (checked.length === 1 && pendingImgs.length) pending[checked[0]].images = pendingImgs.slice();
 
   const norm = stores[active].norm;
+  let pathCreated = 0;
   for (const i of checked) {
     const obj = norm(pending[i]);
-    obj.collectionId = addCollectionId;
+    if (addCollectionId) {
+      obj.collectionId = addCollectionId;
+    } else if (String(pending[i].collection || '').trim()) {
+      // 以现有体系为锚：同名（含全半角/空格等差异）复用，确实没有才新建
+      const r = resolveCollectionPathSmart(colStores[active], pending[i].collection, Date.now());
+      colStores[active] = r.cols;
+      pathCreated += r.created;
+      obj.collectionId = r.id;
+    } else {
+      obj.collectionId = null;
+    }
     stores[active].items.push(obj);
   }
+  if (pathCreated) saveCols(active);
   saveActive();
   refreshTagPicker();
   resetPendingImgs();
@@ -2919,7 +2949,7 @@ async function autoReadSnapshots() {
 }
 
 async function saveAutoSnapshot(reason) {
-  if (reason !== 'manual' && reason !== 'beforeRestore' && !autoDirty) return false;
+  if (reason !== 'manual' && reason !== 'beforeRestore' && reason !== 'beforeOrganize' && !autoDirty) return false;
   const payload = {
     ts: Date.now(),
     reason: reason || 'auto',
@@ -3345,7 +3375,18 @@ function aiOutputRules() {
     '6. 原文里若含多项（以 === 分隔），输出的每一项与之一一对应；',
     '7. 不要改动原文的内容，只在其基础上补充讲解与整理。',
   ];
-  return base.concat(steps);
+  const out = base.concat(steps);
+  const paths = flattenCollections(colStores[active]).map(c =>
+    collectionPath(colStores[active], c.id).map(x => x.name).join('/'));
+  if (paths.length) {
+    out.push(
+      '合集要求：【合集】写成「学科/考点」这类路径，最多两级；必须优先从下列现有路径里选择，只有确实没有合适的才新建，不要为同一分类造同义新路径。',
+      '现有合集路径：' + JSON.stringify(paths)
+    );
+  } else {
+    out.push('合集要求：【合集】写成「学科/考点」这类路径，最多两级；暂时没有已有合集，按这套命名新建即可。');
+  }
+  return out;
 }
 
 // 第二步：基于用户已核对/修正过的原文，解题并整理成导入格式
@@ -3430,12 +3471,13 @@ function aiOrgJsonRules(dims, kpTitles) {
     '4. 若某项无法判断，对应字段给空数组或空字符串，不要瞎猜。',
   ];
   if (dims.collection) {
-    const cols = isKp
-      ? flattenCollections(colStores.k).map(c => collectionPath(colStores.k, c.id).map(x => x.name).join('/'))
-      : [];
+    const cols = flattenCollections(colStores[isKp ? 'k' : 'q'])
+      .map(c => collectionPath(colStores[isKp ? 'k' : 'q'], c.id).map(x => x.name).join('/'));
     if (cols.length) {
-      lines.push('可选合集路径（已存在的优先复用，尽量不要造同义新路径）：');
+      lines.push('可选合集路径（必须优先复用下列已有路径，只有确实没有合适的才新建；不要造同义新路径）：');
       lines.push(JSON.stringify(cols));
+    } else {
+      lines.push('目前还没有已有合集，请按「学科/考点」两级命名新建。');
     }
   }
   if (dims.knowledge && isKp) {
@@ -4131,7 +4173,7 @@ function syncOrgTargetUi() {
   }
 }
 function orgShowStep(name) {
-  ['aiOrgSetup', 'aiOrgPasteWrap', 'aiOrgTreeWrap', 'aiOrgReviewWrap'].forEach(id => {
+  ['aiOrgSetup', 'aiOrgTaxWrap', 'aiOrgPasteWrap', 'aiOrgTreeWrap', 'aiOrgReviewWrap'].forEach(id => {
     orgEl(id).style.display = (id === name) ? '' : 'none';
   });
 }
@@ -4148,6 +4190,12 @@ function openAiOrg() {
   orgEl('aiOrgMsg').textContent = '';
   orgEl('aiOrgReview').innerHTML = '';
   orgEl('aiOrgUndo').style.display = 'none';
+  taxState = null;
+  orgEl('aiOrgTaxDiff').innerHTML = '';
+  orgEl('aiOrgTaxPasteWrap').style.display = 'none';
+  orgEl('aiOrgTaxPaste').value = '';
+  orgEl('aiOrgTaxUndo').style.display = 'none';
+  orgEl('aiOrgTaxApplyRow').style.display = 'none';
   orgModal.classList.add('open');
 }
 orgEl('aiOrgCancel').onclick = () => orgModal.classList.remove('open');
@@ -4180,6 +4228,16 @@ orgEl('aiOrgRun').onclick = async () => {
   } finally { orgEl('aiOrgRun').disabled = false; }
 };
 
+// 审阅表里的路径状态：复用已有 / 将新建（留空表示保持原位）
+function orgPathNote(cols, path) {
+  const p = String(path || '').trim();
+  if (!p) return '<span class="aio-pathnote">留空 = 不移动</span>';
+  const info = pathCreateInfo(cols, p);
+  return info.exists
+    ? '<span class="aio-pathnote">复用已有</span>'
+    : `<span class="aio-pathnote new">将新建：${esc(info.newNames.join(' / '))}</span>`;
+}
+
 // 审阅表：每行 = 跳过勾选 + 题干摘要 + 标签开关 + 合集路径 + 考点摘要（+ 知识库讲解）
 function renderAiOrgReview() {
   const st = orgState;
@@ -4209,7 +4267,7 @@ function renderAiOrgReview() {
       <div class="aio-fields">
         ${st.dims.link ? `<div class="aio-tags">${kpChips}<input class="aio-tagin" data-kpadd="${i}" list="aioKps" placeholder="＋知识点"></div>` : ''}
         ${st.dims.tags ? `<div class="aio-tags">${chips}<input class="aio-tagin" data-tagadd="${i}" placeholder="＋标签"></div>` : ''}
-        ${st.dims.collection ? `<input class="aio-path" data-path="${i}" value="${esc(row.collectionPath || '')}" placeholder="如 高等数学/极限" list="aioCols">` : ''}
+        ${st.dims.collection ? `<div class="aio-pathwrap"><input class="aio-path" data-path="${i}" value="${esc(row.collectionPath || '')}" placeholder="如 高等数学/极限" list="aioCols">${orgPathNote(targetCols, row.collectionPath)}</div>` : ''}
         ${st.dims.knowledge ? (isKp
           ? `<textarea class="aio-know" data-content="${i}" placeholder="完整讲解：定义 → 为什么 → 适用条件 → 怎么用 → 易错点">${esc(row.content || '')}</textarea>`
           : `<textarea class="aio-know" data-know="${i}" placeholder="考点 + 易错点">${esc(row.knowledge || '')}</textarea>`) : ''}
@@ -4242,7 +4300,12 @@ function renderAiOrgReview() {
       renderAiOrgReview();
     };
   });
-  box.querySelectorAll('[data-path]').forEach(inp => { inp.onchange = () => { rows[+inp.dataset.path].collectionPath = inp.value.trim(); }; });
+  box.querySelectorAll('[data-path]').forEach(inp => {
+    inp.onchange = () => {
+      rows[+inp.dataset.path].collectionPath = inp.value.trim();
+      renderAiOrgReview();
+    };
+  });
   box.querySelectorAll('[data-kpchip-i]').forEach(el => {
     el.onclick = () => {
       const row = rows[+el.dataset.kpchipI];
@@ -4349,6 +4412,224 @@ function undoAiOrg() {
   orgEl('aiOrgUndo').style.display = 'none';
 }
 orgEl('aiOrgUndo').onclick = () => undoAiOrg();
+
+/* ===================== 整理现有体系：差异预览 → 应用 → 撤销 ===================== */
+let taxState = null;   // { t, plan, lastMsg }
+
+function taxTarget() { return orgEl('aiOrgTarget').value === 'k' ? 'k' : 'q'; }
+function taxInput(kind, items) {
+  return buildOrganizeInput(items, colStores[kind], { target: kind, maxItems: 30, stemMax: 80 });
+}
+function aiTaxPrompt(input) {
+  return [
+    '你是数学错题本/知识点库的分类体系整理助手。目标是「在现有体系上整理」，不是推倒重来。',
+    '只能输出一个 JSON 对象，形如 {"ops":[...]}，不要输出解释文字。',
+    '每个 op 只能是下面四种之一：',
+    '{"op":"create","path":"高等数学/极限"} —— 仅当现有体系确实没有合适位置时才新建，最多两级；',
+    '{"op":"rename","path":"高等数学/函数","name":"函数与极限"} —— 名字里不能有斜杠；',
+    '{"op":"merge","from":"高等数学/极限","into":"高等数学/函数与极限"} —— 把来源合集并入目标，来源里的题目和子合集必须整体保留；',
+    '{"op":"keep"} —— 保留不动（可省略）。',
+    '硬性要求：',
+    '1. 优先保留现有路径，只有在语义确实重复或过窄时才 rename / merge；',
+    '2. merge 的 into 必须是已有路径，或同时用 create 建出来；绝不能把父级合并进它自己的子级；',
+    '3. 不要删除任何合集，不要输出条目归属（条目分配是下一步）；',
+    '4. 合并/改名的目的是减少同义重复，不要为了「整齐」大改用户已经熟悉的分类；',
+    '5. 只输出 JSON。',
+    '',
+    '现有体系与条目样例：',
+    JSON.stringify(input),
+  ].join('\n');
+}
+function aiTaxAssignPrompt(paths, items) {
+  return [
+    '你是数学错题本的分类助手。下面是已经定稿的分类体系路径，和一批条目。',
+    '请为每个条目选一个最合适的路径；实在没有合适的就给空字符串。',
+    '只能输出 JSON 数组：[{"id":"条目id","path":"体系里的某条路径"}]',
+    '硬性要求：path 必须原样照抄下面路径列表中的某一项，或空字符串；绝对不要新建路径；每一条都要输出。',
+    '体系路径：' + JSON.stringify(paths),
+    '条目：' + JSON.stringify(items),
+  ].join('\n');
+}
+
+function showTaxStep() {
+  ['aiOrgSetup', 'aiOrgTaxWrap'].forEach(id => { orgEl(id).style.display = id === 'aiOrgTaxWrap' ? '' : 'none'; });
+  orgEl('aiOrgTaxDiff').innerHTML = '';
+  orgEl('aiOrgTaxMsg').textContent = '';
+  orgEl('aiOrgTaxPasteWrap').style.display = 'none';
+  orgEl('aiOrgTaxApplyRow').style.display = 'none';
+  orgEl('aiOrgTaxUndo').style.display = 'none';
+  orgEl('aiOrgTaxMsg').textContent = '';
+}
+orgEl('aiOrgTax').onclick = () => {
+  taxState = null;
+  showTaxStep();
+  if (!aiReady()) orgEl('aiOrgTaxMsg').textContent = '未配置 AI：可点「复制提示词（免 Key）」在任意 AI 里跑完再粘回来。';
+};
+orgEl('aiOrgTaxBack').onclick = () => { orgShowStep('aiOrgSetup'); };
+
+// 差异预览：用纯函数在克隆上试跑一遍，不写库
+function renderTaxDiff(st) {
+  const box = orgEl('aiOrgTaxDiff');
+  const dry = applyTaxonomyPlan(colStores[st.t], stores[st.t].items, {
+    ops: st.plan.ops, assigns: st.plan.assigns, warnings: [],
+  });
+  st.dry = dry;
+  const s = dry.stats;
+  const lines = [];
+  if (dry.details.length) {
+    lines.push('<ul class="tax-diff">' + dry.details.map(d =>
+      `<li><span class="tax-op tax-${d.type}">${d.type === 'create' ? '新建' : (d.type === 'rename' ? '改名' : '合并')}</span>${esc(d.text)}</li>`).join('') + '</ul>');
+  } else {
+    lines.push('<p class="hint">AI 认为现有体系已经够用，没有需要新建 / 改名 / 合并的项。</p>');
+  }
+  if (dry.warnings.length) {
+    lines.push('<p class="hint">需注意：' + esc(dry.warnings.slice(0, 8).join('；')) + '</p>');
+  }
+  box.innerHTML = lines.join('');
+  const preserved = dry.items.length;
+  orgEl('aiOrgTaxCount').textContent =
+    `将新建 ${s.created} · 改名 ${s.renamed} · 合并 ${s.merged} · 改挂 ${s.moved} 条 · 条目 ${stores[st.t].items.length} → ${preserved}（不变）`;
+  orgEl('aiOrgTaxApplyRow').style.display = '';
+  orgEl('aiOrgTaxMsg').textContent = '';
+}
+
+function useTaxRaw(rawText) {
+  const t = taxTarget();
+  const raw = parseAiJson(rawText);
+  if (!raw) { orgEl('aiOrgTaxMsg').textContent = '没有解析出 JSON，请检查 AI 输出。'; return; }
+  const plan = normalizeTaxonomyPlan(raw, { cols: colStores[t] });
+  if (!plan.ops.length && !plan.assigns.length) {
+    orgEl('aiOrgTaxMsg').textContent = '这份方案没有可应用的整理项。' + (plan.warnings.length ? ' ' + plan.warnings.join('；') : '');
+    orgEl('aiOrgTaxApplyRow').style.display = 'none';
+    orgEl('aiOrgTaxDiff').innerHTML = '';
+    return;
+  }
+  taxState = { t, plan, scope: orgPickItems(), lastMsg: '' };
+  renderTaxDiff(taxState);
+  if (plan.warnings.length) orgEl('aiOrgTaxMsg').textContent = plan.warnings.slice(0, 5).join('；');
+}
+
+orgEl('aiOrgTaxRun').onclick = async () => {
+  if (!aiReady()) {
+    orgEl('aiOrgTaxMsg').textContent = '还没有配置 AI，请改用「复制提示词（免 Key）」。';
+    return;
+  }
+  const t = taxTarget();
+  const items = orgPickItems();
+  if (!items.length) { orgEl('aiOrgTaxMsg').textContent = '这个范围里没有条目。'; return; }
+  orgEl('aiOrgTaxRun').disabled = true;
+  showAiBusy('AI 正在整理现有体系，请稍候…');
+  try {
+    const input = taxInput(t, items);
+    const text = await aiCall({ system: aiTaxPrompt(input), ask: '请只输出 JSON 对象。' });
+    hideAiBusy();
+    if (!text) throw new Error('模型没有返回任何内容。');
+    useTaxRaw(text);
+  } catch (e) {
+    hideAiBusy();
+    orgEl('aiOrgTaxMsg').textContent = (e && e.name === 'AbortError') ? '已取消。' : '失败：' + ((e && e.message) || e);
+  } finally { orgEl('aiOrgTaxRun').disabled = false; }
+};
+
+orgEl('aiOrgTaxCopy').onclick = async () => {
+  const t = taxTarget();
+  const items = orgPickItems();
+  if (!items.length) { orgEl('aiOrgTaxMsg').textContent = '这个范围里没有条目。'; return; }
+  const text = aiTaxPrompt(taxInput(t, items)) + '\n\n把上面的 JSON 整段粘回本窗口的输入框。';
+  const ok = await copyText(text);
+  orgEl('aiOrgTaxPasteWrap').style.display = '';
+  orgEl('aiOrgTaxPasteMsg').textContent = ok ? '提示词已复制，去任意 AI 跑完再粘回来。' : '复制失败，请手动从提示词框复制。';
+};
+orgEl('aiOrgTaxParse').onclick = () => {
+  const v = orgEl('aiOrgTaxPaste').value.trim();
+  if (!v) { orgEl('aiOrgTaxPasteMsg').textContent = '先粘贴 AI 输出。'; return; }
+  useTaxRaw(v);
+};
+
+// 应用：先快照 → 写结构 → （在线时）分批分配 → 可撤销
+orgEl('aiOrgTaxApply').onclick = async () => {
+  const st = taxState;
+  if (!st) return;
+  const t = st.t;
+  const before = stores[t].items.length;
+  if (!confirm(`将应用这套体系：新建 ${st.dry.stats.created}、改名 ${st.dry.stats.renamed}、合并 ${st.dry.stats.merged}、改挂 ${st.dry.stats.moved} 条。\n\n不会删除任何题目（${before} 条全部保留），并会先自动备份。继续？`)) return;
+
+  orgEl('aiOrgTaxApply').disabled = true;
+  showAiBusy('正在应用整理方案…');
+  try {
+    const snap = await saveAutoSnapshot('beforeOrganize');
+    st.undo = { t, items: stores[t].items, cols: colStores[t] };
+
+    // 第一步：只写结构（外加粘贴方案里可能带的分配）
+    const r1 = applyTaxonomyPlan(colStores[t], stores[t].items, {
+      ops: st.plan.ops, assigns: st.plan.assigns, warnings: [],
+    });
+    stores[t].items = r1.items;
+    colStores[t] = r1.cols;
+    await saveCols(t);
+    await saveStore(stores[t].key, stores[t].items);
+
+    let moved = r1.stats.moved;
+    let assignNote = '';
+    const needAssign = aiReady() && !st.plan.assigns.length;
+    if (needAssign && r1.cols.length) {
+      // 第二步：以定稿体系为白名单，分批分配范围内的条目
+      const paths = flattenCollections(r1.cols).map(c => collectionPath(r1.cols, c.id).map(x => x.name).join('/'));
+      const scope = (st.scope || orgPickItems()).filter(it => it && it.id);
+      const batch = 40;
+      for (let i = 0; i < scope.length; i += batch) {
+        showAiBusy(`正在按新体系分配 ${Math.min(i + batch, scope.length)}/${scope.length}…`);
+        const chunk = scope.slice(i, i + batch).map(it => ({
+          id: it.id,
+          s: String((t === 'k' ? it.title : it.stem) || '').replace(/\s+/g, ' ').slice(0, 90),
+          t: Array.isArray(it.tags) ? it.tags.slice(0, 6) : [],
+          c: it.collectionId ? collectionPath(r1.cols, it.collectionId).map(x => x.name).join('/') : '',
+        }));
+        const txt = await aiCall({ system: aiTaxAssignPrompt(paths, chunk), ask: '请只输出 JSON 数组。' });
+        const raw = parseAiJson(txt);
+        const plan = normalizeTaxonomyPlan(Array.isArray(raw) ? raw : (raw && raw.items) || [], { cols: r1.cols });
+        if (!plan.assigns.length) continue;
+        const r2 = applyTaxonomyPlan(colStores[t], stores[t].items, {
+          ops: [], assigns: plan.assigns, warnings: [],
+        }, { allowedPaths: paths });
+        stores[t].items = r2.items;
+        colStores[t] = r2.cols;
+        moved += r2.stats.changed;
+        await saveStore(stores[t].key, stores[t].items);
+      }
+      assignNote = `，并按新体系分配 ${scope.length} 条范围内的条目`;
+    }
+
+    hideAiBusy();
+    render();
+    refreshTagPicker();
+    orgEl('aiOrgTaxUndo').style.display = '';
+    orgEl('aiOrgTaxApplyRow').style.display = '';
+    orgEl('aiOrgTaxMsg').textContent =
+      `已应用：新建 ${r1.stats.created}、改名 ${r1.stats.renamed}、合并 ${r1.stats.merged}，改挂 ${moved} 条${assignNote}；条目总数 ${before} → ${stores[t].items.length}（不变）。` +
+      (snap ? ' 已生成自动备份。' : '') +
+      (r1.warnings.length ? ` 注意：${r1.warnings.slice(0, 4).join('；')}` : '');
+  } catch (e) {
+    hideAiBusy();
+    orgEl('aiOrgTaxMsg').textContent = (e && e.name === 'AbortError') ? '已取消。'
+      : '已应用结构，但分配步骤失败：' + ((e && e.message) || e) + '（可撤销后重试）';
+  } finally { orgEl('aiOrgTaxApply').disabled = false; }
+};
+
+orgEl('aiOrgTaxUndo').onclick = async () => {
+  const st = taxState;
+  if (!st || !st.undo) return;
+  const u = st.undo;
+  stores[u.t].items = u.items;
+  colStores[u.t] = u.cols;
+  await saveCols(u.t);
+  await saveStore(stores[u.t].key, stores[u.t].items);
+  render();
+  refreshTagPicker();
+  st.undo = null;
+  orgEl('aiOrgTaxUndo').style.display = 'none';
+  orgEl('aiOrgTaxMsg').textContent = '已撤销，题目与合集都回到整理前。';
+};
 
 /* ===================== AI 整理知识点（考点体系 + 挂载） ===================== */
 const kpEl = id => document.getElementById(id);

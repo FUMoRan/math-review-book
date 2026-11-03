@@ -336,11 +336,37 @@
       </div>
       <div class="row">
         <button class="primary" id="aiOrgRun">开始整理</button>
+        <button class="ghost" id="aiOrgTax" title="以现有合集为锚，先看差异再整理">整理现有体系</button>
         <button class="ghost" id="aiOrgTree">先让 AI 建议分类体系</button>
         <button class="ghost" id="aiOrgCopy">复制提示词（免 Key）</button>
         <span class="spacer"></span>
         <button class="ghost" id="aiOrgCancel">取消</button>
         <span class="badge-note" id="aiOrgMsg"></span>
+      </div>
+    </div>
+
+    <!-- 步骤 1.5：整理现有体系（差异预览 → 应用 → 可撤销） -->
+    <div id="aiOrgTaxWrap" style="display:none">
+      <p class="hint">AI 以<b>现有合集</b>为锚提案，只做「新建 / 改名 / 合并」，不会删除合集、不会动范围外的题目。应用前先看差异；应用时会先自动备份，并可撤销。</p>
+      <div class="row">
+        <button class="primary" id="aiOrgTaxRun">让 AI 生成整理方案</button>
+        <button class="ghost" id="aiOrgTaxCopy">复制提示词（免 Key）</button>
+        <span class="spacer"></span>
+        <button class="ghost" id="aiOrgTaxBack">返回</button>
+      </div>
+      <div id="aiOrgTaxPasteWrap" style="display:none">
+        <textarea id="aiOrgTaxPaste" placeholder="粘贴 AI 输出的 JSON（含 ops / assigns）"></textarea>
+        <div class="row">
+          <button class="primary" id="aiOrgTaxParse">解析方案</button>
+          <span class="badge-note" id="aiOrgTaxPasteMsg"></span>
+        </div>
+      </div>
+      <p class="hint" id="aiOrgTaxMsg"></p>
+      <div class="ai-org-table" id="aiOrgTaxDiff"></div>
+      <div class="row" id="aiOrgTaxApplyRow" style="display:none">
+        <button class="primary" id="aiOrgTaxApply">应用这套体系</button>
+        <button class="ghost" id="aiOrgTaxUndo" style="display:none">撤销这次整理</button>
+        <span class="badge-note" id="aiOrgTaxCount"></span>
       </div>
     </div>
 

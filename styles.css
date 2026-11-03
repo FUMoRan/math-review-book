@@ -160,6 +160,11 @@ details[open] summary::before{transform:rotate(90deg);}
 details .body{margin-top:8px; font-size:var(--body-size); color:var(--text-2); overflow-wrap:anywhere;}
 .section-label{font-size:12px; color:var(--muted);}
 .badge-note{font-size:12px; color:var(--warn);}
+.pathnote{font-size:12px; margin-top:4px; color:var(--text-dim, #868e96);}
+.pathnote.reuse{color:var(--ok);}
+.pathnote.new{color:var(--warn);}
+.aio-pathnote{font-size:11px; color:var(--text-dim, #868e96); align-self:center;}
+.aio-pathnote.new{color:var(--warn);}
 /* KaTeX 默认同时输出 MathML（给读屏）和 HTML 两份。MathML 是 1px 的隐藏层，
    但会混进文字选择和复制结果（选中一段会复制出「111」这种重复文本）。
    保留 MathML 给读屏用，只把它排除在选择/复制之外。 */
@@ -691,10 +696,18 @@ img.thumb.broken{opacity:.35;}
 .aio-tagin,.aio-path,.aio-know{font-size:12px; padding:4px 8px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text);}
 .aio-tagin{width:96px;}
 .aio-path{width:210px;}
+.aio-pathwrap{display:flex; gap:6px; align-items:center; flex-wrap:wrap;}
 .aio-know{width:100%; min-height:44px; font-family:inherit;}
 .aio-sink{width:100%; display:flex; flex-direction:column; gap:6px; border-top:1px dashed var(--line); padding-top:8px;}
 .aio-sink .aio-path{width:260px;}
 .aio-sink .aio-know{min-height:96px;}
+#aiOrgTaxPaste{width:100%; min-height:120px; font-family:inherit; font-size:13px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); margin-top:8px;}
+.tax-diff{list-style:none; margin:0; padding:6px 12px;}
+.tax-diff li{display:flex; gap:8px; align-items:flex-start; padding:6px 0; border-bottom:1px dashed var(--line); font-size:13px;}
+.tax-diff li:last-child{border-bottom:none;}
+.tax-op{flex:0 0 auto; font-size:11px; padding:1px 8px; border-radius:20px; background:var(--brand-soft); color:var(--brand);}
+.tax-op.tax-rename{background:rgba(252,196,25,.18); color:#b8860b;}
+.tax-op.tax-merge{background:rgba(250,82,82,.14); color:#c92a2a;}
 .aio-group{margin:8px 0 14px;}
 .aio-group-h{font-size:13px; color:var(--muted); margin-bottom:6px;}
 .aio-group-row{display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px dashed var(--line);}
